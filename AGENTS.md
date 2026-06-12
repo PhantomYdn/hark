@@ -10,6 +10,7 @@ Native macOS CLI (single Swift binary) that captures microphone and system/per-a
 ## Key Conventions
 
 - Language/build: Swift, SwiftPM; modular targets `DeviceManager`, `TapEngine`, `Encoders`, `CLI`
+- Build with `swift build` (or `make build`); run tests with `make test` (wraps `swift test` with CLT Testing.framework path workaround — see Makefile)
 - Binary name: `aural`
 - Minimum OS: macOS 14.4 (Core Audio process-tap API); Apple Silicon + Intel
 - Philosophy: Unix "do one thing well" — composable subcommands, stdout/stdin streaming, POSIX conventions
