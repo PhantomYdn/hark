@@ -5,10 +5,15 @@ import Foundation
 
 public enum TapEngineError: Error, CustomStringConvertible {
     case microphonePermissionDenied
+    case systemAudioPermissionDenied(OSStatus)
     case deviceSelectionFailed(OSStatus)
     case converterCreationFailed
     case engineStartFailed(Error)
     case unsupportedBitDepth(Int)
+    case tapCreationFailed(OSStatus)
+    case tapPropertyReadFailed(OSStatus)
+    case aggregateCreationFailed(OSStatus)
+    case ioProcFailed(OSStatus)
 
     public var description: String {
         switch self {
@@ -16,6 +21,16 @@ public enum TapEngineError: Error, CustomStringConvertible {
             return """
                 microphone access denied. Grant access to your terminal in \
                 System Settings > Privacy & Security > Microphone, then retry.
+                """
+        case .systemAudioPermissionDenied(let status):
+            return """
+                system audio capture was refused (CoreAudio error \(status)). \
+                This usually means the "System Audio Recording" permission is \
+                missing: open System Settings > Privacy & Security > Screen & \
+                System Audio Recording, allow your terminal under "System \
+                Audio Recording Only", then retry. Note: for command-line \
+                tools, macOS attributes the permission to the terminal \
+                application that launched them.
                 """
         case .deviceSelectionFailed(let status):
             return "failed to select input device (CoreAudio error \(status))"
@@ -25,6 +40,14 @@ public enum TapEngineError: Error, CustomStringConvertible {
             return "failed to start audio engine: \(error.localizedDescription)"
         case .unsupportedBitDepth(let bits):
             return "unsupported bit depth \(bits) (expected 16, 24, or 32)"
+        case .tapCreationFailed(let status):
+            return "failed to create process tap (CoreAudio error \(status))"
+        case .tapPropertyReadFailed(let status):
+            return "failed to read tap properties (CoreAudio error \(status))"
+        case .aggregateCreationFailed(let status):
+            return "failed to create capture device (CoreAudio error \(status))"
+        case .ioProcFailed(let status):
+            return "failed to start capture I/O (CoreAudio error \(status))"
         }
     }
 }
