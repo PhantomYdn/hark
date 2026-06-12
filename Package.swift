@@ -27,6 +27,17 @@ let package = Package(
                 "DeviceManager",
                 "TapEngine",
                 "Encoders",
+            ],
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                // Embed Info.plist (bundle ID + TCC usage descriptions) so
+                // macOS can attribute audio-capture permissions to aural.
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Sources/CLI/Info.plist",
+                ])
             ]
         ),
         .testTarget(name: "DeviceManagerTests", dependencies: ["DeviceManager"]),

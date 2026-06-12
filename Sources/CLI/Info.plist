@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.aural.cli</string>
+    <key>CFBundleName</key>
+    <string>aural</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Aural records audio from your microphone when you run 'aural record'.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Aural captures system and per-application audio when you run 'aural record --system' or '--app'.</string>
+</dict>
+</plist>

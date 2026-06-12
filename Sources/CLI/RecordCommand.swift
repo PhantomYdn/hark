@@ -7,12 +7,15 @@ import TapEngine
 
 struct Record: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Record audio from a microphone or input device.",
+        abstract: "Record audio from a microphone, the system, or specific apps.",
         discussion: """
-            Records from the default input device, or from a specific device \
-            selected with -d/--device (UIDs are listed by 'aural devices'). \
-            Recording stops after -t/--duration seconds, or on Ctrl+C \
-            (SIGINT/SIGTERM), finalizing the file so it remains playable.
+            By default records from the default input device, or from a \
+            specific device selected with -d/--device (UIDs are listed by \
+            'aural devices'). With --system, captures all system audio via a \
+            Core Audio process tap instead (requires the System Audio \
+            Recording permission). Recording stops after -t/--duration \
+            seconds, or on Ctrl+C (SIGINT/SIGTERM), finalizing the file so \
+            it remains playable.
             """
     )
 
@@ -51,6 +54,12 @@ struct Record: ParsableCommand {
     @Flag(name: .customLong("no-output"), help: "Capture but write nothing (dry run).")
     var noOutput = false
 
+    @Flag(name: .customLong("system"), help: """
+        Capture all system audio via a Core Audio process tap instead of \
+        the microphone.
+        """)
+    var captureSystem = false
+
     @OptionGroup var options: GlobalOptions
 
     func validate() throws {
@@ -75,6 +84,10 @@ struct Record: ParsableCommand {
         if wavToStdout && noOutput {
             throw ValidationError("--stdout and --no-output are mutually exclusive.")
         }
+        if captureSystem && device != nil {
+            throw ValidationError(
+                "-d/--device selects a microphone and does not apply to --system capture.")
+        }
     }
 
     func run() throws {
@@ -87,7 +100,8 @@ struct Record: ParsableCommand {
                 channels: channels,
                 duration: duration,
                 wavToStdout: wavToStdout,
-                noOutput: noOutput
+                noOutput: noOutput,
+                captureSystem: captureSystem
             ).run()
         }
     }
@@ -104,31 +118,19 @@ struct RecordingSession {
     let duration: Double?
     let wavToStdout: Bool
     let noOutput: Bool
+    let captureSystem: Bool
 
     func run() throws {
-        // 1. Resolve the input device.
-        let inputDevice = try resolveInputDevice()
-        let deviceID: AudioDeviceID? = deviceUID.map { _ in AudioDeviceID(inputDevice.objectID) }
-        let channelCount = channels ?? min(2, max(1, inputDevice.inputChannels))
-        let format = PCMFormat(sampleRate: rate, bitsPerSample: bits, channels: channelCount)
-        Log.verbose(
-            "source: \(inputDevice.name) [\(inputDevice.uid)] -> \(rate) Hz, \(bits)-bit, \(channelCount) ch")
+        // 1. Build the capture session for the requested source.
+        let (session, format) = try makeCapture()
 
-        // 2. Microphone permission (TCC).
-        do {
-            try MicCaptureSession.ensureMicrophonePermission()
-        } catch let error as TapEngineError {
-            throw AuralError.noPermission(error.description)
-        }
-
-        // 3. Set up the output sink.
+        // 2. Set up the output sink.
         let sink = try makeSink(format: format)
         Log.verbose("destination: \(sink.label)")
 
-        // 4. Capture. SIGPIPE is ignored so a closed downstream pipe surfaces
+        // 3. Capture. SIGPIPE is ignored so a closed downstream pipe surfaces
         // as a write error (EPIPE) and is handled as graceful completion.
         signal(SIGPIPE, SIG_IGN)
-        let session = MicCaptureSession(deviceID: deviceID, outputFormat: format)
         let ioQueue = DispatchQueue(label: "aural.record.io")
         let failure = FailureBox()
         let done = DispatchSemaphore(value: 0)
@@ -140,9 +142,16 @@ struct RecordingSession {
             ByteBudget(bytes: UInt64(seconds * Double(format.byteRate)), frameSize: format.bytesPerFrame)
         }
 
+        // macOS delivers pure silence from a tap when the System Audio
+        // Recording permission is missing (no error, no prompt for
+        // terminal-attributed CLIs), so track whether anything non-zero
+        // ever arrives and warn at the end.
+        let silenceDetector = captureSystem ? SilenceDetector() : nil
+
         do {
             try session.start { data in
                 ioQueue.async {
+                    silenceDetector?.observe(data)
                     let (chunk, exhausted) = budget?.consume(data) ?? (data, false)
                     do {
                         if !chunk.isEmpty { try sink.write(chunk) }
@@ -154,9 +163,9 @@ struct RecordingSession {
                 }
             }
         } catch let error as TapEngineError {
-            throw AuralError.software(error.description)
+            throw mapped(error)
         }
-        Log.verbose("recording started (hardware: \(session.hardwareFormatDescription))")
+        Log.verbose("recording started")
 
         // 5. Wait for the duration budget, Ctrl+C/SIGTERM, or a write failure.
         let watcher = SignalWatcher()
@@ -183,6 +192,16 @@ struct RecordingSession {
         let elapsed = Date().timeIntervalSince(startedAt)
         Log.verbose(
             "wrote \(sink.bytesWritten) bytes (\(String(format: "%.1f", elapsed)) s) to \(sink.label)")
+
+        if let silenceDetector, silenceDetector.isAllSilence, sink.bytesWritten > 0 {
+            Log.error("""
+                captured only silence. If audio was playing, the "System \
+                Audio Recording" permission is likely missing: open System \
+                Settings > Privacy & Security > Screen & System Audio \
+                Recording, click "+" under "System Audio Recording Only", \
+                add your terminal app, restart it, and retry.
+                """)
+        }
     }
 
     /// Builds the output sink from the flag combination:
@@ -220,6 +239,48 @@ struct RecordingSession {
         return RawStreamSink(handle: .standardOutput, label: "stdout (raw pcm)")
     }
 
+    /// Builds the capture session and output format for the requested source.
+    private func makeCapture() throws -> (CaptureSession, PCMFormat) {
+        if captureSystem {
+            // System tap: stereo by default; mic TCC not needed.
+            let channelCount = channels ?? 2
+            let format = PCMFormat(
+                sampleRate: rate, bitsPerSample: bits, channels: channelCount)
+            Log.verbose("source: system audio (tap) -> \(rate) Hz, \(bits)-bit, \(channelCount) ch")
+            let session = SystemCaptureSession(
+                scope: .system(excluding: []), micDeviceUID: nil, outputFormat: format)
+            return (session, format)
+        }
+
+        let inputDevice = try resolveInputDevice()
+        let deviceID: AudioDeviceID? = deviceUID.map { _ in AudioDeviceID(inputDevice.objectID) }
+        let channelCount = channels ?? min(2, max(1, inputDevice.inputChannels))
+        let format = PCMFormat(sampleRate: rate, bitsPerSample: bits, channels: channelCount)
+        Log.verbose(
+            "source: \(inputDevice.name) [\(inputDevice.uid)] -> \(rate) Hz, \(bits)-bit, \(channelCount) ch")
+        do {
+            try MicCaptureSession.ensureMicrophonePermission()
+        } catch let error as TapEngineError {
+            throw AuralError.noPermission(error.description)
+        }
+        return (MicCaptureSession(deviceID: deviceID, outputFormat: format), format)
+    }
+
+    /// Maps TapEngine failures to user-facing errors with exit codes.
+    /// Tap creation failures most commonly mean a System Audio Recording
+    /// TCC denial, so they carry the permission guidance (exit 77).
+    private func mapped(_ error: TapEngineError) -> AuralError {
+        switch error {
+        case .tapCreationFailed(let status):
+            return .noPermission(
+                TapEngineError.systemAudioPermissionDenied(status).description)
+        case .microphonePermissionDenied, .systemAudioPermissionDenied:
+            return .noPermission(error.description)
+        default:
+            return .software(error.description)
+        }
+    }
+
     private func resolveInputDevice() throws -> AudioDevice {
         if let deviceUID {
             let devices: [AudioDevice]
@@ -248,6 +309,26 @@ struct RecordingSession {
         } catch {
             throw AuralError.noInput("no default input device available (\(error))")
         }
+    }
+}
+
+/// Tracks whether a capture stream has produced any non-zero sample.
+/// Stops scanning after the first non-zero byte.
+final class SilenceDetector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var sawSignal = false
+
+    func observe(_ data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !sawSignal else { return }
+        if data.contains(where: { $0 != 0 }) { sawSignal = true }
+    }
+
+    var isAllSilence: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !sawSignal
     }
 }
 

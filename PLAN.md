@@ -23,8 +23,8 @@
 
 ## Phase 2: System & App Audio via Core Audio Taps (PRD M2)
 
-- [ ] Implement `TapEngine` using `CATapDescription` / `AudioHardwareCreateProcessTap` (macOS 14.4+)
-- [ ] Implement `--system`: global process tap capturing all system audio
+- [x] Implement `TapEngine` using `CATapDescription` / `AudioHardwareCreateProcessTap` (macOS 14.4+)
+- [x] Implement `--system`: global process tap capturing all system audio
 - [ ] Implement `--app ID` (repeatable): capture specific application(s) by bundle ID or PID (US02, US07)
 - [ ] Implement `--exclude-app ID` (repeatable): capture all system audio except listed apps (US07)
 - [ ] Implement `--mix`: mix microphone into system/app capture

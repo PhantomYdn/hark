@@ -26,11 +26,11 @@ public enum TapEngineError: Error, CustomStringConvertible {
             return """
                 system audio capture was refused (CoreAudio error \(status)). \
                 This usually means the "System Audio Recording" permission is \
-                missing: open System Settings > Privacy & Security > Screen & \
-                System Audio Recording, allow your terminal under "System \
-                Audio Recording Only", then retry. Note: for command-line \
-                tools, macOS attributes the permission to the terminal \
-                application that launched them.
+                missing. macOS attributes it to the terminal application that \
+                launched aural and does not show a prompt: open System \
+                Settings > Privacy & Security > Screen & System Audio \
+                Recording, click "+" under "System Audio Recording Only", add \
+                your terminal app, restart it, and retry.
                 """
         case .deviceSelectionFailed(let status):
             return "failed to select input device (CoreAudio error \(status))"
@@ -52,16 +52,25 @@ public enum TapEngineError: Error, CustomStringConvertible {
     }
 }
 
+/// A live audio capture source delivering packed PCM chunks.
+public protocol CaptureSession: AnyObject, Sendable {
+    /// Starts capture; `onAudio` receives packed PCM in the session's
+    /// output format on an audio/IO thread.
+    func start(onAudio: @escaping @Sendable (Data) -> Void) throws
+    /// Stops capture and releases audio resources.
+    func stop()
+}
+
 /// Captures audio from a microphone/input device and delivers interleaved
 /// little-endian signed PCM in the requested format.
 ///
 /// Capture pipeline: AVAudioEngine input tap (hardware format) ->
-/// AVAudioConverter (rate/width/channel conversion) -> packed PCM bytes.
-public final class MicCaptureSession: @unchecked Sendable {
+/// PCMStreamConverter (rate/width/channel conversion) -> packed PCM bytes.
+public final class MicCaptureSession: CaptureSession, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let deviceID: AudioDeviceID?
     private let outputFormat: PCMFormat
-    private var converter: AVAudioConverter?
+    private var converter: PCMStreamConverter?
     private var started = false
 
     /// - Parameters:
@@ -126,57 +135,14 @@ public final class MicCaptureSession: @unchecked Sendable {
         }
 
         let hardwareFormat = inputNode.inputFormat(forBus: 0)
-
-        // Converter target: 16/32-bit go straight to the wire format;
-        // 24-bit converts to Int32 and is packed to 3 bytes afterwards.
-        let commonFormat: AVAudioCommonFormat =
-            switch outputFormat.bitsPerSample {
-            case 16: .pcmFormatInt16
-            case 24, 32: .pcmFormatInt32
-            default: throw TapEngineError.unsupportedBitDepth(outputFormat.bitsPerSample)
-            }
-        guard
-            let converterOutputFormat = AVAudioFormat(
-                commonFormat: commonFormat,
-                sampleRate: Double(outputFormat.sampleRate),
-                channels: AVAudioChannelCount(outputFormat.channels),
-                interleaved: true
-            ),
-            let converter = AVAudioConverter(from: hardwareFormat, to: converterOutputFormat)
-        else {
-            throw TapEngineError.converterCreationFailed
-        }
+        let converter = try PCMStreamConverter(
+            inputFormat: hardwareFormat, outputFormat: outputFormat)
         self.converter = converter
-
-        let bitsPerSample = outputFormat.bitsPerSample
-        let rateRatio = Double(outputFormat.sampleRate) / hardwareFormat.sampleRate
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) {
             [weak self] buffer, _ in
             guard let self, let converter = self.converter else { return }
-
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * rateRatio) + 64
-            guard
-                let outBuffer = AVAudioPCMBuffer(
-                    pcmFormat: converterOutputFormat, frameCapacity: capacity)
-            else { return }
-
-            nonisolated(unsafe) var consumed = false
-            var conversionError: NSError?
-            let status = converter.convert(to: outBuffer, error: &conversionError) {
-                _, outStatus in
-                if consumed {
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-                consumed = true
-                outStatus.pointee = .haveData
-                return buffer
-            }
-            guard status != .error, conversionError == nil, outBuffer.frameLength > 0 else {
-                return
-            }
-            if let data = Self.packedData(from: outBuffer, bitsPerSample: bitsPerSample) {
+            if let data = converter.convert(buffer) {
                 onAudio(data)
             }
         }
@@ -195,30 +161,5 @@ public final class MicCaptureSession: @unchecked Sendable {
         guard started else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-    }
-
-    /// Extracts packed little-endian PCM bytes from a converted buffer.
-    private static func packedData(
-        from buffer: AVAudioPCMBuffer, bitsPerSample: Int
-    ) -> Data? {
-        let frames = Int(buffer.frameLength)
-        let channels = Int(buffer.format.channelCount)
-        let sampleCount = frames * channels
-        guard sampleCount > 0 else { return nil }
-
-        switch bitsPerSample {
-        case 16:
-            guard let int16Data = buffer.int16ChannelData else { return nil }
-            return Data(bytes: int16Data[0], count: sampleCount * 2)
-        case 32:
-            guard let int32Data = buffer.int32ChannelData else { return nil }
-            return Data(bytes: int32Data[0], count: sampleCount * 4)
-        case 24:
-            guard let int32Data = buffer.int32ChannelData else { return nil }
-            let samples = UnsafeBufferPointer(start: int32Data[0], count: sampleCount)
-            return PCMPacker.pack24(fromInt32: samples)
-        default:
-            return nil
-        }
     }
 }
