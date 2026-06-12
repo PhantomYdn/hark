@@ -25,8 +25,8 @@
 
 - [x] Implement `TapEngine` using `CATapDescription` / `AudioHardwareCreateProcessTap` (macOS 14.4+)
 - [x] Implement `--system`: global process tap capturing all system audio
-- [ ] Implement `--app ID` (repeatable): capture specific application(s) by bundle ID or PID (US02, US07)
-- [ ] Implement `--exclude-app ID` (repeatable): capture all system audio except listed apps (US07)
+- [x] Implement `--app ID` (repeatable): capture specific application(s) by bundle ID or PID (US02, US07)
+- [x] Implement `--exclude-app ID` (repeatable): capture all system audio except listed apps (US07)
 - [ ] Implement `--mix`: mix microphone into system/app capture
 - [ ] Handle tap lifecycle: create on start, destroy on stop; finalise recording cleanly and report on stderr if tapped app quits mid-recording (PRD §6.2)
 - [ ] Handle "System Audio Recording" TCC permission: detect denial, emit actionable error; document prompt/approval flow incl. terminal-attributed permission for unbundled CLI (PRD §7 Security, Open Q4)

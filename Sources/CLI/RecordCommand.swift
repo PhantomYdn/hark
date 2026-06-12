@@ -60,6 +60,22 @@ struct Record: ParsableCommand {
         """)
     var captureSystem = false
 
+    @Option(name: .customLong("app"), parsing: .singleValue, help: ArgumentHelp(
+        """
+        Capture only this application's audio (bundle ID or PID, see \
+        'aural apps'). Repeat to capture several apps.
+        """,
+        valueName: "bundle-id|pid"))
+    var apps: [String] = []
+
+    @Option(name: .customLong("exclude-app"), parsing: .singleValue, help: ArgumentHelp(
+        """
+        Capture all system audio except this application (bundle ID or \
+        PID). Repeatable; implies --system.
+        """,
+        valueName: "bundle-id|pid"))
+    var excludeApps: [String] = []
+
     @OptionGroup var options: GlobalOptions
 
     func validate() throws {
@@ -84,9 +100,16 @@ struct Record: ParsableCommand {
         if wavToStdout && noOutput {
             throw ValidationError("--stdout and --no-output are mutually exclusive.")
         }
-        if captureSystem && device != nil {
+        if !apps.isEmpty && captureSystem {
             throw ValidationError(
-                "-d/--device selects a microphone and does not apply to --system capture.")
+                "--system captures everything; it cannot be combined with --app.")
+        }
+        if !apps.isEmpty && !excludeApps.isEmpty {
+            throw ValidationError("--app and --exclude-app are mutually exclusive.")
+        }
+        if (captureSystem || !apps.isEmpty || !excludeApps.isEmpty) && device != nil {
+            throw ValidationError(
+                "-d/--device selects a microphone and does not apply to system/app capture.")
         }
     }
 
@@ -101,7 +124,9 @@ struct Record: ParsableCommand {
                 duration: duration,
                 wavToStdout: wavToStdout,
                 noOutput: noOutput,
-                captureSystem: captureSystem
+                captureSystem: captureSystem,
+                apps: apps,
+                excludeApps: excludeApps
             ).run()
         }
     }
@@ -119,6 +144,8 @@ struct RecordingSession {
     let wavToStdout: Bool
     let noOutput: Bool
     let captureSystem: Bool
+    let apps: [String]
+    let excludeApps: [String]
 
     func run() throws {
         // 1. Build the capture session for the requested source.
@@ -241,14 +268,14 @@ struct RecordingSession {
 
     /// Builds the capture session and output format for the requested source.
     private func makeCapture() throws -> (CaptureSession, PCMFormat) {
-        if captureSystem {
-            // System tap: stereo by default; mic TCC not needed.
+        if let (scope, label) = try makeTapScope() {
+            // Tap capture: stereo by default; mic TCC not needed.
             let channelCount = channels ?? 2
             let format = PCMFormat(
                 sampleRate: rate, bitsPerSample: bits, channels: channelCount)
-            Log.verbose("source: system audio (tap) -> \(rate) Hz, \(bits)-bit, \(channelCount) ch")
+            Log.verbose("source: \(label) -> \(rate) Hz, \(bits)-bit, \(channelCount) ch")
             let session = SystemCaptureSession(
-                scope: .system(excluding: []), micDeviceUID: nil, outputFormat: format)
+                scope: scope, micDeviceUID: nil, outputFormat: format)
             return (session, format)
         }
 
@@ -264,6 +291,39 @@ struct RecordingSession {
             throw AuralError.noPermission(error.description)
         }
         return (MicCaptureSession(deviceID: deviceID, outputFormat: format), format)
+    }
+
+    /// Resolves --system/--app/--exclude-app into a tap scope, or nil for
+    /// plain microphone capture.
+    private func makeTapScope() throws -> (TapScope, String)? {
+        if !apps.isEmpty {
+            let resolved = try resolveApps(apps)
+            let label = "app audio (" + resolved.map(\.name).joined(separator: ", ") + ")"
+            return (.processes(resolved.map { AudioObjectID($0.objectID) }), label)
+        }
+        if !excludeApps.isEmpty {
+            let resolved = try resolveApps(excludeApps)
+            let label = "system audio excluding " + resolved.map(\.name).joined(separator: ", ")
+            return (.system(excluding: resolved.map { AudioObjectID($0.objectID) }), label)
+        }
+        if captureSystem {
+            return (.system(excluding: []), "system audio (tap)")
+        }
+        return nil
+    }
+
+    private func resolveApps(_ specifiers: [String]) throws -> [CapturableApp] {
+        do {
+            let resolved = try DeviceManager.resolveApps(specifiers: specifiers)
+            for app in resolved {
+                Log.verbose("resolved '\(app.name)' [\(app.bundleID)] pid \(app.pid)")
+            }
+            return resolved
+        } catch let error as AppResolutionError {
+            throw AuralError.noInput(error.description)
+        } catch {
+            throw AuralError.software("failed to resolve applications: \(error)")
+        }
     }
 
     /// Maps TapEngine failures to user-facing errors with exit codes.
