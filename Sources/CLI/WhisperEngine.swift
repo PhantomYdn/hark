@@ -63,6 +63,9 @@ struct WhisperEngine {
     /// Binary names probed on PATH, in order of preference.
     static let binaryNames = ["whisper-cli", "whisper-cpp"]
 
+    /// Server binary names probed on PATH, in order of preference.
+    static let serverBinaryNames = ["whisper-server"]
+
     let binary: URL
     let modelPath: String
 
@@ -70,15 +73,30 @@ struct WhisperEngine {
     static func discover(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
-        if let override = environment["AURAL_WHISPER_BIN"], !override.isEmpty {
+        discover(
+            override: environment["AURAL_WHISPER_BIN"], names: binaryNames,
+            path: environment["PATH"] ?? "")
+    }
+
+    /// Locates the whisper.cpp server binary: $AURAL_WHISPER_SERVER_BIN
+    /// override, then PATH. Used for the model-resident live backend.
+    static func discoverServer(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> URL? {
+        discover(
+            override: environment["AURAL_WHISPER_SERVER_BIN"], names: serverBinaryNames,
+            path: environment["PATH"] ?? "")
+    }
+
+    private static func discover(override: String?, names: [String], path: String) -> URL? {
+        if let override, !override.isEmpty {
             if FileManager.default.isExecutableFile(atPath: override) {
                 return URL(fileURLWithPath: override)
             }
             return nil
         }
-        let path = environment["PATH"] ?? ""
         for directory in path.split(separator: ":") {
-            for name in binaryNames {
+            for name in names {
                 let candidate = String(directory) + "/" + name
                 if FileManager.default.isExecutableFile(atPath: candidate) {
                     return URL(fileURLWithPath: candidate)

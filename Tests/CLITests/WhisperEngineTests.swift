@@ -60,6 +60,101 @@ struct WhisperDiscoveryTests {
         ]
         #expect(WhisperEngine.discover(environment: env)?.lastPathComponent == "my-whisper")
     }
+
+    @Test func findsServerOnPath() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try makeExecutable(named: "whisper-server", in: dir)
+        let found = WhisperEngine.discoverServer(environment: ["PATH": dir.path])
+        #expect(found?.lastPathComponent == "whisper-server")
+    }
+
+    @Test func serverAbsentReturnsNil() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try makeExecutable(named: "whisper-cli", in: dir)  // cli present, server not
+        #expect(WhisperEngine.discoverServer(environment: ["PATH": dir.path]) == nil)
+    }
+
+    @Test func serverBinOverrideWins() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try makeExecutable(named: "my-server", in: dir)
+        let env = [
+            "PATH": "/nonexistent",
+            "AURAL_WHISPER_SERVER_BIN": dir.appendingPathComponent("my-server").path,
+        ]
+        #expect(
+            WhisperEngine.discoverServer(environment: env)?.lastPathComponent == "my-server")
+    }
+}
+
+@Suite("Whisper server backend")
+struct WhisperServerTests {
+    @Test func freePortIsUsableAndNotYetListening() {
+        guard let port = freePort() else {
+            Issue.record("freePort returned nil")
+            return
+        }
+        #expect(port > 0)
+        // Nothing is listening on the freshly-allocated port.
+        #expect(tcpConnectable(port: port) == false)
+    }
+
+    @Test func multipartBodyContainsFileAndFields() {
+        let wav = Data("RIFFxxxxWAVE".utf8)
+        let body = WhisperServerEngine.multipartBody(
+            boundary: "BND", wav: wav, responseFormat: "text", language: "en")
+        let text = String(decoding: body, as: UTF8.self)
+        #expect(text.contains("--BND\r\n"))
+        #expect(text.contains("name=\"file\"; filename=\"segment.wav\""))
+        #expect(text.contains("Content-Type: audio/wav"))
+        #expect(text.contains("name=\"response_format\"\r\n\r\ntext\r\n"))
+        #expect(text.contains("name=\"language\"\r\n\r\nen\r\n"))
+        #expect(text.hasSuffix("--BND--\r\n"))
+        #expect(text.contains("RIFFxxxxWAVE"))
+    }
+
+    @Test func multipartBodyOmitsLanguageWhenNil() {
+        let body = WhisperServerEngine.multipartBody(
+            boundary: "B", wav: Data(), responseFormat: "text", language: nil)
+        let text = String(decoding: body, as: UTF8.self)
+        #expect(!text.contains("name=\"language\""))
+    }
+
+    /// Boots a real whisper-server and transcribes one segment over loopback.
+    /// Skipped when the server binary, a model, or `say` is unavailable.
+    @Test func serverTranscribesSpeechOverLoopback() throws {
+        guard let serverBinary = WhisperEngine.discoverServer(),
+            let modelPath = try? WhisperEngine.resolveModel(flag: nil)
+        else { return }
+
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-srv-it-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        let aiff = work.appendingPathComponent("speech.aiff")
+        let say = Process()
+        say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        say.arguments = ["-o", aiff.path, "the quick brown fox jumps over the lazy dog"]
+        do {
+            try say.run()
+            say.waitUntilExit()
+        } catch {
+            return  // `say` unavailable -> skip
+        }
+        guard say.terminationStatus == 0 else { return }
+
+        let normalized = try AudioPipeline.normalizeFileForWhisper(aiff.path)
+        defer { try? FileManager.default.removeItem(at: normalized) }
+
+        let engine = try WhisperServerEngine.start(
+            serverBinary: serverBinary, modelPath: modelPath, quiet: true)
+        defer { engine.shutdown() }
+        let text = try engine.transcribe(wavFile: normalized, language: nil)
+        #expect(text.lowercased().contains("quick brown fox"))
+    }
 }
 
 @Suite("Whisper model resolution")

@@ -12,11 +12,10 @@ import Foundation
 /// persistent-process optimization is tracked as a follow-up. Timestamps are
 /// sample-accurate, derived from the capture byte clock.
 final class LiveTranscriber: AudioSink, @unchecked Sendable {
-    private let whisper: WhisperEngine
+    private let transcriber: SegmentTranscriber
     private let language: String?
     private let writer: LiveTranscriptWriter
     private let format: PCMFormat
-    private let quietEngine: Bool
     private let segmenter: StreamSegmenter
 
     private var totalBytes: UInt64 = 0
@@ -40,11 +39,11 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         maxWindowSeconds: Double = 12,
         minSegmentSeconds: Double = 0.4
     ) throws {
-        self.whisper = try TranscribeEngine.resolveWhisper(
+        let engine = try TranscribeEngine.resolveWhisper(
             engineName: engineName, modelFlag: modelFlag)
+        self.transcriber = Self.makeTranscriber(engine: engine, quiet: !Log.isVerbose)
         self.language = language
         self.format = captureFormat
-        self.quietEngine = !Log.isVerbose
         self.writer = try LiveTranscriptWriter(
             destination: destination, format: transcriptFormat)
         self.segmenter = StreamSegmenter(
@@ -59,9 +58,31 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
             self?.enqueue(segment, start: start, end: end)
         }
         Log.verbose("""
-            live transcription: pause \(pauseSeconds)s, window \(maxWindowSeconds)s, \
-            threshold \(silenceThresholdDBFS) dBFS
+            live transcription: \(transcriber.backendLabel); pause \(pauseSeconds)s, \
+            window \(maxWindowSeconds)s, threshold \(silenceThresholdDBFS) dBFS
             """)
+    }
+
+    /// Prefers the model-resident server (loads the model once) when the
+    /// `whisper-server` binary is available and not disabled via
+    /// `AURAL_WHISPER_SERVER=0`; otherwise falls back to the per-segment CLI.
+    /// Any server start failure also falls back, so transcription is never
+    /// blocked by the optimization.
+    private static func makeTranscriber(engine: WhisperEngine, quiet: Bool) -> SegmentTranscriber {
+        let environment = ProcessInfo.processInfo.environment
+        let disabled = environment["AURAL_WHISPER_SERVER"] == "0"
+        if !disabled, let serverBinary = WhisperEngine.discoverServer(environment: environment) {
+            do {
+                let server = try WhisperServerEngine.start(
+                    serverBinary: serverBinary, modelPath: engine.modelPath, quiet: quiet)
+                Log.verbose("live engine: \(server.backendLabel)")
+                return server
+            } catch {
+                Log.verbose(
+                    "whisper-server unavailable (\(error)); using per-segment whisper-cli")
+            }
+        }
+        return CLISegmentTranscriber(engine: engine, quietStderr: quiet)
     }
 
     func write(_ data: Data) throws {
@@ -99,14 +120,14 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
 
         let normalized = try AudioPipeline.normalizeFileForWhisper(raw.path)
         defer { try? FileManager.default.removeItem(at: normalized) }
-        return try whisper.transcribe(
-            wavFile: normalized, language: language, format: .txt, quietStderr: quietEngine)
+        return try transcriber.transcribe(wavFile: normalized, language: language)
     }
 
     func finalize() throws {
-        // Emit the trailing segment, then wait for the queue to drain.
+        // Emit the trailing segment, drain the queue, then release the engine.
         segmenter.finish()
         worker.sync {}
+        transcriber.shutdown()
         try? writer.close()
     }
 
