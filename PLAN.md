@@ -91,13 +91,16 @@
 - [x] Doc sweep: PRD §6.1/§6.3/§6.6 + FR table + US01–US04; scripts, docs/permissions.md, help strings
 - [x] Verified offline: convert roundtrips, file/stdin/both transcription, `-a - | -i -` pipeline (whisper.cpp + base.en)
 
-### Change 2 — Near-runtime live transcription (follow-up)
+### Change 2 — Near-runtime live transcription
 
-- [ ] `TranscriptSink` (file + stdout, live-append) parallel to `AudioSink`; `.srt` cumulative cues, `.json` JSON-lines in live mode
-- [ ] `LiveTranscriber`: tee live capture → audio sink + silence/max-window segmenter → per-segment whisper → live append
-- [ ] Wire live transcription into the root `runLiveInput` path (replaces batch-at-end when transcript requested)
+- [x] `LiveTranscriptWriter` (file + stdout, live-append): `.txt` lines, `.srt` numbered cues with sample-accurate timestamps, `.json` JSON-lines — written unbuffered so `tail -f` follows
+- [x] `StreamSegmenter`: cut on `pauseSeconds` of silence (reuses `peakAmplitude`/`--silence-threshold`) with a `maxWindowSeconds` cap; pure-silence windows dropped (clock advances, no engine spawn)
+- [x] `LiveTranscriber` (AudioSink): tee live PCM → segmenter → serial per-segment whisper worker → live append; engine/model resolved up front (fail fast); engine errors surfaced post-capture with exit-code mapping; broken-pipe = graceful
+- [x] `WhisperEngine.transcribe(quietStderr:)` so per-segment calls don't flood stderr (verbose keeps passthrough)
+- [x] Wire `LiveTranscriber` into `runLiveInput` (replaces batch-at-end; file-input transcription keeps whisper's native srt/json)
+- [x] Tests: `StreamSegmenter` boundaries/clock (5), `LiveTranscriptWriter` srt/json/txt (4), and a whisper-gated live integration test (segmenter→whisper→writer on `say` speech; skips without engine/model). `make test` green — 90 tests, 26 suites
 - [ ] Follow-up: persistent whisper process to avoid per-segment model reload (perf optimization)
-- [ ] Live e2e via `say`/`afplay` (permission-free) extending `Scripts/e2e-transcribe.sh`
+- [ ] Live-capture e2e of the segmenter (real mic/system) — on the pending-live list; the live PATH can't be exercised permission-free through the binary (covered offline by the integration test feeding PCM directly)
 
 ## Phase 5: Release Engineering & Public Beta (PRD M5)
 

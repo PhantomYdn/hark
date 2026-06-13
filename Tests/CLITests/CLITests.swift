@@ -376,3 +376,193 @@ struct SilenceSplittingTests {
         #expect(chunks.count == 1)
     }
 }
+
+@Suite("Live segmentation")
+struct StreamSegmenterTests {
+    // 1000 Hz 16-bit mono -> byteRate 2000, frame 2; 0.5 s == 1000 bytes.
+    private let format = PCMFormat(sampleRate: 1000, bitsPerSample: 16, channels: 1)
+
+    private func loud(_ bytes: Int = 1000) -> Data {
+        var data = Data(capacity: bytes)
+        for i in 0..<(bytes / 2) {
+            withUnsafeBytes(of: Int16(i % 2 == 0 ? 16000 : -16000).littleEndian) {
+                data.append(contentsOf: $0)
+            }
+        }
+        return data
+    }
+    private func quiet(_ bytes: Int = 1000) -> Data { Data(count: bytes) }
+
+    private func makeSegmenter() -> (StreamSegmenter, () -> [(Int, Double, Double)]) {
+        var captured: [(Int, Double, Double)] = []
+        let seg = StreamSegmenter(
+            format: format, silenceThresholdDBFS: -50,
+            pauseSeconds: 0.5, maxWindowSeconds: 2.0, minSegmentSeconds: 0.2)
+        seg.onSegment = { data, start, end in captured.append((data.count, start, end)) }
+        return (seg, { captured })
+    }
+
+    @Test func speechThenPauseEmitsOneSegment() {
+        let (seg, segments) = makeSegmenter()
+        seg.consume(loud(1000))   // 0.5 s speech
+        seg.consume(quiet(1000))  // 0.5 s silence == pause boundary
+        seg.finish()
+        let result = segments()
+        #expect(result.count == 1)
+        #expect(result[0].0 == 2000)            // bytes (speech + trailing pause)
+        #expect(abs(result[0].1 - 0.0) < 1e-9)  // start
+        #expect(abs(result[0].2 - 1.0) < 1e-9)  // end
+    }
+
+    @Test func continuousSpeechCutAtMaxWindow() {
+        let (seg, segments) = makeSegmenter()
+        for _ in 0..<4 { seg.consume(loud(1000)) }  // 2 s without a pause
+        let result = segments()
+        #expect(result.count == 1)
+        #expect(result[0].0 == 4000)  // forced at the 2 s window cap
+    }
+
+    @Test func pureSilenceWindowIsDropped() {
+        let (seg, segments) = makeSegmenter()
+        for _ in 0..<5 { seg.consume(quiet(1000)) }
+        seg.finish()
+        #expect(segments().isEmpty)  // no speech -> nothing transcribed
+    }
+
+    @Test func finishFlushesTrailingSpeech() {
+        let (seg, segments) = makeSegmenter()
+        seg.consume(loud(500))  // 0.25 s, no pause yet
+        seg.finish()
+        let result = segments()
+        #expect(result.count == 1)
+        #expect(result[0].0 == 500)
+        #expect(abs(result[0].2 - 0.25) < 1e-9)
+    }
+
+    @Test func clockAdvancesAcrossDroppedSilence() {
+        let (seg, segments) = makeSegmenter()
+        seg.consume(loud(1000))   // segment A: speech ...
+        seg.consume(quiet(1000))  // ... + pause -> [0, 1]
+        for _ in 0..<4 { seg.consume(quiet(1000)) }  // 2 s pure silence: dropped
+        seg.consume(loud(1000))   // segment B: speech ...
+        seg.consume(quiet(1000))  // ... + pause
+        seg.finish()
+        let result = segments()
+        #expect(result.count == 2)
+        #expect(abs(result[0].1 - 0.0) < 1e-9)
+        #expect(abs(result[0].2 - 1.0) < 1e-9)
+        // 2 s of dropped silence advances the clock: B starts at 3 s.
+        #expect(abs(result[1].1 - 3.0) < 1e-9)
+        #expect(abs(result[1].2 - 4.0) < 1e-9)
+    }
+}
+
+@Suite("Live transcript writer")
+struct LiveTranscriptWriterTests {
+    @Test func srtTimestampFormatting() {
+        #expect(LiveTranscriptWriter.srtTimestamp(0) == "00:00:00,000")
+        #expect(LiveTranscriptWriter.srtTimestamp(1.0) == "00:00:01,000")
+        #expect(LiveTranscriptWriter.srtTimestamp(3661.5) == "01:01:01,500")
+    }
+
+    @Test func jsonLineIsValidAndEscaped() throws {
+        let line = LiveTranscriptWriter.jsonLine(start: 1.5, end: 2.0, text: "he said \"hi\"")
+        #expect(!line.contains("\n"))
+        let object = try JSONSerialization.jsonObject(
+            with: Data(line.utf8)) as? [String: Any]
+        #expect(object?["text"] as? String == "he said \"hi\"")
+        #expect((object?["start"] as? Double) == 1.5)
+        #expect((object?["end"] as? Double) == 2.0)
+    }
+
+    @Test func srtFileAppendsNumberedCues() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-test-\(UUID().uuidString).srt").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let writer = try LiveTranscriptWriter(destination: .file(path), format: .srt)
+        try writer.append(text: "first", start: 0, end: 1)
+        try writer.append(text: "second", start: 1, end: 2)
+        try writer.close()
+
+        let contents = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(contents.contains("1\n00:00:00,000 --> 00:00:01,000\nfirst"))
+        #expect(contents.contains("2\n00:00:01,000 --> 00:00:02,000\nsecond"))
+    }
+
+    @Test func txtFileAppendsLines() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-test-\(UUID().uuidString).txt").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let writer = try LiveTranscriptWriter(destination: .file(path), format: .txt)
+        try writer.append(text: "hello", start: 0, end: 1)
+        try writer.append(text: "world", start: 1, end: 2)
+        try writer.close()
+        let contents = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(contents == "hello\nworld\n")
+    }
+}
+
+/// End-to-end check of the live chain (segmenter -> whisper -> writer) using
+/// `say`-synthesized speech. Skipped automatically when whisper.cpp, a model,
+/// or `say` is unavailable, so it never breaks CI.
+@Suite("Live transcription (integration)")
+struct LiveTranscriptionIntegrationTests {
+    @Test func liveSegmentTranscribesSpeechToFile() throws {
+        guard WhisperEngine.discover() != nil,
+            (try? WhisperEngine.resolveModel(flag: nil)) != nil
+        else { return }  // no engine/model -> skip
+
+        let work = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-live-it-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        let aiff = work.appendingPathComponent("speech.aiff")
+        guard runSay("the quick brown fox jumps over the lazy dog", to: aiff) else { return }
+
+        // Decode the speech to canonical 16 kHz mono PCM via the shared path.
+        let normalized = try AudioPipeline.normalizeFileForWhisper(aiff.path)
+        defer { try? FileManager.default.removeItem(at: normalized) }
+        let handle = try FileHandle(forReadingFrom: normalized)
+        let header = try WAVStreamParser.parseHeader { handle.readData(ofLength: $0) }
+        let pcm = handle.readDataToEndOfFile()
+        try handle.close()
+        #expect(!pcm.isEmpty)
+
+        let outputPath = work.appendingPathComponent("out.txt").path
+        let transcriber = try LiveTranscriber(
+            destination: .file(outputPath), transcriptFormat: .txt,
+            engineName: "whisper", modelFlag: nil, language: nil,
+            captureFormat: header.format, silenceThresholdDBFS: -50,
+            pauseSeconds: 0.5, maxWindowSeconds: 12, minSegmentSeconds: 0.3)
+
+        // Feed the speech in 0.25 s chunks, then a 0.6 s pause to close the
+        // segment, mimicking the live capture callback.
+        let chunk = header.format.byteRate / 4
+        var offset = 0
+        while offset < pcm.count {
+            let end = min(offset + chunk, pcm.count)
+            try transcriber.write(pcm.subdata(in: offset..<end))
+            offset = end
+        }
+        try transcriber.write(Data(count: (header.format.byteRate * 6) / 10))  // 0.6 s silence
+        try transcriber.finalize()
+        try transcriber.rethrowErrors()
+
+        let contents = try String(contentsOfFile: outputPath, encoding: .utf8)
+        #expect(contents.lowercased().contains("quick brown fox"))
+    }
+
+    private func runSay(_ phrase: String, to url: URL) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        process.arguments = ["-o", url.path, phrase]
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+}

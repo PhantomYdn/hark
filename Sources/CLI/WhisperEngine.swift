@@ -123,8 +123,13 @@ struct WhisperEngine {
     /// Transcribes the WAV file; returns the transcript in the requested
     /// format. Throws `TranscriptionError.engineFailed` with the engine's
     /// exit code on failure (propagated by the caller, US03).
+    ///
+    /// `quietStderr` silences the engine's stderr (model-load/timing lines);
+    /// used by live transcription, which would otherwise emit one such block
+    /// per segment.
     func transcribe(
-        wavFile: URL, language: String?, format: TranscriptOutputFormat
+        wavFile: URL, language: String?, format: TranscriptOutputFormat,
+        quietStderr: Bool = false
     ) throws -> String {
         let outputBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("aural-transcript-\(UUID().uuidString)").path
@@ -137,8 +142,10 @@ struct WhisperEngine {
             model: modelPath, wav: wavFile.path, language: language,
             format: format, outputBase: outputBase)
         // stdout duplicates the transcript with timestamps — suppress;
-        // stderr (model load info, errors) passes through to our stderr.
+        // stderr (model load info, errors) passes through to our stderr
+        // unless silenced.
         process.standardOutput = FileHandle.nullDevice
+        if quietStderr { process.standardError = FileHandle.nullDevice }
 
         do {
             try process.run()

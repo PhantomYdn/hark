@@ -28,6 +28,17 @@ struct TranscribeEngine {
     /// Normalizes `audioPath` to a whisper-ready WAV, runs the engine, and
     /// returns the transcript text in the requested format.
     func transcribe(audioPath: String) throws -> String {
+        let whisper = try Self.resolveWhisper(engineName: engineName, modelFlag: modelFlag)
+        Log.verbose("normalizing '\(audioPath)' to 16 kHz mono WAV")
+        let wavFile = try AudioPipeline.normalizeFileForWhisper(audioPath)
+        defer { try? FileManager.default.removeItem(at: wavFile) }
+        return try whisper.transcribe(wavFile: wavFile, language: language, format: format)
+    }
+
+    /// Resolves the transcription engine: validates the backend, locates the
+    /// whisper binary on PATH (or `$AURAL_WHISPER_BIN`), and the model. Used
+    /// to fail fast before capture starts and by the live transcriber.
+    static func resolveWhisper(engineName: String, modelFlag: String?) throws -> WhisperEngine {
         guard engineName == "whisper" else {
             throw AuralError.unavailable(
                 "cloud transcription backends are post-MVP (see PRD §4.2); use --engine whisper.")
@@ -37,13 +48,7 @@ struct TranscribeEngine {
         }
         let modelPath = try WhisperEngine.resolveModel(flag: modelFlag)
         Log.verbose("engine: \(binary.path), model: \(modelPath)")
-
-        Log.verbose("normalizing '\(audioPath)' to 16 kHz mono WAV")
-        let wavFile = try AudioPipeline.normalizeFileForWhisper(audioPath)
-        defer { try? FileManager.default.removeItem(at: wavFile) }
-
-        let whisper = WhisperEngine(binary: binary, modelPath: modelPath)
-        return try whisper.transcribe(wavFile: wavFile, language: language, format: format)
+        return WhisperEngine(binary: binary, modelPath: modelPath)
     }
 
     /// Writes a transcript to its destination: stdout (newline-terminated)

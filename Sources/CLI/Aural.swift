@@ -361,6 +361,12 @@ struct Aural: ParsableCommand {
             }
         }
 
+        // Fail fast on a missing transcription engine/model before touching
+        // audio permissions or starting capture.
+        if outputs.transcript != nil {
+            _ = try TranscribeEngine.resolveWhisper(engineName: engine, modelFlag: model)
+        }
+
         let captureEngine = CaptureEngine(
             deviceUID: device, rate: rate ?? 44100, bits: bits ?? 16, channels: channels,
             captureSystem: captureSystem, apps: apps, excludeApps: excludeApps, mix: mix)
@@ -373,15 +379,17 @@ struct Aural: ParsableCommand {
         if let audioDest = outputs.audio {
             sinks.append(try makeAudioSink(audioDest, format: format, metadata: metadata))
         }
-        var transcriptTemp: URL?
-        if outputs.transcript != nil {
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("aural-capture-\(UUID().uuidString).wav")
-            let writer = try WAVFileWriter(destination: .file(url), format: format)
-            sinks.append(WAVSink(writer: writer, label: "transcription buffer"))
-            transcriptTemp = url
+        var liveTranscriber: LiveTranscriber?
+        if let transcriptDest = outputs.transcript {
+            let transcriber = try LiveTranscriber(
+                destination: transcriptDest,
+                transcriptFormat: transcriptFormat(for: transcriptDest),
+                engineName: engine, modelFlag: model, language: language,
+                captureFormat: format, silenceThresholdDBFS: silenceThreshold)
+            sinks.append(transcriber)
+            liveTranscriber = transcriber
             if outputs.audio == nil && duration == nil {
-                Log.notice("recording — press Ctrl+C to stop and transcribe")
+                Log.notice("listening — press Ctrl+C to stop")
             }
         }
         if sinks.isEmpty {
@@ -393,10 +401,8 @@ struct Aural: ParsableCommand {
             session: session, format: format, into: sinks,
             duration: duration, warnOnSilence: captureSystem)
 
-        if let transcriptDest = outputs.transcript, let transcriptTemp {
-            defer { try? FileManager.default.removeItem(at: transcriptTemp) }
-            try transcribeAndWrite(audioPath: transcriptTemp.path, to: transcriptDest)
-        }
+        // Surface any engine error from the live segments (exit-code-mapped).
+        try liveTranscriber?.rethrowErrors()
     }
 
     // MARK: File input (transcode and/or transcribe)
