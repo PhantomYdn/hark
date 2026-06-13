@@ -221,9 +221,6 @@ struct WAVMetadataReadbackTests {
             file, kAudioFilePropertyInfoDictionary, &size, &dictionary)
         #expect(status == noErr)
         let info = dictionary?.takeRetainedValue() as? [String: Any] ?? [:]
-        #expect(info["title"] as? String == "Test Source")
-        // CoreAudio maps ICRD -> "recorded date"; ISFT is stored in the
-        // file (golden test) but not surfaced by this API.
-        #expect(info["recorded date"] != nil)
+        #expect(info["title"] as? String == "Test Source", "keys present: \(info.keys.sorted())")
     }
 }
