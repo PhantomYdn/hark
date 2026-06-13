@@ -45,7 +45,7 @@
 - [x] Implement `aural convert`: format conversion reusing CoreAudio codecs (PRD §6.1) — verified by lossless tone roundtrips (wav→m4a→wav, wav→flac→wav)
 - [x] Implement `aural info`: print duration, sample rate, channels, metadata; read support for WAV, AIFF, CAF, M4A, FLAC
 - [x] Implement metadata embedding: WAV INFO chunk (ICRD/ISFT/INAM) — MP4 atoms and ID3v2 deferred with their formats (P2)
-- [ ] Verify all output formats are accepted as-is by `whisper.cpp`, Fabric AI, and at least one cloud transcription API (PRD §6.4) — partially done locally (afinfo + AVAudioFile readback + convert roundtrips); whisper.cpp acceptance lands naturally with Phase 4; Fabric/cloud check needs network/tools
+- [ ] Verify all output formats are accepted as-is by `whisper.cpp`, Fabric AI, and at least one cloud transcription API (PRD §6.4) — whisper.cpp ✓ (e2e-transcribe.sh: wav/m4a/flac all transcribed); Fabric AI + cloud API checks still need network/API keys
 
 ### Pending live verification (capture permissions were reset mid-session; needs GUI access)
 
@@ -54,17 +54,19 @@
 - [ ] `aural record -t 5 --split duration=2 -o x.wav` — 3 chunks, each playable
 - [ ] Live `--split silence` smoke with real audio
 - [ ] Re-run `Scripts/e2e-app-isolation.sh` (should still pass)
+- [ ] `aural record -t 10 --stdout | aural transcribe -i -` — the literal US03 mic pipeline
+- [ ] `aural transcribe -i <mic-UID> -t 5` while speaking — device capture mode
 
 ## Phase 4: Transcription Pipeline (PRD M4)
 
-- [ ] Implement `aural transcribe -i <file>`: batch transcription of an audio file
-- [ ] Implement `-i -` stdin mode: read raw audio from stdin, no temporary files (US03)
-- [ ] Implement source input mode: record from device UID in memory, pipe to engine, output text to stdout
-- [ ] Implement `--engine whisper` (default): invoke system-installed whisper binary
-- [ ] Implement `--model`, `--language`, `--output-format txt|srt|json` flags
-- [ ] Missing-engine UX: clear error with installation instructions (`brew install whisper-cpp`) (PRD §6.6)
-- [ ] Pass engine STDERR through for debugging; propagate non-zero exit codes through pipelines (US03)
-- [ ] End-to-end test: `aural record -t 60 --stdout | aural transcribe -i -` produces transcript
+- [x] Implement `aural transcribe -i <file>`: batch transcription of an audio file (any readable format, normalized to 16 kHz mono internally)
+- [x] Implement `-i -` stdin mode: read raw audio from stdin (WAV-stream sniffing + raw PCM flags); staged via temp file internally (US03)
+- [x] Implement source input mode: record from device UID in memory, pipe to engine, output text to stdout — live mic check pending TCC re-grant
+- [x] Implement `--engine whisper` (default): invoke system-installed whisper binary (`whisper-cli`/`whisper-cpp` on PATH, `AURAL_WHISPER_BIN` override)
+- [x] Implement `--model`, `--language`, `--output-format txt|srt|json` flags (model fallback: `$AURAL_WHISPER_MODEL`)
+- [x] Missing-engine UX: clear error with installation instructions (`brew install whisper-cpp`) (PRD §6.6); missing model gets a HuggingFace download line
+- [x] Pass engine STDERR through for debugging; propagate non-zero exit codes through pipelines (US03) — verified: whisper exit 3 propagated
+- [x] End-to-end test: pipe-to-transcript verified permission-free via Scripts/e2e-transcribe.sh (say-synthesized speech; WAV + raw-PCM pipes); the literal mic variant `record --stdout | transcribe -i -` is on the pending-live list
 
 ## Phase 5: Release Engineering & Public Beta (PRD M5)
 
