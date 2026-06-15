@@ -74,18 +74,64 @@ struct ConfigSet: ParsableCommand {
             guard let configKey = ConfigKey(rawValue: key) else {
                 throw AuralError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
             }
-            // For the model key, warn (non-fatal) when the value can't be
-            // resolved yet, so a typo is visible but pre-download setup still works.
-            if configKey == .model, ModelRegistry.resolvePath(value) == nil {
-                Log.notice(
-                    "note: model '\(value)' is not present yet; "
-                        + "download it with 'aural models download \(value)'.")
-            }
             var config = Configuration.load()
+            // A non-fatal, engine-aware hint for the model key (the value is set
+            // regardless): catches a missing whisper model and points out when
+            // the value belongs to an engine other than the configured one.
+            if configKey == .model {
+                let owner = Self.installedEngine(of: value)
+                if let note = Self.modelNote(
+                    value: value, configuredEngine: config.engine, installedEngine: owner)
+                {
+                    Log.notice(note)
+                }
+            }
             try config.set(configKey, rawValue: value)  // typed; throws on bad value
             try config.save()
             print("\(configKey.rawValue) = \(config.displayValue(for: configKey) ?? value)")
         }
+    }
+
+    /// Hint for `config set model` (pure, for testing). `installedEngine` is the
+    /// engine whose installed models include `value` (nil if none). Returns nil
+    /// when the value matches the configured engine; otherwise flags a value
+    /// owned by a different engine (set `engine` too), or — only for whisper — a
+    /// model that isn't downloaded yet (the CoreML engines auto-download).
+    static func modelNote(
+        value: String, configuredEngine: String?, installedEngine owner: String?
+    ) -> String? {
+        let effective = configuredEngine ?? "whisper"
+        if let owner, owner != effective {
+            let versionHint = owner == "parakeet" ? " (parakeet selects a version, e.g. v2 or v3)" : ""
+            return "note: '\(value)' is a \(owner) model; also set the engine — "
+                + "aural config set engine \(owner)\(versionHint)"
+        }
+        if owner == nil, effective == "whisper" {
+            return "note: model '\(value)' is not present yet; "
+                + "download it with 'aural models download \(value)'."
+        }
+        return nil
+    }
+
+    /// The engine whose installed models include `value`, or nil. whisper matches
+    /// a resolvable ggml path/name; whisperkit/parakeet match a cached bundle.
+    static func installedEngine(of value: String) -> String? {
+        if ModelRegistry.resolvePath(value) != nil
+            || ModelRegistry.localModels().contains(where: { $0.name == value })
+        {
+            return "whisper"
+        }
+        let whisperkit = ModelRegistry.coreMLModels(
+            engine: "whisperkit", directory: WhisperKitBackend.downloadBase)
+        if whisperkit.contains(where: { $0.name == value || $0.name == "openai_whisper-\(value)" }) {
+            return "whisperkit"
+        }
+        let parakeet = ModelRegistry.coreMLModels(
+            engine: "parakeet", directory: ParakeetBackend.downloadBase)
+        if parakeet.contains(where: { $0.name == value || $0.name.hasSuffix("-\(value)") }) {
+            return "parakeet"
+        }
+        return nil
     }
 }
 

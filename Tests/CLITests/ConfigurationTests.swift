@@ -108,6 +108,36 @@ struct ConfigurationTests {
         #expect(Configuration(silenceThreshold: -50).displayValue(for: .silenceThreshold) == "-50")
         #expect(Configuration(silenceThreshold: -42.5).displayValue(for: .silenceThreshold) == "-42.5")
     }
+
+    // MARK: `config set model` engine-aware note
+
+    @Test func modelNoteSilentWhenValueMatchesConfiguredEngine() {
+        // whisper model + whisper engine (default) -> no note.
+        #expect(ConfigSet.modelNote(value: "base.en", configuredEngine: nil, installedEngine: "whisper") == nil)
+        // parakeet model + parakeet engine -> no note.
+        #expect(ConfigSet.modelNote(value: "v3", configuredEngine: "parakeet", installedEngine: "parakeet") == nil)
+    }
+
+    @Test func modelNoteFlagsDifferentEngine() {
+        // The reported bug: a parakeet model set while the engine is still whisper.
+        let note = ConfigSet.modelNote(
+            value: "parakeet-tdt-0.6b-v3", configuredEngine: nil, installedEngine: "parakeet")
+        #expect(note?.contains("is a parakeet model") == true)
+        #expect(note?.contains("aural config set engine parakeet") == true)
+        // whisperkit model while engine is whisper.
+        let wk = ConfigSet.modelNote(
+            value: "openai_whisper-base", configuredEngine: "whisper", installedEngine: "whisperkit")
+        #expect(wk?.contains("aural config set engine whisperkit") == true)
+    }
+
+    @Test func modelNoteWhisperNotPresentOnlyForWhisperEngine() {
+        // Unknown value, whisper engine -> "not present" download hint.
+        let whisper = ConfigSet.modelNote(value: "nope", configuredEngine: nil, installedEngine: nil)
+        #expect(whisper?.contains("not present yet") == true)
+        #expect(whisper?.contains("aural models download nope") == true)
+        // Unknown value, parakeet engine -> no note (CoreML engines auto-download).
+        #expect(ConfigSet.modelNote(value: "v3", configuredEngine: "parakeet", installedEngine: nil) == nil)
+    }
 }
 
 @Suite("Default-model adoption")
