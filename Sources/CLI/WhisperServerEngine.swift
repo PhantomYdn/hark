@@ -1,40 +1,6 @@
 import Darwin
 import Foundation
 
-/// Transcribes one already-normalized (16 kHz mono) WAV segment to text.
-/// Backs the live transcriber so the recognition engine can be swapped:
-/// a per-segment CLI process, or a model-resident server.
-protocol SegmentTranscriber: AnyObject {
-    /// Returns the recognized text for the segment.
-    func transcribe(wavFile: URL, language: String?) throws -> String
-    /// Releases any held resources (e.g., terminates a server process).
-    func shutdown()
-    /// Short description for verbose logging.
-    var backendLabel: String { get }
-}
-
-/// Per-segment backend: spawns the whisper CLI once per segment (the model
-/// is reloaded each time). Robust and dependency-light; the fallback when no
-/// server is available.
-final class CLISegmentTranscriber: SegmentTranscriber {
-    private let engine: WhisperEngine
-    private let quietStderr: Bool
-
-    init(engine: WhisperEngine, quietStderr: Bool) {
-        self.engine = engine
-        self.quietStderr = quietStderr
-    }
-
-    func transcribe(wavFile: URL, language: String?) throws -> String {
-        try engine.transcribe(
-            wavFile: wavFile, language: language, format: .txt, quietStderr: quietStderr)
-    }
-
-    func shutdown() {}
-
-    var backendLabel: String { "whisper-cli (per-segment)" }
-}
-
 /// Thread-safe holder for the async URLSession result; reads happen only
 /// after the completion handler signals its semaphore.
 private final class ResponseBox: @unchecked Sendable {
@@ -76,11 +42,13 @@ enum WhisperServerError: Error, CustomStringConvertible {
 /// `/inference` endpoint on loopback (127.0.0.1). This is local IPC with our
 /// own child process — no external network — and avoids the per-segment model
 /// reload of the CLI backend.
-final class WhisperServerEngine: SegmentTranscriber {
+final class WhisperServerEngine: TranscriptionBackend {
     private let process: Process
     private let inferenceURL: URL
     private let session: URLSession
     let port: UInt16
+
+    let capabilities = EngineCapabilities(autoDetect: true, translate: true, usesModelFile: true)
 
     private init(process: Process, port: UInt16) {
         self.process = process
@@ -131,7 +99,9 @@ final class WhisperServerEngine: SegmentTranscriber {
         throw WhisperServerError.notReady
     }
 
-    func transcribe(wavFile: URL, language: String?) throws -> String {
+    func transcribe(
+        wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat
+    ) throws -> String {
         let wav = try Data(contentsOf: wavFile)
         let boundary = "aural-\(UUID().uuidString)"
         var request = URLRequest(url: inferenceURL)
@@ -139,7 +109,8 @@ final class WhisperServerEngine: SegmentTranscriber {
         request.setValue(
             "multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.multipartBody(
-            boundary: boundary, wav: wav, responseFormat: "text", language: language)
+            boundary: boundary, wav: wav, responseFormat: Self.responseFormat(for: format),
+            translate: translate, language: language)
 
         let semaphore = DispatchSemaphore(value: 0)
         let outcome = ResponseBox()
@@ -175,12 +146,23 @@ final class WhisperServerEngine: SegmentTranscriber {
         process.waitUntilExit()
     }
 
-    var backendLabel: String { "whisper-server (model-resident, port \(port))" }
+    var label: String { "whisper-server (model-resident, port \(port))" }
+
+    /// Maps an aural transcript format to a whisper.cpp server `response_format`.
+    static func responseFormat(for format: TranscriptOutputFormat) -> String {
+        switch format {
+        case .txt: return "text"
+        case .srt: return "srt"
+        case .json: return "json"
+        }
+    }
 
     /// Builds a `multipart/form-data` body carrying the WAV file plus the
-    /// requested response format and optional language.
+    /// requested response format, translation flag, and optional language. The
+    /// whisper.cpp server reads these as form fields (`translate` is parsed as a
+    /// boolean string; `language` accepts "auto").
     static func multipartBody(
-        boundary: String, wav: Data, responseFormat: String, language: String?
+        boundary: String, wav: Data, responseFormat: String, translate: Bool, language: String?
     ) -> Data {
         var body = Data()
         func append(_ string: String) { body.append(Data(string.utf8)) }
@@ -198,6 +180,7 @@ final class WhisperServerEngine: SegmentTranscriber {
         }
         field("response_format", responseFormat)
         field("temperature", "0.0")
+        if translate { field("translate", "true") }
         if let language { field("language", language) }
 
         append("--\(boundary)--\r\n")

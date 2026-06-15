@@ -23,25 +23,36 @@ struct TranscribeEngine {
     let engineName: String
     let modelFlag: String?
     let language: String?
+    let translate: Bool
     let format: TranscriptOutputFormat
 
     /// Normalizes `audioPath` to a whisper-ready WAV, runs the engine, and
     /// returns the transcript text in the requested format.
     func transcribe(audioPath: String) throws -> String {
         let whisper = try Self.resolveWhisper(engineName: engineName, modelFlag: modelFlag)
+        ModelRegistry.warnIfModelLanguageMismatch(
+            modelPath: whisper.modelPath, language: language, translate: translate)
+        let backend = WhisperCLIBackend(engine: whisper, quietStderr: false)
         Log.verbose("normalizing '\(audioPath)' to 16 kHz mono WAV")
         let wavFile = try AudioPipeline.normalizeFileForWhisper(audioPath)
         defer { try? FileManager.default.removeItem(at: wavFile) }
-        return try whisper.transcribe(wavFile: wavFile, language: language, format: format)
+        return try backend.transcribe(
+            wavFile: wavFile, language: language, translate: translate, format: format)
     }
 
-    /// Resolves the transcription engine: validates the backend, locates the
-    /// whisper binary on PATH (or `$AURAL_WHISPER_BIN`), and the model. Used
-    /// to fail fast before capture starts and by the live transcriber.
+    /// Resolves the transcription engine: validates the backend is known and
+    /// implemented, locates the whisper binary on PATH (or `$AURAL_WHISPER_BIN`),
+    /// and the model. Used to fail fast before capture starts and by the live
+    /// transcriber.
     static func resolveWhisper(engineName: String, modelFlag: String?) throws -> WhisperEngine {
-        guard engineName == "whisper" else {
+        guard let spec = EngineSpec.named(engineName) else {
+            throw AuralError.usage(
+                "unknown engine '\(engineName)' (known: \(EngineSpec.knownNames)).")
+        }
+        guard spec.isImplemented else {
             throw AuralError.unavailable(
-                "cloud transcription backends are post-MVP (see PRD §4.2); use --engine whisper.")
+                (spec.plannedNote ?? "engine '\(engineName)' is not available")
+                    + "; use --engine whisper.")
         }
         guard let binary = WhisperEngine.discover() else {
             throw TranscriptionError.engineNotFound

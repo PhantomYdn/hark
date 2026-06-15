@@ -104,7 +104,7 @@ struct WhisperServerTests {
     @Test func multipartBodyContainsFileAndFields() {
         let wav = Data("RIFFxxxxWAVE".utf8)
         let body = WhisperServerEngine.multipartBody(
-            boundary: "BND", wav: wav, responseFormat: "text", language: "en")
+            boundary: "BND", wav: wav, responseFormat: "text", translate: false, language: "en")
         let text = String(decoding: body, as: UTF8.self)
         #expect(text.contains("--BND\r\n"))
         #expect(text.contains("name=\"file\"; filename=\"segment.wav\""))
@@ -117,9 +117,25 @@ struct WhisperServerTests {
 
     @Test func multipartBodyOmitsLanguageWhenNil() {
         let body = WhisperServerEngine.multipartBody(
-            boundary: "B", wav: Data(), responseFormat: "text", language: nil)
+            boundary: "B", wav: Data(), responseFormat: "text", translate: false, language: nil)
         let text = String(decoding: body, as: UTF8.self)
         #expect(!text.contains("name=\"language\""))
+    }
+
+    @Test func multipartBodyAddsTranslateFieldOnlyWhenRequested() {
+        let off = WhisperServerEngine.multipartBody(
+            boundary: "B", wav: Data(), responseFormat: "text", translate: false, language: "de")
+        #expect(!String(decoding: off, as: UTF8.self).contains("name=\"translate\""))
+
+        let on = WhisperServerEngine.multipartBody(
+            boundary: "B", wav: Data(), responseFormat: "text", translate: true, language: "de")
+        #expect(String(decoding: on, as: UTF8.self).contains("name=\"translate\"\r\n\r\ntrue\r\n"))
+    }
+
+    @Test func responseFormatMapping() {
+        #expect(WhisperServerEngine.responseFormat(for: .txt) == "text")
+        #expect(WhisperServerEngine.responseFormat(for: .srt) == "srt")
+        #expect(WhisperServerEngine.responseFormat(for: .json) == "json")
     }
 
     /// Boots a real whisper-server and transcribes one segment over loopback.
@@ -152,7 +168,8 @@ struct WhisperServerTests {
         let engine = try WhisperServerEngine.start(
             serverBinary: serverBinary, modelPath: modelPath, quiet: true)
         defer { engine.shutdown() }
-        let text = try engine.transcribe(wavFile: normalized, language: nil)
+        let text = try engine.transcribe(
+            wavFile: normalized, language: nil, translate: false, format: .txt)
         #expect(text.lowercased().contains("quick brown fox"))
     }
 }
@@ -181,14 +198,52 @@ struct WhisperModelTests {
 
     @Test func missingModelThrows() {
         #expect(throws: TranscriptionError.self) {
-            _ = try WhisperEngine.resolveModel(flag: nil, environment: [:])
+            _ = try WhisperEngine.resolveModel(
+                flag: nil, environment: [:], config: Configuration())
         }
     }
 
     @Test func nonexistentModelPathThrows() {
         #expect(throws: TranscriptionError.self) {
-            _ = try WhisperEngine.resolveModel(flag: "/no/such/model.bin", environment: [:])
+            _ = try WhisperEngine.resolveModel(
+                flag: "/no/such/model.bin", environment: [:], config: Configuration())
         }
+    }
+
+    @Test func configModelUsedWhenNoFlagOrEnv() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-cfg-model-\(UUID().uuidString).bin")
+        try Data([0x01]).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let resolved = try WhisperEngine.resolveModel(
+            flag: nil, environment: [:], config: Configuration(model: file.path))
+        #expect(resolved == file.path)
+    }
+
+    @Test func precedenceFlagBeatsEnvBeatsConfig() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aural-prec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let flagFile = dir.appendingPathComponent("flag.bin")
+        let envFile = dir.appendingPathComponent("env.bin")
+        let cfgFile = dir.appendingPathComponent("cfg.bin")
+        for f in [flagFile, envFile, cfgFile] { try Data([0x01]).write(to: f) }
+
+        let env = ["AURAL_WHISPER_MODEL": envFile.path]
+        let config = Configuration(model: cfgFile.path)
+        // Flag wins over everything.
+        #expect(
+            try WhisperEngine.resolveModel(flag: flagFile.path, environment: env, config: config)
+                == flagFile.path)
+        // Env wins over config when no flag.
+        #expect(
+            try WhisperEngine.resolveModel(flag: nil, environment: env, config: config)
+                == envFile.path)
+        // Config used when neither flag nor env.
+        #expect(
+            try WhisperEngine.resolveModel(flag: nil, environment: [:], config: config)
+                == cfgFile.path)
     }
 }
 
@@ -196,20 +251,95 @@ struct WhisperModelTests {
 struct WhisperArgumentTests {
     @Test func buildsBaseArguments() {
         let args = WhisperEngine.buildArguments(
-            model: "/m.bin", wav: "/a.wav", language: nil, format: .txt, outputBase: "/tmp/out")
+            model: "/m.bin", wav: "/a.wav", language: nil, translate: false,
+            format: .txt, outputBase: "/tmp/out")
         #expect(args == ["-m", "/m.bin", "-f", "/a.wav", "-np", "-otxt", "-of", "/tmp/out"])
     }
 
     @Test func includesLanguageWhenSet() {
         let args = WhisperEngine.buildArguments(
-            model: "/m.bin", wav: "/a.wav", language: "de", format: .srt, outputBase: "/o")
+            model: "/m.bin", wav: "/a.wav", language: "de", translate: false,
+            format: .srt, outputBase: "/o")
         #expect(args.contains("-osrt"))
         #expect(args.suffix(2) == ["-l", "de"])
     }
 
+    @Test func autoLanguagePassesThrough() {
+        let args = WhisperEngine.buildArguments(
+            model: "/m.bin", wav: "/a.wav", language: "auto", translate: false,
+            format: .txt, outputBase: "/o")
+        #expect(args.suffix(2) == ["-l", "auto"])
+    }
+
     @Test func jsonFormatFlag() {
         let args = WhisperEngine.buildArguments(
-            model: "/m.bin", wav: "/a.wav", language: nil, format: .json, outputBase: "/o")
+            model: "/m.bin", wav: "/a.wav", language: nil, translate: false,
+            format: .json, outputBase: "/o")
         #expect(args.contains("-oj"))
+    }
+
+    @Test func translateAddsFlagBeforeLanguage() {
+        let args = WhisperEngine.buildArguments(
+            model: "/m.bin", wav: "/a.wav", language: "de", translate: true,
+            format: .txt, outputBase: "/o")
+        #expect(args.contains("-tr"))
+        // Language must remain the trailing pair so callers can rely on it.
+        #expect(args.suffix(2) == ["-l", "de"])
+        let tr = args.firstIndex(of: "-tr")!
+        let l = args.firstIndex(of: "-l")!
+        #expect(tr < l)
+    }
+
+    @Test func noTranslateFlagByDefault() {
+        let args = WhisperEngine.buildArguments(
+            model: "/m.bin", wav: "/a.wav", language: nil, translate: false,
+            format: .txt, outputBase: "/o")
+        #expect(!args.contains("-tr"))
+    }
+}
+
+@Suite("Engine selection")
+struct EngineSpecTests {
+    @Test func whisperIsImplementedAndCapable() {
+        let spec = EngineSpec.named("whisper")
+        #expect(spec?.isImplemented == true)
+        #expect(spec?.capabilities.translate == true)
+        #expect(spec?.capabilities.autoDetect == true)
+    }
+
+    @Test func appleIsKnownButNotImplementedAndCannotTranslate() {
+        let spec = EngineSpec.named("apple")
+        #expect(spec != nil)
+        #expect(spec?.isImplemented == false)
+        #expect(spec?.capabilities.translate == false)
+        #expect(spec?.capabilities.autoDetect == false)
+    }
+
+    @Test func whisperkitKnownButNotImplemented() {
+        #expect(EngineSpec.named("whisperkit")?.isImplemented == false)
+        #expect(EngineSpec.named("whisperkit")?.capabilities.translate == true)
+    }
+
+    @Test func unknownEngineIsNil() {
+        #expect(EngineSpec.named("bogus") == nil)
+    }
+
+    @Test func knownNamesListsEveryEngine() {
+        let names = EngineSpec.knownNames
+        for engine in ["whisper", "apple", "whisperkit", "cloud"] {
+            #expect(names.contains(engine))
+        }
+    }
+
+    @Test func resolveRejectsUnknownEngine() {
+        #expect(throws: AuralError.self) {
+            _ = try TranscribeEngine.resolveWhisper(engineName: "bogus", modelFlag: nil)
+        }
+    }
+
+    @Test func resolveRejectsUnimplementedEngine() {
+        #expect(throws: AuralError.self) {
+            _ = try TranscribeEngine.resolveWhisper(engineName: "apple", modelFlag: nil)
+        }
     }
 }

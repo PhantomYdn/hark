@@ -42,6 +42,8 @@ struct Aural: ParsableCommand {
             Devices.self,
             Apps.self,
             Info.self,
+            Models.self,
+            Config.self,
         ]
     )
 
@@ -53,7 +55,8 @@ struct Aural: ParsableCommand {
     var input: String?
 
     @Option(name: [.short, .long], help: ArgumentHelp(
-        "Live: input device UID (see 'aural devices'). Defaults to the system default input.",
+        "Live: input device UID (see 'aural devices'). Defaults to the system default input "
+            + "(or $AURAL_DEVICE / aural config).",
         valueName: "uid"))
     var device: String?
 
@@ -119,9 +122,10 @@ struct Aural: ParsableCommand {
     var split: String?
 
     @Option(name: .customLong("silence-threshold"), help: ArgumentHelp(
-        "Peak level (dBFS, negative) below which audio counts as silence for --split silence.",
+        "Peak level (dBFS, negative) below which audio counts as silence for --split silence "
+            + "(default -50; or $AURAL_SILENCE_THRESHOLD / aural config).",
         valueName: "dbfs"))
-    var silenceThreshold: Double = -50
+    var silenceThreshold: Double?
 
     // MARK: Format overrides
 
@@ -138,16 +142,30 @@ struct Aural: ParsableCommand {
     // MARK: Transcription engine
 
     @Option(name: [.short, .long], help: ArgumentHelp(
-        "Transcription engine: whisper (local) or cloud (post-MVP).", valueName: "engine"))
-    var engine: String = "whisper"
+        "Transcription engine: whisper (local). apple/whisperkit are planned; cloud is post-MVP "
+            + "(default whisper; or $AURAL_ENGINE / aural config).",
+        valueName: "engine"))
+    var engine: String?
 
     @Option(help: ArgumentHelp(
-        "Path to a ggml Whisper model (default: $AURAL_WHISPER_MODEL).", valueName: "path"))
+        "ggml Whisper model: a path or a short name resolved under ~/.aural/models "
+            + "(e.g. base.en, large-v3-turbo). Default: $AURAL_WHISPER_MODEL, then "
+            + "the config 'model' (aural config).",
+        valueName: "name|path"))
     var model: String?
 
     @Option(help: ArgumentHelp(
-        "Spoken language code (e.g. en, de); omit for the model default.", valueName: "code"))
+        "Spoken language code (e.g. en, de), or 'auto' to detect "
+            + "(default auto; or $AURAL_LANGUAGE / aural config).",
+        valueName: "code"))
     var language: String?
+
+    @Flag(name: .customLong("translate"), inversion: .prefixedNo, help: """
+        Translate speech to English regardless of the spoken language \
+        (whisper/whisperkit only; or $AURAL_TRANSLATE / aural config). Use \
+        --no-translate to override a configured default.
+        """)
+    var translate: Bool?
 
     // MARK: Advanced
 
@@ -192,8 +210,18 @@ struct Aural: ParsableCommand {
         if let duration, duration <= 0 {
             throw ValidationError("--duration must be positive.")
         }
-        guard ["whisper", "cloud"].contains(engine) else {
-            throw ValidationError("unknown engine '\(engine)' (known: whisper, cloud).")
+        // Validate explicit engine/translate at parse time; config/env-sourced
+        // values are re-checked on the merged result in `ResolvedSettings`.
+        if let engine {
+            guard let engineSpec = EngineSpec.named(engine) else {
+                throw ValidationError(
+                    "unknown engine '\(engine)' (known: \(EngineSpec.knownNames)).")
+            }
+            if translate == true && !engineSpec.capabilities.translate {
+                throw ValidationError(
+                    "the '\(engine)' engine cannot translate to English; drop --translate or "
+                        + "choose an engine that supports it (whisper, whisperkit).")
+            }
         }
         guard [16, 24, 32].contains(inputBits) else {
             throw ValidationError("--input-bits must be 16, 24, or 32.")
@@ -275,7 +303,7 @@ struct Aural: ParsableCommand {
                 throw ValidationError(error.message)
             }
         }
-        if silenceThreshold >= 0 {
+        if let silenceThreshold, silenceThreshold >= 0 {
             throw ValidationError("--silence-threshold must be negative (dBFS).")
         }
     }
@@ -285,11 +313,15 @@ struct Aural: ParsableCommand {
     func run() throws {
         Log.isVerbose = options.verbose
         do {
+            let settings = try ResolvedSettings.resolve(
+                engineFlag: engine, languageFlag: language, translateFlag: translate,
+                silenceFlag: silenceThreshold, deviceFlag: device)
+            try settings.validate()
             let outputs = try resolveOutputs()
             if let input {
-                try runFileInput(input, outputs: outputs)
+                try runFileInput(input, outputs: outputs, settings: settings)
             } else {
-                try runLiveInput(outputs: outputs)
+                try runLiveInput(outputs: outputs, settings: settings)
             }
         } catch let error as AuralError {
             Log.error(error.message)
@@ -351,7 +383,7 @@ struct Aural: ParsableCommand {
 
     // MARK: Live capture
 
-    private func runLiveInput(outputs: ResolvedOutputs) throws {
+    private func runLiveInput(outputs: ResolvedOutputs, settings: ResolvedSettings) throws {
         // Fail fast on unwritable audio formats before any permission prompts.
         if case .file(let path)? = outputs.audio {
             let fileFormat = try resolveAudioFileFormat(path: path)
@@ -362,14 +394,20 @@ struct Aural: ParsableCommand {
         }
 
         // Fail fast on a missing transcription engine/model before touching
-        // audio permissions or starting capture.
+        // audio permissions or starting capture (and warn once if the model
+        // can't honor the requested language/translation).
         if outputs.transcript != nil {
-            _ = try TranscribeEngine.resolveWhisper(engineName: engine, modelFlag: model)
+            let whisper = try TranscribeEngine.resolveWhisper(
+                engineName: settings.engine, modelFlag: model)
+            ModelRegistry.warnIfModelLanguageMismatch(
+                modelPath: whisper.modelPath, language: settings.language,
+                translate: settings.translate)
         }
 
         let captureEngine = CaptureEngine(
-            deviceUID: device, rate: rate ?? 44100, bits: bits ?? 16, channels: channels,
-            captureSystem: captureSystem, apps: apps, excludeApps: excludeApps, mix: mix)
+            deviceUID: settings.micDevice, rate: rate ?? 44100, bits: bits ?? 16,
+            channels: channels, captureSystem: captureSystem, apps: apps,
+            excludeApps: excludeApps, mix: mix)
         let (session, format, sourceLabel) = try captureEngine.makeCapture()
 
         let metadata = WAVMetadata(
@@ -377,15 +415,18 @@ struct Aural: ParsableCommand {
 
         var sinks: [AudioSink] = []
         if let audioDest = outputs.audio {
-            sinks.append(try makeAudioSink(audioDest, format: format, metadata: metadata))
+            sinks.append(try makeAudioSink(
+                audioDest, format: format, metadata: metadata,
+                silenceThreshold: settings.silenceThreshold))
         }
         var liveTranscriber: LiveTranscriber?
         if let transcriptDest = outputs.transcript {
             let transcriber = try LiveTranscriber(
                 destination: transcriptDest,
                 transcriptFormat: transcriptFormat(for: transcriptDest),
-                engineName: engine, modelFlag: model, language: language,
-                captureFormat: format, silenceThresholdDBFS: silenceThreshold)
+                engineName: settings.engine, modelFlag: model, language: settings.language,
+                translate: settings.translate,
+                captureFormat: format, silenceThresholdDBFS: settings.silenceThreshold)
             sinks.append(transcriber)
             liveTranscriber = transcriber
             if outputs.audio == nil && duration == nil {
@@ -407,7 +448,9 @@ struct Aural: ParsableCommand {
 
     // MARK: File input (transcode and/or transcribe)
 
-    private func runFileInput(_ inputPath: String, outputs: ResolvedOutputs) throws {
+    private func runFileInput(
+        _ inputPath: String, outputs: ResolvedOutputs, settings: ResolvedSettings
+    ) throws {
         var sourcePath = inputPath
         var stagedStdin: URL?
         if inputPath == "-" {
@@ -426,16 +469,19 @@ struct Aural: ParsableCommand {
         }
 
         if let audioDest = outputs.audio {
-            try convert(sourcePath: sourcePath, to: audioDest)
+            try convert(sourcePath: sourcePath, to: audioDest, settings: settings)
         }
         if let transcriptDest = outputs.transcript {
-            try transcribeAndWrite(audioPath: sourcePath, to: transcriptDest)
+            try transcribeAndWrite(
+                audioPath: sourcePath, to: transcriptDest, settings: settings)
         }
     }
 
     /// Transcodes `sourcePath` into the given audio destination, defaulting
     /// rate/depth/channels to the source values.
-    private func convert(sourcePath: String, to destination: AudioDestination) throws {
+    private func convert(
+        sourcePath: String, to destination: AudioDestination, settings: ResolvedSettings
+    ) throws {
         let source = try AudioPipeline.openForReading(sourcePath)
         let sourceFormat = source.processingFormat
         let sourceBits = Int(source.fileFormat.streamDescription.pointee.mBitsPerChannel)
@@ -444,7 +490,9 @@ struct Aural: ParsableCommand {
             bitsPerSample: bits ?? ([16, 24, 32].contains(sourceBits) ? sourceBits : 16),
             channels: channels ?? min(2, max(1, Int(sourceFormat.channelCount)))
         )
-        let sink = try makeAudioSink(destination, format: pcmFormat, metadata: WAVMetadata())
+        let sink = try makeAudioSink(
+            destination, format: pcmFormat, metadata: WAVMetadata(),
+            silenceThreshold: settings.silenceThreshold)
         Log.verbose("""
             \(sourcePath) (\(Int(sourceFormat.sampleRate)) Hz, \(sourceFormat.channelCount) ch) -> \
             \(sink.label) (\(pcmFormat.sampleRate) Hz, \(pcmFormat.bitsPerSample)-bit, \
@@ -456,10 +504,13 @@ struct Aural: ParsableCommand {
 
     // MARK: Shared helpers
 
-    private func transcribeAndWrite(audioPath: String, to destination: TranscriptDestination) throws {
+    private func transcribeAndWrite(
+        audioPath: String, to destination: TranscriptDestination, settings: ResolvedSettings
+    ) throws {
         let format = transcriptFormat(for: destination)
         let transcriber = TranscribeEngine(
-            engineName: engine, modelFlag: model, language: language, format: format)
+            engineName: settings.engine, modelFlag: model, language: settings.language,
+            translate: settings.translate, format: format)
         let text = try transcriber.transcribe(audioPath: audioPath)
         try transcriber.write(text, to: destination)
     }
@@ -467,7 +518,8 @@ struct Aural: ParsableCommand {
     /// Builds an audio sink for a destination. File destinations honor
     /// `--split` (live only); stdout uses a WAV stream or raw PCM.
     private func makeAudioSink(
-        _ destination: AudioDestination, format: PCMFormat, metadata: WAVMetadata
+        _ destination: AudioDestination, format: PCMFormat, metadata: WAVMetadata,
+        silenceThreshold: Double
     ) throws -> AudioSink {
         switch destination {
         case .stdoutRaw:

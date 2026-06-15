@@ -37,11 +37,10 @@ enum TranscriptionError: Error, CustomStringConvertible {
                 """
         case .modelMissing:
             return """
-                no Whisper model specified. Pass --model PATH or set \
-                AURAL_WHISPER_MODEL. Models: \
-                https://huggingface.co/ggerganov/whisper.cpp — e.g.: \
-                curl -L -o ~/.aural/models/ggml-base.en.bin \
-                'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin'
+                no Whisper model specified. Pass --model NAME|PATH, set \
+                AURAL_WHISPER_MODEL, or configure a default: \
+                aural models download base.en --default \
+                (or aural config set model <name>).
                 """
         case .modelNotFound(let path):
             return "Whisper model not found at '\(path)'"
@@ -106,23 +105,33 @@ struct WhisperEngine {
         return nil
     }
 
-    /// Resolves the model path: --model flag, then $AURAL_WHISPER_MODEL.
+    /// Resolves the model in precedence order: `--model` flag, then
+    /// `$AURAL_WHISPER_MODEL`, then the config default (`~/.aural/config.json`).
+    /// Each value may be a ggml path or a short name resolved under
+    /// `~/.aural/models` (see `ModelRegistry`).
     static func resolveModel(
         flag: String?,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        config: Configuration = .load()
     ) throws -> String {
-        let path = flag ?? environment["AURAL_WHISPER_MODEL"]
-        guard let path, !path.isEmpty else { throw TranscriptionError.modelMissing }
-        let expanded = (path as NSString).expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: expanded) else {
-            throw TranscriptionError.modelNotFound(expanded)
+        let value = flag
+            ?? environment["AURAL_WHISPER_MODEL"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? config.model
+        guard let value, !value.isEmpty else { throw TranscriptionError.modelMissing }
+        if let resolved = ModelRegistry.resolvePath(value) { return resolved }
+        // Not found as a path nor a known short name.
+        if value.contains("/") {
+            throw TranscriptionError.modelNotFound((value as NSString).expandingTildeInPath)
         }
-        return expanded
+        throw TranscriptionError.modelNotFound(
+            "\(ModelRegistry.modelsDirectory.path)/\(ModelRegistry.fileName(for: value)) "
+                + "(run 'aural models download \(value)')")
     }
 
-    /// Builds the whisper-cli argument list.
+    /// Builds the whisper-cli argument list. `language` nil omits `-l` (whisper
+    /// default); "auto" enables detection. `translate` adds `-tr` (English out).
     static func buildArguments(
-        model: String, wav: String, language: String?,
+        model: String, wav: String, language: String?, translate: Bool,
         format: TranscriptOutputFormat, outputBase: String
     ) -> [String] {
         var arguments = [
@@ -132,6 +141,9 @@ struct WhisperEngine {
             format.whisperFlag,
             "-of", outputBase,
         ]
+        if translate {
+            arguments.append("-tr")
+        }
         if let language {
             arguments += ["-l", language]
         }
@@ -146,8 +158,8 @@ struct WhisperEngine {
     /// used by live transcription, which would otherwise emit one such block
     /// per segment.
     func transcribe(
-        wavFile: URL, language: String?, format: TranscriptOutputFormat,
-        quietStderr: Bool = false
+        wavFile: URL, language: String?, translate: Bool = false,
+        format: TranscriptOutputFormat, quietStderr: Bool = false
     ) throws -> String {
         let outputBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("aural-transcript-\(UUID().uuidString)").path
@@ -157,7 +169,7 @@ struct WhisperEngine {
         let process = Process()
         process.executableURL = binary
         process.arguments = Self.buildArguments(
-            model: modelPath, wav: wavFile.path, language: language,
+            model: modelPath, wav: wavFile.path, language: language, translate: translate,
             format: format, outputBase: outputBase)
         // stdout duplicates the transcript with timestamps — suppress;
         // stderr (model load info, errors) passes through to our stderr

@@ -128,12 +128,15 @@
 
 ### Phase 6.1 — Engine abstraction + multilingual `whisper` (no new deps)
 
-- [ ] `TranscriptionBackend` protocol + capability descriptor; route batch (`runFileInput`) and live (`LiveTranscriber`) through it; whisper CLI+server refactored as a backend
-- [ ] `--language auto` default + `--language CODE`; `--translate` (`-tr` CLI / `task` server); capability validation (reject unsupported combos)
-- [ ] Named-model resolution (`large-v3-turbo` → `~/.aural/models/ggml-...bin`); warn on `.en` model + non-English language
-- [ ] `aural models list` / `aural models download <name>` (ggml from HF `ggerganov/whisper.cpp`)
-- [ ] Tests: capability validation, language/translate parsing, model resolution; gated multilingual e2e
-- [ ] Docs/README usage examples; tick PRD/PLAN
+- [x] `TranscriptionBackend` protocol + `EngineCapabilities`/`EngineSpec` descriptor; batch (`TranscribeEngine`) and live (`LiveTranscriber`) both drive `WhisperCLIBackend`/`WhisperServerEngine` through it; live server-vs-CLI selection moved to `TranscriptionEngine.makeLive`
+- [x] `--language auto` default + `--language CODE`; `--translate` (whisper-cli `-tr`; server form field `translate=true` — note: whisper.cpp server uses `translate`, not `task`, verified against server.cpp); capability validation rejects unsupported combos (e.g. `--translate` on `apple`); `apple`/`whisperkit` are known-but-not-implemented (run-time exit 69), `cloud` post-MVP
+- [x] Named-model resolution via `ModelRegistry` (`base.en`/`large-v3-turbo` → `~/.aural/models/ggml-*.bin`, full paths pass through); warns when a `.en` model gets a non-English `--language`/`--translate`
+- [x] `aural models list` (+`--json`, current default marked `*`) / `aural models list --available` (downloadable catalog + installed/current) / `aural models download <name>` (ggml from HF `ggerganov/whisper.cpp`; only network path, opt-in; `--force` re-download; `--default` sets the config default, first download auto-adopts)
+- [x] Config file `~/.aural/config.json` (`Configuration` Codable, kebab-case keys) + `aural config show/set/unset/path` (typed validation; `set` captures `-`-prefixed values verbatim); `current`/`*` marker reflects env›config
+- [x] Config defaults for `model`/`engine`/`language`/`translate`/`silence-threshold`/`device`, each resolved flag › env (`$AURAL_*`) › config › built-in via `ResolvedSettings`; merged-value validation catches env/config-driven conflicts; `--no-translate` overrides a configured default; malformed env values are usage errors
+- [x] Tests: arg building (auto/translate ordering), server multipart `translate`/`response_format`, capability/EngineSpec + resolve rejection, model name/path resolution + `.en` warning + `models list`; whisper-gated chain still green (118 tests, 29 suites)
+- [x] Help strings refreshed (`--engine`/`--language`/`--translate`/`--model`); PRD §6.1/§6.6 already specced in Phase 6.0; PLAN ticked. README usage examples deferred to Phase 5 (README is a Phase 5 deliverable)
+- [ ] True multilingual e2e (non-English speech → translate, multilingual model) — gated/pending a local multilingual model + live TCC; covered offline only for English via the whisper-gated chain
 
 ### Phase 6.2 — `apple` engine (native Speech.framework, zero deps)
 

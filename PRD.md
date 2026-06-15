@@ -127,11 +127,12 @@ As a **developer**, I want to capture audio from one specific app while excludin
 
 ### 6.1 CLI Commands & Flags
 
-`aural` itself is the verb — "listen and transcribe." It takes one input (live capture by default, or an existing file/stream via `-i`) and writes the outputs you name. Three utility subcommands remain for inspection.
+`aural` itself is the verb — "listen and transcribe." It takes one input (live capture by default, or an existing file/stream via `-i`) and writes the outputs you name. Utility subcommands cover inspection and setup.
 
 ```
-aural [INPUT] [OUTPUTS] [OPTIONS]      # capture / transcribe / convert
-aural devices | apps | info            # inspection utilities
+aural [INPUT] [OUTPUTS] [OPTIONS]        # capture / transcribe / convert
+aural devices | apps | info              # inspection utilities
+aural models | config                    # model + default management
 ```
 
 **Input — pick one (default: system default microphone):**
@@ -160,7 +161,7 @@ aural devices | apps | info            # inspection utilities
 - `--format wav|m4a|flac` : force the audio format, overriding the extension.
 - `--transcript-format txt|srt|json` : force the transcript format, overriding the extension.
 - `-e, --engine whisper|apple|whisperkit` : recognition engine (default `whisper`; `cloud` is post-MVP). Capabilities vary — see §6.6.
-- `--model NAME|PATH` : engine-specific model selector. `whisper`: ggml path or short name (`large-v3-turbo`); `whisperkit`: a WhisperKit model name (`large-v3-v20240930_626MB`); `apple`: ignored (OS assets). whisper falls back to `$AURAL_WHISPER_MODEL`.
+- `--model NAME|PATH` : engine-specific model selector. `whisper`: ggml path or short name (`large-v3-turbo`); `whisperkit`: a WhisperKit model name (`large-v3-v20240930_626MB`); `apple`: ignored (OS assets). whisper precedence: `--model` › `$AURAL_WHISPER_MODEL` › config `model` (`aural config` / `~/.aural/config.json`).
 - `--language CODE` : spoken language (e.g. `de`); `auto` (default) detects it where the engine supports detection.
 - `--translate` : output English regardless of the spoken language (whisper/whisperkit only).
 - `--raw` : with `-a -`, stream headerless raw PCM to stdout instead of a WAV container.
@@ -192,9 +193,28 @@ aural --system --engine whisperkit --translate -t -  # any language -> English, 
 - `--json` : output in JSON for scripting.
 
 **`aural models`**
-- `list` : show locally available models and the engine they belong to.
-- `download <name>` : fetch a model into `~/.aural/models` (whisper ggml) or trigger the engine's own cache (whisperkit).
+- `list` : show locally available models, sizes, and the active default (marked); the entry matching the resolved default model carries a `*`.
+- `list --available` : show the downloadable catalog (from `ggerganov/whisper.cpp`) with language coverage and installed/current status.
+- `download <name>` : fetch a model into `~/.aural/models` (whisper ggml) or trigger the engine's own cache (whisperkit). `--default` sets it as the config default; the first model downloaded becomes the default automatically. `--force` re-downloads.
 - Applies to file-based engines (`whisper`, `whisperkit`); `apple` uses OS-managed assets.
+- `--json` on `list` for scripting.
+
+**`aural config`** — persisted defaults in `~/.aural/config.json` (JSON; user-editable, kebab-case keys).
+- `show` (default; `--json`) / `set <key> <value>` / `unset <key>` / `path`.
+- Keys: `model`, `engine`, `language`, `translate`, `silence-threshold`, `device`. Values are type-checked (`translate` boolean; `silence-threshold` negative number; `engine` a known engine); unknown keys are rejected. Values beginning with `-` are taken verbatim (e.g. `aural config set silence-threshold -40`).
+
+**Defaults precedence (environment & configuration).** Each setting resolves in the order **flag › environment (`$AURAL_*`) › config (`aural config`) › built-in default**:
+
+| Setting | Flag | Env var | Config key | Default |
+|---------|------|---------|------------|---------|
+| model | `--model` | `$AURAL_WHISPER_MODEL` | `model` | (required) |
+| engine | `-e/--engine` | `$AURAL_ENGINE` | `engine` | `whisper` |
+| language | `--language` | `$AURAL_LANGUAGE` | `language` | `auto` |
+| translate | `--translate`/`--no-translate` | `$AURAL_TRANSLATE` | `translate` | `false` |
+| silence threshold | `--silence-threshold` | `$AURAL_SILENCE_THRESHOLD` | `silence-threshold` | `-50` |
+| input device | `-d/--device` | `$AURAL_DEVICE` | `device` | system default input |
+
+Model values (flag/env/config) may each be a ggml path or a short name resolved under `~/.aural/models`. Malformed env values (non-boolean `$AURAL_TRANSLATE`, non-negative/non-numeric `$AURAL_SILENCE_THRESHOLD`) are reported as usage errors.
 
 All invocations accept `-h, --help` and `-v, --verbose`.
 

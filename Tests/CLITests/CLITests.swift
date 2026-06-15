@@ -19,7 +19,12 @@ struct RootParsingTests {
         #expect(aural.duration == nil)
         #expect(!aural.raw)
         #expect(!aural.noOutput)
-        #expect(aural.engine == "whisper")
+        // Defaults are now unset (nil) so config/env can supply them; the
+        // effective defaults are applied in ResolvedSettings.
+        #expect(aural.engine == nil)
+        #expect(aural.language == nil)
+        #expect(aural.translate == nil)
+        #expect(aural.silenceThreshold == nil)
     }
 
     @Test func parsesAllOptions() throws {
@@ -54,6 +59,7 @@ struct RootParsingTests {
         ["--split", "duration=2", "-a", "-"],  // split needs a file
         ["--split", "duration=2"],             // split needs an audio output
         ["-e", "bogus"],                        // unknown engine
+        ["-e", "apple", "--translate"],         // apple cannot translate
     ])
     func rejectsInvalidCombinations(_ arguments: [String]) {
         #expect(throws: (any Error).self) {
@@ -73,6 +79,11 @@ struct RootParsingTests {
         ["--system", "--mix", "-d", "SomeUID"],
         ["--app", "com.example.app", "--app", "123"],
         ["--exclude-app", "com.example.app"],
+        ["--language", "de", "-i", "x.wav"],    // explicit language
+        ["--translate", "-i", "x.wav"],         // whisper supports translate
+        ["--no-translate", "-i", "x.wav"],      // explicit opt-out
+        ["-e", "whisperkit", "--translate"],    // known engine, capable (impl. pending)
+        ["-e", "apple", "-i", "x.wav"],         // known engine parses (run-time unavailable)
     ])
     func acceptsValidCombinations(_ arguments: [String]) throws {
         _ = try Aural.parse(arguments)
@@ -532,7 +543,7 @@ struct LiveTranscriptionIntegrationTests {
         let outputPath = work.appendingPathComponent("out.txt").path
         let transcriber = try LiveTranscriber(
             destination: .file(outputPath), transcriptFormat: .txt,
-            engineName: "whisper", modelFlag: nil, language: nil,
+            engineName: "whisper", modelFlag: nil, language: "auto", translate: false,
             captureFormat: header.format, silenceThresholdDBFS: -50,
             pauseSeconds: 0.5, maxWindowSeconds: 12, minSegmentSeconds: 0.3)
 
