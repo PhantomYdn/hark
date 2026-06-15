@@ -23,8 +23,18 @@ let package = Package(
         .target(name: "DeviceManager"),
         // Capture sessions: microphone now, Core Audio process taps in Phase 2.
         .target(name: "TapEngine", dependencies: ["DeviceManager", "Encoders"]),
-        // Audio file writers/encoders: WAV now, M4A/FLAC/MP3/Opus in Phase 3.
-        .target(name: "Encoders"),
+        // Vendored libmp3lame (encode-only) for MP3 output (PRD §6.1). Source
+        // under Sources/CLame; LGPL — see NOTICES.
+        .target(
+            name: "CLame",
+            cSettings: [
+                .define("HAVE_CONFIG_H"),
+                .headerSearchPath("."),
+                // LAME's own sources have many such warnings; silence the noise.
+                .unsafeFlags(["-w"]),
+            ]),
+        // Audio file writers/encoders: WAV/M4A/FLAC native; MP3 via CLame; Opus next.
+        .target(name: "Encoders", dependencies: ["CLame"]),
         // The `aural` command-line interface.
         .executableTarget(
             name: "CLI",

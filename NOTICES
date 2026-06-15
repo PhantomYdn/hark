@@ -1,0 +1,16 @@
+Third-party components bundled in this repository
+=================================================
+
+LAME (libmp3lame) — MP3 encoding
+--------------------------------
+Aural's MP3 output uses libmp3lame, vendored (encode-only) under
+Sources/CLame/ from LAME 3.100 (https://lame.sourceforge.io/).
+
+LAME is licensed under the GNU Lesser General Public License (LGPL),
+version 2.1. See https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+for the full license text. The vendored sources retain their original
+copyright headers.
+
+Only the encoder is included; the MP3 decoder (mpglib) and SIMD
+(xmm_quantize_sub.c) sources are omitted, and a minimal Sources/CLame/config.h
+replaces LAME's autoconf-generated config.h.

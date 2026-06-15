@@ -8,12 +8,12 @@ public enum AudioFileFormat: String, CaseIterable, Sendable {
     case mp3
     case opus
 
-    /// Formats that can currently be written. MP3 (LAME) and Ogg/Opus
-    /// (Ogg muxer) are planned — see PLAN.md Phase 3 deferred items.
+    /// Formats that can currently be written. Ogg/Opus (Ogg muxer) is planned —
+    /// see PLAN.md Phase 3.
     public var isWritable: Bool {
         switch self {
-        case .wav, .m4a, .flac: return true
-        case .mp3, .opus: return false
+        case .wav, .m4a, .flac, .mp3: return true
+        case .opus: return false
         }
     }
 

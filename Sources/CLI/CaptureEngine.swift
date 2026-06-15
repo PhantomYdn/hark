@@ -188,9 +188,16 @@ struct CaptureEngine {
             } catch {
                 throw AuralError.ioError("cannot open output file: \(error)")
             }
-        case .mp3, .opus:
+        case .mp3:
+            do {
+                let writer = try MP3FileWriter(url: url, pcmFormat: format)
+                return MP3Sink(writer: writer, label: "\(url.path) (mp3)")
+            } catch {
+                throw AuralError.ioError("cannot open output file: \(error)")
+            }
+        case .opus:
             throw AuralError.unavailable(
-                "\(fileFormat.rawValue) output is not implemented yet (planned; see PLAN.md). Use wav, m4a, or flac.")
+                "opus output is not implemented yet (planned; see PLAN.md). Use wav, m4a, flac, or mp3.")
         }
     }
 

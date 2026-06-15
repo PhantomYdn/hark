@@ -137,7 +137,7 @@ struct AudioFileFormatTests {
         #expect(AudioFileFormat.wav.isWritable)
         #expect(AudioFileFormat.m4a.isWritable)
         #expect(AudioFileFormat.flac.isWritable)
-        #expect(!AudioFileFormat.mp3.isWritable)
+        #expect(AudioFileFormat.mp3.isWritable)  // vendored LAME
         #expect(!AudioFileFormat.opus.isWritable)
     }
 }
