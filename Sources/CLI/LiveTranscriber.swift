@@ -347,6 +347,11 @@ final class LiveTranscriptWriter: @unchecked Sendable {
         do {
             try handle.write(contentsOf: Data(chunk.utf8))
         } catch {
+            // A closed downstream pipe (transcript to stdout, reader gone / Ctrl+C)
+            // surfaces here as EPIPE wrapped in NSCocoaError 512. Propagate it raw
+            // so the graceful broken-pipe handlers (rethrowErrors / CaptureEngine)
+            // recognize it instead of masking it as a generic write failure.
+            if isBrokenPipe(error) { throw error }
             throw AuralError.ioError("transcript write failed: \(error)")
         }
     }

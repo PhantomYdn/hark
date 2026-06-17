@@ -24,11 +24,14 @@ final class EENDStreamingDiarizer: LiveSpeakerResolver, @unchecked Sendable {
 
     private init(diarizer: LSEENDDiarizer) { self.diarizer = diarizer }
 
-    /// FluidAudio LS-EEND variant + step. `ami` (AMI meeting corpus) best fits
-    /// Aural's use case — diarizing a multi-party call/meeting from the system
-    /// stream — and separated more speakers than `dihard3` on real meeting audio.
-    /// `step100ms` gives the lowest-latency frame updates.
-    private static let variant: LSEENDVariant = .ami
+    /// FluidAudio LS-EEND variant + step. `callhome` is trained on 2-party
+    /// single-channel telephone audio — the closest match to Aural's use case
+    /// (a call/meeting mixed into one system stream). On real recordings it
+    /// separated both a 2-party conversation and a multi-party meeting correctly,
+    /// where `ami` (multi-headset meetings) collapsed the 2-party case to one
+    /// speaker and `dihard3` under-split the meeting. `step100ms` gives the
+    /// lowest-latency frame updates.
+    private static let variant: LSEENDVariant = .callhome
     private static let stepSize: LSEENDStepSize = .step100ms
 
     static func make() throws -> EENDStreamingDiarizer {

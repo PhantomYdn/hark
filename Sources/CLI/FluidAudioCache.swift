@@ -8,8 +8,8 @@ enum FluidAudioCache {
     static let vadBundle = "silero-vad"
     static let diarizerBundle = "speaker-diarization"
     /// LS-EEND streaming-diarization model (FluidAudio caches it under the repo
-    /// folder `ls-eend/<variant>`; `ami` is Aural's default variant).
-    static let streamingDiarizerBundle = "ls-eend/ami"
+    /// folder `ls-eend/<variant>`; `ch` (callhome) is Aural's default variant).
+    static let streamingDiarizerBundle = "ls-eend/ch"
 
     static var modelsDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
