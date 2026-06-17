@@ -280,12 +280,15 @@
 > embedding quality — not the threshold — was the bottleneck.
 
 - [x] Lowered the offline/batch default clustering threshold (`DiarizationDefaults.clusteringThreshold = 0.65`, effective ~0.78 after FluidAudio's ×1.2) so `-i FILE --speakers` no longer collapses to one speaker; surfaced the real default in `config show`
-- [ ] Replace the live **streaming** diarizer with FluidAudio **LS-EEND** (long-form streaming end-to-end neural diarization): `EENDStreamingDiarizer` wraps `LSEENDDiarizer`, ingests the system/single stream continuously (`addAudio`/`process`), and maintains a frame-level `DiarizerTimeline` (~100 ms updates) independent of the ASR VAD segmentation — speaker turns detected by **voice** (incl. overlap), not silence
-- [ ] Decouple the live speaker resolver from ASR segments: `LiveSpeakerResolver.label(start:end:)` queries the timeline for the dominant speaker over a segment's time window (was per-segment WAV re-decode); thread segment `start`/`end` through `LiveTranscriber`
-- [ ] `TimelineDiarizerSink` (`AudioSink`) tees the `.system` PCM to the diarizer (off the capture IO thread); wire `.system` → `[diarizerSink, systemTranscriber]` in `runSourceAttributedLive`/`runSingleDiarizedLive`; finalize the session at stop
-- [ ] Retire the legacy live `StreamingDiarizer` + `ClusteringSpeakerResolver` (clustering stays for offline/batch); `--speaker-threshold`/`--max-speakers` are now offline/batch-only (no clustering knob in EEND)
-- [ ] Model plumbing: LS-EEND bundle in `FluidAudioCache`, `fluidaudio:streaming-diarizer` in `ModelCatalog`, download branch in `ModelDownloader`
-- [ ] Validate on test5 (live multi-party): distinct speakers ≫ 2 (offline finds ~4); streaming RTF < 1 / latency within PRD §7
+- [x] Replace the live **streaming** diarizer with FluidAudio **LS-EEND** (long-form streaming end-to-end neural diarization): `EENDStreamingDiarizer` wraps `LSEENDDiarizer`, ingests the system/single stream continuously (`addAudio`/`process`), and maintains a frame-level `DiarizerTimeline` (~100 ms updates) independent of the ASR VAD segmentation — speaker turns detected by **voice** (incl. overlap), not silence
+- [x] Decouple the live speaker resolver from ASR segments: `LiveSpeakerResolver.label(start:end:)` queries the timeline for the dominant speaker over a segment's time window (was per-segment WAV re-decode); thread segment `start`/`end` through `LiveTranscriber`
+- [x] `TimelineDiarizerSink` (`AudioSink`) tees the `.system` PCM to the diarizer (off the capture IO thread); wire `.system` → `[diarizerSink, systemTranscriber]` in `runSourceAttributedLive`/`runSingleDiarizedLive`; finalize the session at stop
+- [x] Retire the legacy live `StreamingDiarizer` + `ClusteringSpeakerResolver` (clustering stays for offline/batch); `--speaker-threshold`/`--max-speakers` are now offline/batch-only (no clustering knob in EEND)
+- [x] Model plumbing: LS-EEND bundle in `FluidAudioCache`, `fluidaudio:streaming-diarizer` in `ModelCatalog`, download branch in `ModelDownloader`
+- [x] **Variant selection** (`callhome` default): ranked LS-EEND variants on real recordings + `say`-synthesized ground truth. `callhome` (2-party single-channel telephone corpus — closest to a call mixed into one system stream) was the only variant correct on both a real 2-party conversation (2) and a real multi-party meeting (3), and perfect on synthetic 1- and 2-speaker cases; `ami` collapsed the 2-party case, `dihard3` under-split the meeting
+- [x] Fixed broken-pipe on exit: `LiveTranscriptWriter.append` wrapped EPIPE in `AuralError`, defeating `isBrokenPipe`; now propagated raw so transcript-to-stdout `Ctrl+C` is graceful (no spurious "transcript write failed")
+- [x] Gated `say` ground-truth test (`SayDiarizationTests`, `AURAL_TEST_DIARIZE=1`): single speaker stays one, two distinct voices separate with a stable 1:1 mapping — validates the zero-config default end-to-end (minus TCC capture)
+- [ ] Real-call e2e (TCC capture front-end) remains on the pending-live list; streaming RTF measured ≪ 1 (≈0.01) via the harness
 
 ## Future
 
