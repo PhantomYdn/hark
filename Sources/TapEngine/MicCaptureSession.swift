@@ -28,7 +28,7 @@ public enum TapEngineError: Error, CustomStringConvertible {
                 system audio capture was refused (CoreAudio error \(status)). \
                 This usually means the "System Audio Recording" permission is \
                 missing. macOS attributes it to the terminal application that \
-                launched aural and does not show a prompt: open System \
+                launched hark and does not show a prompt: open System \
                 Settings > Privacy & Security > Screen & System Audio \
                 Recording, click "+" under "System Audio Recording Only", add \
                 your terminal app, restart it, and retry.
@@ -109,7 +109,7 @@ public final class MicCaptureSession: CaptureSession, @unchecked Sendable {
             return
         case .notDetermined:
             FileHandle.standardError.write(Data("""
-                aural: requesting microphone access — if a permission \
+                hark: requesting microphone access — if a permission \
                 prompt appeared, please respond to it…\n
                 """.utf8))
             let semaphore = DispatchSemaphore(value: 0)

@@ -9,14 +9,14 @@ enum SplitSpec: Equatable {
     static func parse(_ raw: String) throws -> SplitSpec {
         let parts = raw.split(separator: "=", maxSplits: 1)
         guard parts.count == 2, let value = Double(parts[1]), value > 0 else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "invalid --split '\(raw)'; expected duration=SEC or silence=SEC with a positive number.")
         }
         switch parts[0] {
         case "duration": return .duration(value)
         case "silence": return .silence(value)
         default:
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "unknown --split mode '\(parts[0])'; expected 'duration' or 'silence'.")
         }
     }

@@ -2,7 +2,7 @@ import ArgumentParser
 import AudioToolbox
 import Foundation
 
-/// Inspection result for `aural info` (also the `--json` shape).
+/// Inspection result for `hark info` (also the `--json` shape).
 struct AudioFileDetails: Codable {
     let path: String
     let format: String
@@ -61,12 +61,12 @@ struct Info: ParsableCommand {
     static func inspect(path: String) throws -> AudioFileDetails {
         let url = URL(fileURLWithPath: path)
         guard FileManager.default.fileExists(atPath: path) else {
-            throw AuralError.noInput("no such file: \(path)")
+            throw HarkError.noInput("no such file: \(path)")
         }
         var fileID: AudioFileID?
         let openStatus = AudioFileOpenURL(url as CFURL, .readPermission, 0, &fileID)
         guard openStatus == noErr, let file = fileID else {
-            throw AuralError.noInput(
+            throw HarkError.noInput(
                 "cannot read '\(path)' as audio (CoreAudio error \(openStatus))")
         }
         defer { AudioFileClose(file) }
@@ -75,7 +75,7 @@ struct Info: ParsableCommand {
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         guard AudioFileGetProperty(file, kAudioFilePropertyDataFormat, &size, &asbd) == noErr
         else {
-            throw AuralError.software("failed to read data format of '\(path)'")
+            throw HarkError.software("failed to read data format of '\(path)'")
         }
 
         var duration: Double = 0

@@ -14,7 +14,7 @@ struct StartupStatusTests {
             source: "MacBook Pro Microphone", captureBackend: nil, format: format,
             audio: "rec.m4a", transcript: "stdout (txt)", speakers: nil, vad: true,
             duration: nil, split: nil)
-        #expect(text.contains("aural — listening"))
+        #expect(text.contains("hark — listening"))
         #expect(text.contains("whisper (base.en)"))
         #expect(text.contains("44100 Hz"))
         #expect(text.contains("16-bit"))
@@ -91,8 +91,8 @@ struct CaptureControlTests {
 @Suite("Interactive output resolution")
 struct InteractiveOutputTests {
     @Test func recordOnlyInteractiveShowsTranscriptOnStdout() throws {
-        let aural = try Aural.parse(["--interactive", "-a", "rec.m4a"])
-        let outputs = try aural.resolveOutputs()
+        let hark = try Hark.parse(["--interactive", "-a", "rec.m4a"])
+        let outputs = try hark.resolveOutputs()
         guard case .file("rec.m4a")? = outputs.audio else {
             Issue.record("expected audio to rec.m4a"); return
         }
@@ -102,8 +102,8 @@ struct InteractiveOutputTests {
     }
 
     @Test func recordOnlyWithoutInteractiveHasNoTranscript() throws {
-        let aural = try Aural.parse(["-a", "rec.m4a"])
-        let outputs = try aural.resolveOutputs()
+        let hark = try Hark.parse(["-a", "rec.m4a"])
+        let outputs = try hark.resolveOutputs()
         #expect(outputs.transcript == nil)
     }
 }

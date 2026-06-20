@@ -33,14 +33,14 @@ enum TranscriptionError: Error, CustomStringConvertible {
             return """
                 no Whisper engine found on PATH (searched: \
                 \(WhisperEngine.binaryNames.joined(separator: ", "))). Install it with: \
-                brew install whisper-cpp — or point AURAL_WHISPER_BIN at the binary.
+                brew install whisper-cpp — or point HARK_WHISPER_BIN at the binary.
                 """
         case .modelMissing:
             return """
                 no Whisper model specified. Pass --model NAME|PATH, set \
-                AURAL_WHISPER_MODEL, or configure a default: \
-                aural models download base.en --default \
-                (or aural config set model <name>).
+                HARK_WHISPER_MODEL, or configure a default: \
+                hark models download base.en --default \
+                (or hark config set model <name>).
                 """
         case .modelNotFound(let path):
             return "Whisper model not found at '\(path)'"
@@ -56,7 +56,7 @@ enum TranscriptionError: Error, CustomStringConvertible {
 /// WAV file (PRD §6.6).
 ///
 /// Engine stderr is passed through live for progress/debugging; engine
-/// stdout (a duplicate timestamped transcript) is suppressed so aural's
+/// stdout (a duplicate timestamped transcript) is suppressed so hark's
 /// stdout carries exactly the requested output format.
 struct WhisperEngine {
     /// Binary names probed on PATH, in order of preference.
@@ -68,22 +68,22 @@ struct WhisperEngine {
     let binary: URL
     let modelPath: String
 
-    /// Locates the whisper binary: $AURAL_WHISPER_BIN override, then PATH.
+    /// Locates the whisper binary: $HARK_WHISPER_BIN override, then PATH.
     static func discover(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
         discover(
-            override: environment["AURAL_WHISPER_BIN"], names: binaryNames,
+            override: environment["HARK_WHISPER_BIN"], names: binaryNames,
             path: environment["PATH"] ?? "")
     }
 
-    /// Locates the whisper.cpp server binary: $AURAL_WHISPER_SERVER_BIN
+    /// Locates the whisper.cpp server binary: $HARK_WHISPER_SERVER_BIN
     /// override, then PATH. Used for the model-resident live backend.
     static func discoverServer(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
         discover(
-            override: environment["AURAL_WHISPER_SERVER_BIN"], names: serverBinaryNames,
+            override: environment["HARK_WHISPER_SERVER_BIN"], names: serverBinaryNames,
             path: environment["PATH"] ?? "")
     }
 
@@ -106,16 +106,16 @@ struct WhisperEngine {
     }
 
     /// Resolves the model in precedence order: `--model` flag, then
-    /// `$AURAL_WHISPER_MODEL`, then the config default (`~/.aural/config.json`).
+    /// `$HARK_WHISPER_MODEL`, then the config default (`~/.hark/config.json`).
     /// Each value may be a ggml path or a short name resolved under
-    /// `~/.aural/models` (see `ModelRegistry`).
+    /// `~/.hark/models` (see `ModelRegistry`).
     static func resolveModel(
         flag: String?,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         config: Configuration = .load()
     ) throws -> String {
         let value = flag
-            ?? environment["AURAL_WHISPER_MODEL"].flatMap { $0.isEmpty ? nil : $0 }
+            ?? environment["HARK_WHISPER_MODEL"].flatMap { $0.isEmpty ? nil : $0 }
             ?? config.model
         guard let value, !value.isEmpty else { throw TranscriptionError.modelMissing }
         if let resolved = ModelRegistry.resolvePath(value) { return resolved }
@@ -125,7 +125,7 @@ struct WhisperEngine {
         }
         throw TranscriptionError.modelNotFound(
             "\(ModelRegistry.modelsDirectory.path)/\(ModelRegistry.fileName(for: value)) "
-                + "(run 'aural models download \(value)')")
+                + "(run 'hark models download \(value)')")
     }
 
     /// Builds the whisper-cli argument list. `language` nil omits `-l` (whisper
@@ -162,7 +162,7 @@ struct WhisperEngine {
         format: TranscriptOutputFormat, quietStderr: Bool = false
     ) throws -> String {
         let outputBase = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-transcript-\(UUID().uuidString)").path
+            .appendingPathComponent("hark-transcript-\(UUID().uuidString)").path
         let outputPath = "\(outputBase).\(format.fileExtension)"
         defer { try? FileManager.default.removeItem(atPath: outputPath) }
 

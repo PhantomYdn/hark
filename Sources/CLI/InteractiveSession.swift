@@ -44,7 +44,7 @@ final class InteractiveSession: @unchecked Sendable {
         lock.lock(); rawEnabled = true; lock.unlock()
 
         let thread = Thread { [weak self] in self?.readLoop() }
-        thread.name = "aural.interactive.keys"
+        thread.name = "hark.interactive.keys"
         thread.start()
 
         note("controls: [space] pause/resume   [enter] finish   [ctrl-c] stop")
@@ -90,6 +90,6 @@ final class InteractiveSession: @unchecked Sendable {
 
     /// A control notice on stderr (keeps stdout — the transcript — clean).
     private func note(_ message: String) {
-        FileHandle.standardError.write(Data("aural: \(message)\n".utf8))
+        FileHandle.standardError.write(Data("hark: \(message)\n".utf8))
     }
 }

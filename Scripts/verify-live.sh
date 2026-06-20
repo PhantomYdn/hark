@@ -13,13 +13,13 @@
 # the app-isolation step. Best run on a quiet system. Each check reports PASS or
 # FAIL and the script continues; exit status is non-zero if any check failed.
 #
-# Usage:  ./Scripts/verify-live.sh        (uses .build/release/aural)
-#         AURAL=.build/debug/aural ./Scripts/verify-live.sh
+# Usage:  ./Scripts/verify-live.sh        (uses .build/release/hark)
+#         HARK=.build/debug/hark ./Scripts/verify-live.sh
 
 set -uo pipefail
 
-AURAL="${AURAL:-.build/release/aural}"
-WORK="$(mktemp -d /tmp/aural-verify.XXXXXX)"
+HARK="${HARK:-.build/release/hark}"
+WORK="$(mktemp -d /tmp/hark-verify.XXXXXX)"
 FAILED=0
 trap 'rm -rf "$WORK"' EXIT
 
@@ -41,21 +41,21 @@ check_audio() { # path minsec label
   fi
 }
 
-if [[ ! -x "$AURAL" ]]; then
-  echo "error: aural binary not found at '$AURAL' (build it, or set AURAL=...)." >&2
+if [[ ! -x "$HARK" ]]; then
+  echo "error: hark binary not found at '$HARK' (build it, or set HARK=...)." >&2
   exit 69
 fi
-echo "aural: $AURAL"
+echo "hark: $HARK"
 echo "work:  $WORK"
 echo "NOTE: grant Microphone + System Audio Recording to this terminal first."
 echo
 
 echo "[1] Live encoded capture (m4a, flac) — 2 s each"
-"$AURAL" --duration 2 -a "$WORK/mic.m4a"  2>/dev/null; check_audio "$WORK/mic.m4a"  1.5 "m4a mic capture"
-"$AURAL" --duration 2 -a "$WORK/mic.flac" 2>/dev/null; check_audio "$WORK/mic.flac" 1.5 "flac mic capture"
+"$HARK" --duration 2 -a "$WORK/mic.m4a"  2>/dev/null; check_audio "$WORK/mic.m4a"  1.5 "m4a mic capture"
+"$HARK" --duration 2 -a "$WORK/mic.flac" 2>/dev/null; check_audio "$WORK/mic.flac" 1.5 "flac mic capture"
 
 echo "[2] --split duration=2 over 5 s -> 3 numbered chunks, each playable"
-"$AURAL" --duration 5 --split duration=2 -a "$WORK/split.wav" 2>/dev/null
+"$HARK" --duration 5 --split duration=2 -a "$WORK/split.wav" 2>/dev/null
 chunks=("$WORK"/split_*.wav)
 if [[ -e "${chunks[0]}" ]]; then
   n="${#chunks[@]}"
@@ -66,7 +66,7 @@ else
 fi
 
 echo "[3] --split silence smoke (4 s, threshold default)"
-"$AURAL" --duration 4 --split silence=1 -a "$WORK/sil.wav" 2>/dev/null
+"$HARK" --duration 4 --split silence=1 -a "$WORK/sil.wav" 2>/dev/null
 sil=("$WORK"/sil_*.wav)
 if [[ -e "${sil[0]}" ]]; then
   pass "produced ${#sil[@]} silence-split chunk(s)"
@@ -75,10 +75,10 @@ else
   fail "no sil_*.wav chunks produced"
 fi
 
-echo "[4] US03 mic pipeline: aural -a - --duration 5 | aural -i -"
-if "$AURAL" --engine whisper -i /dev/null -t - >/dev/null 2>&1 \
-  || "$AURAL" models list 2>/dev/null | grep -q whisper; then
-  out="$("$AURAL" -a - --duration 5 2>/dev/null | "$AURAL" -i - 2>/dev/null)"
+echo "[4] US03 mic pipeline: hark -a - --duration 5 | hark -i -"
+if "$HARK" --engine whisper -i /dev/null -t - >/dev/null 2>&1 \
+  || "$HARK" models list 2>/dev/null | grep -q whisper; then
+  out="$("$HARK" -a - --duration 5 2>/dev/null | "$HARK" -i - 2>/dev/null)"
   if [[ -n "${out// /}" ]]; then pass "pipeline produced transcript: ${out:0:60}"; else
     skip "pipeline ran but transcript empty (speak during capture; needs whisper + model)"
   fi
@@ -88,10 +88,10 @@ fi
 
 echo "[5] App-isolation e2e (Scripts/e2e-app-isolation.sh)"
 if [[ -x Scripts/e2e-app-isolation.sh ]]; then
-  if AURAL="$AURAL" Scripts/e2e-app-isolation.sh >/dev/null 2>&1; then
+  if HARK="$HARK" Scripts/e2e-app-isolation.sh >/dev/null 2>&1; then
     pass "app isolation"
   else
-    fail "app isolation (see: AURAL=$AURAL Scripts/e2e-app-isolation.sh)"
+    fail "app isolation (see: HARK=$HARK Scripts/e2e-app-isolation.sh)"
   fi
 else
   skip "Scripts/e2e-app-isolation.sh not found"
@@ -104,7 +104,7 @@ check_system_backend() { # backend extra-flags... label
   local backend="$1"; shift
   local label="${*: -1}"; set -- "${@:1:$(($#-1))}"
   local out="$WORK/sys-$backend-$RANDOM.wav" err="$WORK/sys-$backend.err"
-  "$AURAL" --system --capture-backend "$backend" "$@" --duration 2 -a "$out" 2>"$err"
+  "$HARK" --system --capture-backend "$backend" "$@" --duration 2 -a "$out" 2>"$err"
   if grep -qiE "permission denied|no display|needs macOS 15" "$err"; then
     skip "$label — $(tr '\n' ' ' <"$err" | sed 's/  */ /g' | cut -c1-80)"
     return
@@ -120,21 +120,21 @@ check_system_backend sckit --mix "sckit --system --mix"
 check_system_backend auto "auto --system (picks a backend)"
 
 echo "[7] Interactive mode requires a TTY (negative guard)"
-if "$AURAL" --interactive </dev/null >/dev/null 2>"$WORK/interactive.err"; then
+if "$HARK" --interactive </dev/null >/dev/null 2>"$WORK/interactive.err"; then
   fail "interactive — expected a usage error without a TTY"
 elif grep -qi "interactive terminal" "$WORK/interactive.err"; then
   pass "interactive rejects a non-TTY with a clear error"
 else
   fail "interactive — unexpected error: $(tr '\n' ' ' <"$WORK/interactive.err" | cut -c1-80)"
 fi
-echo "  NOTE: the positive interactive path (space/Enter keys) needs a real TTY; run 'aural --interactive' by hand."
+echo "  NOTE: the positive interactive path (space/Enter keys) needs a real TTY; run 'hark --interactive' by hand."
 
 echo "[8] Remote-control agent (loopback HTTP API: start/409/stop lifecycle)"
 if ! command -v curl >/dev/null; then
   skip "remote-control — curl not found"
 else
   PORT=$((8500 + RANDOM % 400))
-  "$AURAL" --remote-control "127.0.0.1:$PORT" -C "$WORK" >"$WORK/agent.log" 2>&1 &
+  "$HARK" --remote-control "127.0.0.1:$PORT" -C "$WORK" >"$WORK/agent.log" 2>&1 &
   AGENT_PID=$!
   sleep 1
   if curl -fsS "http://127.0.0.1:$PORT/status" >/dev/null 2>&1; then

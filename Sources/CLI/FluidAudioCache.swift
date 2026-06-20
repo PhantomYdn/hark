@@ -8,7 +8,7 @@ enum FluidAudioCache {
     static let vadBundle = "silero-vad"
     static let diarizerBundle = "speaker-diarization"
     /// LS-EEND streaming-diarization model (FluidAudio caches it under the repo
-    /// folder `ls-eend/<variant>`; `ch` (callhome) is Aural's default variant).
+    /// folder `ls-eend/<variant>`; `ch` (callhome) is Hark's default variant).
     static let streamingDiarizerBundle = "ls-eend/ch"
 
     static var modelsDirectory: URL {
@@ -23,7 +23,7 @@ enum FluidAudioCache {
         fileManager.fileExists(atPath: modelsDirectory.appendingPathComponent(bundle).path)
     }
 
-    /// Maps a cached bundle directory name to its Aural engine label. Parakeet
+    /// Maps a cached bundle directory name to its Hark engine label. Parakeet
     /// ASR bundles are `parakeet`; the VAD/diarization helpers are `fluidaudio`.
     static func engine(forBundle name: String) -> String {
         name.lowercased().contains("parakeet") ? "parakeet" : "fluidaudio"

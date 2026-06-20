@@ -128,11 +128,11 @@ struct StartRequest: Decodable {
     var vadThreshold: Double?
     var gain: Bool?
 
-    /// Builds the per-session `Aural` command from the agent's launch defaults
+    /// Builds the per-session `Hark` command from the agent's launch defaults
     /// plus this request's overrides. The capture path runs exactly as the CLI
     /// would, so it has full parity (sources, formats, engines, speakers).
-    /// Throws `AuralError.usage` (→ HTTP 400) for invalid values.
-    func makeCommand(defaults: Aural) throws -> Aural {
+    /// Throws `HarkError.usage` (→ HTTP 400) for invalid values.
+    func makeCommand(defaults: Hark) throws -> Hark {
         var cmd = defaults
         // Never recurse into the agent / interactive UI / file input from a
         // session command.
@@ -157,7 +157,7 @@ struct StartRequest: Decodable {
         if let format { cmd.forcedFormat = format }
         if let transcriptFormat {
             guard let parsed = TranscriptOutputFormat(rawValue: transcriptFormat.lowercased()) else {
-                throw AuralError.usage("invalid transcriptFormat '\(transcriptFormat)' (txt, srt, json).")
+                throw HarkError.usage("invalid transcriptFormat '\(transcriptFormat)' (txt, srt, json).")
             }
             cmd.forcedTranscriptFormat = parsed
         }
@@ -169,14 +169,14 @@ struct StartRequest: Decodable {
         if let speakers { cmd.speakers = speakers }
         if let speakerMode {
             guard let parsed = SpeakerMode(rawValue: speakerMode.lowercased()) else {
-                throw AuralError.usage("invalid speakerMode '\(speakerMode)' (auto, source, acoustic).")
+                throw HarkError.usage("invalid speakerMode '\(speakerMode)' (auto, source, acoustic).")
             }
             cmd.speakerMode = parsed
         }
         if let speakerLabels { cmd.speakerLabels = speakerLabels }
         if let diarizeEngine {
             guard let parsed = DiarizeEngine(rawValue: diarizeEngine.lowercased()) else {
-                throw AuralError.usage("invalid diarizeEngine '\(diarizeEngine)' (auto, streaming, offline).")
+                throw HarkError.usage("invalid diarizeEngine '\(diarizeEngine)' (auto, streaming, offline).")
             }
             cmd.diarizeEngine = parsed
         }
@@ -189,17 +189,17 @@ struct StartRequest: Decodable {
         // The agent writes to files under the working directory and never to the
         // client; reject stdout/streaming outputs and require at least one file.
         if cmd.audio == "-" || cmd.transcript == "-" || cmd.raw {
-            throw AuralError.usage("the remote agent writes files; stdout ('-') output isn't supported.")
+            throw HarkError.usage("the remote agent writes files; stdout ('-') output isn't supported.")
         }
         guard cmd.audio != nil || cmd.transcript != nil else {
-            throw AuralError.usage("specify 'audio' and/or 'transcript' (a file path) to start a recording.")
+            throw HarkError.usage("specify 'audio' and/or 'transcript' (a file path) to start a recording.")
         }
 
         // Run the same flag-combination validation the CLI does (→ HTTP 400).
         do {
             try cmd.validate()
         } catch let error as ValidationError {
-            throw AuralError.usage("\(error)")
+            throw HarkError.usage("\(error)")
         }
         return cmd
     }

@@ -1,7 +1,7 @@
-# aural
+# hark
 
 Capture audio and produce transcripts on macOS, from a single native Swift
-binary. `aural` is the verb — "listen and transcribe": it takes one input
+binary. `hark` is the verb — "listen and transcribe": it takes one input
 (your microphone by default, or system/per-app audio, or an existing file) and
 writes the outputs you name (an audio file, a transcript, or a stream on
 stdout). It is built for Unix-style pipelines and unattended use.
@@ -19,12 +19,12 @@ stdout). It is built for Unix-style pipelines and unattended use.
   dependencies). Near-runtime live transcription segments the stream and emits
   text as you speak.
 - **Formats**: write `.wav`, `.m4a`, `.flac`, `.mp3`, `.opus` audio and `.txt`, `.srt`, `.json`
-  transcripts; **transcode** between formats (`aural -i in -a out`); **split**
+  transcripts; **transcode** between formats (`hark -i in -a out`); **split**
   into chunks by duration or silence.
 - **Streaming**: `-a -` writes a WAV (or raw PCM) stream to stdout; transcripts
   go to stdout by default — both compose with `ffmpeg`, `sox`, and friends.
-- **Config & environment**: persistent defaults in `~/.aural/config.json` plus
-  `$AURAL_*` overrides.
+- **Config & environment**: persistent defaults in `~/.hark/config.json` plus
+  `$HARK_*` overrides.
 
 ## Requirements
 
@@ -39,8 +39,8 @@ stdout). It is built for Unix-style pipelines and unattended use.
 ### Homebrew (Apple Silicon)
 
 ```sh
-brew tap PhantomYdn/aural https://github.com/PhantomYdn/Aural
-brew install phantomydn/aural/aural
+brew tap PhantomYdn/hark https://github.com/PhantomYdn/hark
+brew install phantomydn/hark/hark
 ```
 
 This installs the prebuilt arm64 binary and the man page, and pulls in
@@ -48,30 +48,30 @@ This installs the prebuilt arm64 binary and the man page, and pulls in
 no Gatekeeper steps are needed.
 
 > The formula is installed by its **tap-qualified name**
-> (`phantomydn/aural/aural`) because the bare name `aural` is already taken by an
-> unrelated Homebrew cask (the "Aural Player" app). Some Homebrew setups also
+> (`phantomydn/hark/hark`) because the bare name `hark` is already taken by an
+> unrelated Homebrew cask (the "Hark Player" app). Some Homebrew setups also
 > prompt you to trust a third-party tap — run `brew tap` as above (and
-> `brew trust phantomydn/aural` if asked).
+> `brew trust phantomydn/hark` if asked).
 
 ### Build from source (Intel, or to hack on it)
 
 With the Swift toolchain (Swift 6 / Xcode 16):
 
 ```sh
-git clone https://github.com/PhantomYdn/Aural.git aural && cd aural
+git clone https://github.com/PhantomYdn/hark.git hark && cd hark
 make build                      # or: swift build -c release
-cp .build/release/aural /usr/local/bin/aural
+cp .build/release/hark /usr/local/bin/hark
 ```
 
 ### Direct binary download
 
 The arm64 binary is also attached to each
-[GitHub Release](https://github.com/PhantomYdn/Aural/releases). This beta build
+[GitHub Release](https://github.com/PhantomYdn/hark/releases). This beta build
 is **not yet notarized**, so a direct download must be de-quarantined before it
 runs:
 
 ```sh
-xattr -dr com.apple.quarantine ./aural
+xattr -dr com.apple.quarantine ./hark
 ```
 
 Because the binary is unsigned, macOS attributes its microphone / system-audio /
@@ -83,24 +83,24 @@ Install a transcription engine and model:
 
 ```sh
 brew install whisper-cpp                 # the default 'whisper' engine
-aural models download base.en --default  # fetch a model and make it the default
+hark models download base.en --default  # fetch a model and make it the default
 ```
 
 ## Quick start
 
 ```sh
-aural                                  # live mic -> transcript on stdout (Ctrl+C to stop)
-aural -i recording.m4a                 # transcribe a file -> stdout
-aural -a rec.m4a                       # record only (no transcript)
-aural -a rec.m4a -t notes.txt          # record + transcribe to files
-aural --system --mix -a mtg.m4a -t mtg.srt   # capture a meeting, keep audio + subtitles
-aural -i in.wav -a out.flac            # transcode between formats
-aural --engine apple                   # transcribe live with on-device Apple speech
+hark                                  # live mic -> transcript on stdout (Ctrl+C to stop)
+hark -i recording.m4a                 # transcribe a file -> stdout
+hark -a rec.m4a                       # record only (no transcript)
+hark -a rec.m4a -t notes.txt          # record + transcribe to files
+hark --system --mix -a mtg.m4a -t mtg.srt   # capture a meeting, keep audio + subtitles
+hark -i in.wav -a out.flac            # transcode between formats
+hark --engine apple                   # transcribe live with on-device Apple speech
 ```
 
 ## Usage
 
-`aural` takes **one input** and writes the **outputs you name**; naming no
+`hark` takes **one input** and writes the **outputs you name**; naming no
 output transcribes to stdout.
 
 **Input — pick one** (default: system default microphone):
@@ -108,12 +108,12 @@ output transcribes to stdout.
 | Flag | Source |
 |------|--------|
 | *(none)* | live capture from the default input device |
-| `-d, --device UID` | live capture from a specific input device (`aural devices`) |
+| `-d, --device UID` | live capture from a specific input device (`hark devices`) |
 | `--system` | all system audio via a process tap |
 | `--app ID` | a specific app (bundle ID or PID; repeatable) |
 | `--exclude-app ID` | all system audio except the listed app(s) (repeatable) |
 | `--mix` | additionally mix the microphone into a system/app capture |
-| `--capture-backend auto\|sckit\|coreaudio` | system/app capture backend (default `auto`; or `$AURAL_CAPTURE`) |
+| `--capture-backend auto\|sckit\|coreaudio` | system/app capture backend (default `auto`; or `$HARK_CAPTURE`) |
 | `-i, --input PATH\|-` | read an existing file, or `-` for stdin (no live capture) |
 
 **Output — name what to keep; `-` means stdout** (at most one output may be `-`):
@@ -132,7 +132,7 @@ output transcribes to stdout.
 **Working directory**: `-C, --directory PATH` resolves **relative** artifact
 paths (`-i`, `-a`, `-t`, and `--split` outputs) against `PATH` (absolute paths
 and `-` are unaffected). Defaults to the current directory; also
-`$AURAL_DIRECTORY` or config `directory`. The directory must already exist.
+`$HARK_DIRECTORY` or config `directory`. The directory must already exist.
 
 **Transcription**: `-e/--engine`, `--model` (engine-specific — see
 [Models](#models)), `--language` (`auto`, or a code; support varies by engine),
@@ -143,9 +143,9 @@ and `-` are unaffected). Defaults to the current directory; also
 system gain), lower the gate with `--vad-threshold` (0–1, default `0.5`; lower =
 catches quieter speech). Segments are also peak-normalized before the engine to
 improve recognition of low-level audio (the recording is unaffected; disable
-with `AURAL_GAIN=off`).
+with `HARK_GAIN=off`).
 
-Run `aural --help` for the full list, and `aural help <subcommand>` for a
+Run `hark --help` for the full list, and `hark help <subcommand>` for a
 subcommand's options.
 
 ### Speaker labels
@@ -174,27 +174,27 @@ split with no diarization.
 
 ```sh
 # Live meeting: You + Speaker 1/2/… in real time
-aural --system --mix --speakers -t meeting.srt
+hark --system --mix --speakers -t meeting.srt
 
 # Same, but an accurate offline pass (transcript written when you stop)
-aural --system --mix --speakers --diarize-engine offline -t meeting.srt
+hark --system --mix --speakers --diarize-engine offline -t meeting.srt
 
 # Cheap deterministic You/Others (no diarization model)
-aural --system --mix --speakers --speaker-mode source -t -
+hark --system --mix --speakers --speaker-mode source -t -
 
 # Diarize a recording (everyone becomes Speaker N — "You" is live-only)
-aural -i meeting.wav --speakers -t out.json
+hark -i meeting.wav --speakers -t out.json
 
 # Tune sensitivity if speakers merge or over-split
-aural -i meeting.wav --speakers --speaker-threshold 0.55 --max-speakers 6 -t out.srt
+hark -i meeting.wav --speakers --speaker-threshold 0.55 --max-speakers 6 -t out.srt
 ```
 
 The label appears per format: txt `Speaker 1: …`, srt `[Speaker 1] …`, json a
 `"speaker"` field. **Acoustic diarization is Apple-Silicon-only** (on Intel,
 diarized modes fall back to `You`/`Others`); the first use downloads a CoreML
-model — pre-fetch with `aural models download fluidaudio:diarizer`. Live
+model — pre-fetch with `hark models download fluidaudio:diarizer`. Live
 segmentation also uses an on-device VAD model (Apple Silicon); disable it with
-`AURAL_VAD=0`.
+`HARK_VAD=0`.
 
 ### Interactive mode
 
@@ -208,11 +208,11 @@ engine/source/format, and single keys control the session:
 
 ```sh
 # Interactive meeting capture: watch the transcript, pause during a break
-aural --interactive --system --mix -a meeting.m4a
+hark --interactive --system --mix -a meeting.m4a
 
 # Same, but also persist the transcript — captions show on screen *and* go to
 # the file at the same time
-aural --interactive --system --mix -a meeting.m4a -t meeting.txt
+hark --interactive --system --mix -a meeting.m4a -t meeting.txt
 ```
 
 The live transcript is always shown on screen; naming `-t FILE`/`-a FILE`
@@ -222,7 +222,7 @@ concurrently saves the transcript/audio. Interactive mode needs a real terminal
 
 ### Remote control
 
-`aural --remote-control [host:]port` runs Aural as a control **agent** instead
+`hark --remote-control [host:]port` runs Hark as a control **agent** instead
 of capturing on launch, serving a small HTTP/JSON API so scripts (or a browser
 userscript) can start/pause/resume/stop/query a recording. One recording at a
 time; the API is control + status only (artifacts are written to files, never
@@ -230,7 +230,7 @@ returned over HTTP).
 
 ```sh
 # Loopback agent (conventional port 8473), recordings under ~/Recordings
-aural --remote-control 8473 -C ~/Recordings
+hark --remote-control 8473 -C ~/Recordings
 
 curl -s -X POST http://127.0.0.1:8473/start \
   -d '{"system":true,"mix":true,"audio":"call.m4a","transcript":"call.srt"}'
@@ -238,7 +238,7 @@ curl -s http://127.0.0.1:8473/status
 curl -s -X POST http://127.0.0.1:8473/stop
 ```
 
-Bound to loopback by default; a non-loopback bind requires `$AURAL_REMOTE_TOKEN`.
+Bound to loopback by default; a non-loopback bind requires `$HARK_REMOTE_TOKEN`.
 Launch-time capture flags become per-session defaults. Full API reference and a
 Tampermonkey Google-Meet auto-record userscript:
 [docs/remote-control.md](docs/remote-control.md).
@@ -246,12 +246,12 @@ Tampermonkey Google-Meet auto-record userscript:
 ### Subcommands
 
 ```sh
-aural devices [--list-inputs|--list-outputs] [--json]   # enumerate audio devices
-aural apps [--json]                                     # list capturable applications
-aural info <file> [--json]                              # duration/format/metadata
-aural models list [--available] [--json]                # local or downloadable models
-aural models download <name> [--default] [--force]      # fetch a ggml model
-aural config show|set <key> <value>|unset <key>|path    # persisted defaults
+hark devices [--list-inputs|--list-outputs] [--json]   # enumerate audio devices
+hark apps [--json]                                     # list capturable applications
+hark info <file> [--json]                              # duration/format/metadata
+hark models list [--available] [--json]                # local or downloadable models
+hark models download <name> [--default] [--force]      # fetch a ggml model
+hark config show|set <key> <value>|unset <key>|path    # persisted defaults
 ```
 
 ## Transcription engines
@@ -268,8 +268,8 @@ input; it is normalized to 16 kHz mono internally.
 | `cloud` | post-MVP | — | — | — | — |
 
 - `whisper` is found on `PATH` (`whisper-cli`/`whisper-cpp`, and
-  `whisper-server` for resident live transcription) or via `$AURAL_WHISPER_BIN`
-  / `$AURAL_WHISPER_SERVER_BIN`. Disable the server with `$AURAL_WHISPER_SERVER=0`.
+  `whisper-server` for resident live transcription) or via `$HARK_WHISPER_BIN`
+  / `$HARK_WHISPER_SERVER_BIN`. Disable the server with `$HARK_WHISPER_SERVER=0`.
 - `apple` needs the Speech Recognition permission and runs entirely on-device
   (no network). Batch transcription writes plain text; for `.srt`/`.json` from a
   file, use another engine. Live `.srt`/`.json` works with any engine.
@@ -280,34 +280,34 @@ input; it is normalized to 16 kHz mono internally.
 
 ## Models
 
-Whisper ggml models live in `~/.aural/models` as `ggml-<name>.bin`; whisperkit
+Whisper ggml models live in `~/.hark/models` as `ggml-<name>.bin`; whisperkit
 and parakeet CoreML models are cached by their SDKs (and shown by `models list`).
 
 ```sh
-aural models list                    # installed models, all engines; default marked *
-aural models list --available        # downloadable catalog, with an ENGINE column
+hark models list                    # installed models, all engines; default marked *
+hark models list --available        # downloadable catalog, with an ENGINE column
 
 # Download names are engine-tagged: bare = whisper ggml, prefix = CoreML engine
-aural models download large-v3-turbo            # whisper ggml
-aural models download whisperkit:large-v3-v20240930_626MB
-aural models download parakeet:v3               # or parakeet:v2 (English-only)
-aural models download fluidaudio:diarizer       # speaker diarization (--speakers)
-aural models download fluidaudio:vad            # live-segmentation VAD
+hark models download large-v3-turbo            # whisper ggml
+hark models download whisperkit:large-v3-v20240930_626MB
+hark models download parakeet:v3               # or parakeet:v2 (English-only)
+hark models download fluidaudio:diarizer       # speaker diarization (--speakers)
+hark models download fluidaudio:vad            # live-segmentation VAD
 ```
 
 The first whisper model you download becomes the default. `--default` makes any
 model the default; for whisperkit/parakeet it also sets the engine (e.g.
-`aural models download parakeet:v3 --default` ⇒ `engine=parakeet`). CoreML
+`hark models download parakeet:v3 --default` ⇒ `engine=parakeet`). CoreML
 engines also auto-download on first use, so an explicit download is optional.
 
 ## Configuration & environment
 
-Most defaults resolve **flag › environment (`$AURAL_*`) › config
-(`~/.aural/config.json`) › built-in**:
+Most defaults resolve **flag › environment (`$HARK_*`) › config
+(`~/.hark/config.json`) › built-in**:
 
-Every setting has a flag, a `$AURAL_*` env var, and a config key. The env var
-is `AURAL_<KEY>` (uppercased, `-`→`_`) except `model` (`$AURAL_WHISPER_MODEL`)
-and `capture-backend` (`$AURAL_CAPTURE`).
+Every setting has a flag, a `$HARK_*` env var, and a config key. The env var
+is `HARK_<KEY>` (uppercased, `-`→`_`) except `model` (`$HARK_WHISPER_MODEL`)
+and `capture-backend` (`$HARK_CAPTURE`).
 
 | Config key | Flag | Default |
 |------------|------|---------|
@@ -331,29 +331,29 @@ and `capture-backend` (`$AURAL_CAPTURE`).
 | `speaker-threshold` | `--speaker-threshold` | (engine default) |
 
 ```sh
-aural config set engine apple
-aural config set silence-threshold -40   # values starting with '-' are taken verbatim
-aural config set speaker-mode source
-aural config show                        # every setting, its value, and its SOURCE
+hark config set engine apple
+hark config set silence-threshold -40   # values starting with '-' are taken verbatim
+hark config set speaker-mode source
+hark config show                        # every setting, its value, and its SOURCE
 ```
 
-`aural config show` lists **all** settings with their effective value and a
+`hark config show` lists **all** settings with their effective value and a
 `SOURCE` column — `default` (built-in), `config` (set in the file), or `env`
-(an `$AURAL_*` override, which outranks config). `--json` emits
+(an `$HARK_*` override, which outranks config). `--json` emits
 `{ "<key>": { "value": …, "source": … } }`.
 
-The config file is plain JSON and hand-editable; `aural config path` prints its
+The config file is plain JSON and hand-editable; `hark config path` prints its
 location.
 
 ## Permissions
 
 macOS gates microphone, system-audio, and speech recognition behind TCC. For an
 unsigned build these prompts are attributed to the **terminal** that launches
-`aural`. See [docs/permissions.md](docs/permissions.md) for the exact
+`hark`. See [docs/permissions.md](docs/permissions.md) for the exact
 System Settings paths, the system-audio "+" flow, and notes for tmux/screen.
 
 System/app capture has two backends, selected by `--capture-backend` (default
-`auto`, or `$AURAL_CAPTURE`):
+`auto`, or `$HARK_CAPTURE`):
 
 - **`coreaudio`** — Core Audio process tap. Needs the narrower **System Audio
   Recording** permission and works headless (cron/launchd/SSH), macOS 14.4+.
@@ -369,25 +369,25 @@ granted, a display present) and otherwise falls back to `coreaudio`.
 
 ```sh
 # Stream live WAV into ffmpeg
-aural -a - --duration 10 | ffmpeg -i - out.mp3
+hark -a - --duration 10 | ffmpeg -i - out.mp3
 
 # Record on one machine, transcribe on another
-aural -a - | aural -i -
+hark -a - | hark -i -
 
 # Follow a live transcript as it is written
-aural -t notes.txt --system & tail -f notes.txt
+hark -t notes.txt --system & tail -f notes.txt
 ```
 
-`aural` follows POSIX conventions: audio/transcripts on stdout, diagnostics on
+`hark` follows POSIX conventions: audio/transcripts on stdout, diagnostics on
 stderr (`-v` for detail), and a non-zero engine exit code propagates through the
 pipeline. SIGINT/SIGTERM finalize the current file so it stays playable.
 
 ## Recipes
 
 Copy-and-adapt `zsh` wrappers for common workflows live in
-[`examples/`](examples/) — `aural-meeting` (interactive system+mic capture →
-audio + transcript, then a fabric-ai summary), `aural-note` (quick voice memo),
-and `aural-dictate` (speak → clipboard). See [examples/README.md](examples/README.md).
+[`examples/`](examples/) — `hark-meeting` (interactive system+mic capture →
+audio + transcript, then a fabric-ai summary), `hark-note` (quick voice memo),
+and `hark-dictate` (speak → clipboard). See [examples/README.md](examples/README.md).
 
 ## Exit codes
 

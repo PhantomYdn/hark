@@ -2,45 +2,45 @@ import Foundation
 import FlyingFox
 import FlyingSocks
 
-/// Remote-control agent (PRD §6.10): runs `aural` as a long-lived control plane
+/// Remote-control agent (PRD §6.10): runs `hark` as a long-lived control plane
 /// instead of capturing on launch. Serves a small HTTP/1.1 + JSON API over TCP
 /// — flat verbs `GET /status`, `POST /start|/pause|/resume|/stop` — driving a
 /// single active recording. The API is control + status only: it never serves
 /// transcript/audio content (artifacts land under the working directory).
 ///
 /// Bound to loopback by default; binding to a non-loopback interface requires a
-/// bearer token (`$AURAL_REMOTE_TOKEN`). Launch-time capture flags become the
+/// bearer token (`$HARK_REMOTE_TOKEN`). Launch-time capture flags become the
 /// per-session defaults, overridable by each `POST /start` body.
 final class RemoteControlAgent: @unchecked Sendable {
-    private let defaults: UncheckedSendableBox<Aural>
+    private let defaults: UncheckedSendableBox<Hark>
     private let rawAddress: String
     private let sessions = RemoteSessionManager()
-    private let captureQueue = DispatchQueue(label: "aural.remote.capture")
+    private let captureQueue = DispatchQueue(label: "hark.remote.capture")
     private var token: String?
     private let version = "0.1.0"
 
-    init(defaults: Aural, address: String) {
+    init(defaults: Hark, address: String) {
         self.defaults = UncheckedSendableBox(value: defaults)
         self.rawAddress = address
     }
 
     /// Parses the address, enforces the token policy, starts the server, and
     /// blocks until SIGINT/SIGTERM (or a fatal server error). Throws
-    /// `AuralError` for the CLI to map to an exit code.
+    /// `HarkError` for the CLI to map to an exit code.
     func run() throws {
         let address = try RemoteAddress.parse(rawAddress)
         token = Self.configuredToken()
         if !address.isLoopback && token == nil {
-            throw AuralError.usage("""
+            throw HarkError.usage("""
                 binding to \(address.display) exposes the control API beyond this machine; \
-                set $AURAL_REMOTE_TOKEN first, or bind to loopback (e.g. \(address.port)).
+                set $HARK_REMOTE_TOKEN first, or bind to loopback (e.g. \(address.port)).
                 """)
         }
 
         let server = HTTPServer(address: try address.socketAddress())
 
         Log.notice(
-            "aural remote-control agent on http://\(address.display) "
+            "hark remote-control agent on http://\(address.display) "
                 + (token == nil ? "(loopback, no auth)" : "(bearer-token auth)"))
 
         let finished = DispatchSemaphore(value: 0)
@@ -67,7 +67,7 @@ final class RemoteControlAgent: @unchecked Sendable {
         task.cancel()
 
         if let error = serverError.get() {
-            throw AuralError.ioError(
+            throw HarkError.ioError(
                 "remote-control server could not start on \(address.display): \(error) "
                     + "(is the port already in use?)")
         }
@@ -118,7 +118,7 @@ final class RemoteControlAgent: @unchecked Sendable {
             do {
                 req = try JSONDecoder().decode(StartRequest.self, from: data)
             } catch {
-                throw AuralError.usage("invalid JSON body: \(error)")
+                throw HarkError.usage("invalid JSON body: \(error)")
             }
         }
         let command = try req.makeCommand(defaults: defaults.value)
@@ -159,7 +159,7 @@ final class RemoteControlAgent: @unchecked Sendable {
     }
 
     private static func configuredToken() -> String? {
-        ProcessInfo.processInfo.environment["AURAL_REMOTE_TOKEN"].flatMap { $0.isEmpty ? nil : $0 }
+        ProcessInfo.processInfo.environment["HARK_REMOTE_TOKEN"].flatMap { $0.isEmpty ? nil : $0 }
     }
 
     // MARK: Response building
@@ -181,8 +181,8 @@ final class RemoteControlAgent: @unchecked Sendable {
             return self.error("a recording is already active", .conflict)
         case AgentError.noActiveSession:
             return self.error("no active recording", .notFound)
-        case let auralError as AuralError:
-            return self.error(auralError.message, httpStatus(for: auralError.code))
+        case let harkError as HarkError:
+            return self.error(harkError.message, httpStatus(for: harkError.code))
         case let transcription as TranscriptionError:
             return self.error(transcription.description, .unprocessableContent)
         default:
@@ -190,8 +190,8 @@ final class RemoteControlAgent: @unchecked Sendable {
         }
     }
 
-    /// Maps Aural's exit-code semantics to an HTTP status (PRD §6.10).
-    static func httpStatus(for code: AuralExitCode) -> HTTPStatusCode {
+    /// Maps Hark's exit-code semantics to an HTTP status (PRD §6.10).
+    static func httpStatus(for code: HarkExitCode) -> HTTPStatusCode {
         switch code {
         case .usage: return .badRequest
         case .noInput: return .notFound
@@ -203,7 +203,7 @@ final class RemoteControlAgent: @unchecked Sendable {
 
     private static func message(for error: Error) -> String {
         switch error {
-        case let auralError as AuralError: return auralError.message
+        case let harkError as HarkError: return harkError.message
         case let transcription as TranscriptionError: return transcription.description
         default: return "\(error)"
         }
@@ -230,7 +230,7 @@ struct RemoteAddress {
     static func parse(_ raw: String) throws -> RemoteAddress {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else {
-            throw AuralError.usage("--remote-control needs a port (e.g. 8473 or 0.0.0.0:8473).")
+            throw HarkError.usage("--remote-control needs a port (e.g. 8473 or 0.0.0.0:8473).")
         }
         let host: String?
         let portText: String
@@ -243,7 +243,7 @@ struct RemoteAddress {
             portText = trimmed
         }
         guard let port = UInt16(portText), port > 0 else {
-            throw AuralError.usage("--remote-control port must be 1–65535 (got '\(portText)').")
+            throw HarkError.usage("--remote-control port must be 1–65535 (got '\(portText)').")
         }
         return RemoteAddress(host: host, port: port)
     }
@@ -260,7 +260,7 @@ struct RemoteAddress {
         do {
             return try .inet(ip4: host!, port: port)
         } catch {
-            throw AuralError.usage("--remote-control host must be an IPv4 address (got '\(host!)').")
+            throw HarkError.usage("--remote-control host must be an IPv4 address (got '\(host!)').")
         }
     }
 }

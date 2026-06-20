@@ -1,0 +1,38 @@
+#!/usr/bin/env zsh
+#
+# hark-dictate — speak, and get the text on your clipboard.
+#
+# Captures the microphone for a few seconds, transcribes it, and copies the
+# resulting text to the macOS clipboard (pbcopy) so you can paste it anywhere.
+#
+# Usage:
+#   hark-dictate            # 30 seconds (default)
+#   hark-dictate 10         # 10 seconds
+#
+# Environment:
+#   HARK_DICTATE_SECONDS    default capture length when no argument is given (default: 30)
+#   HARK_ENGINE/...         any HARK_* var Hark honors (engine, model, language…)
+#
+# Requirements: `hark`, `pbcopy` (macOS), and microphone permission.
+
+set -euo pipefail
+
+die() { print -u2 -- "hark-dictate: $*"; exit 1 }
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,18p' "$0"; exit 0 }
+
+command -v hark  >/dev/null 2>&1 || die "missing dependency: hark"
+command -v pbcopy >/dev/null 2>&1 || die "missing dependency: pbcopy"
+
+secs="${1:-${HARK_DICTATE_SECONDS:-30}}"
+[[ "$secs" == <1-> ]] || die "duration must be a positive integer number of seconds (got '$secs')"
+
+print -u2 -- "hark-dictate: listening for ${secs}s…"
+
+# Transcript to stdout ('-'); piping to pbcopy makes stdout a pipe (not a TTY),
+# so this is a plain non-interactive capture.
+text=$(hark --duration "$secs" -t -)
+print -rn -- "$text" | pbcopy
+
+words=$(print -rn -- "$text" | wc -w | tr -d ' ')
+print -u2 -- "hark-dictate: copied $words word(s) to the clipboard."

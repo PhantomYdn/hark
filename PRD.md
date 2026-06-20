@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-## Product: Aural
+## Product: Hark
 **Version:** 1.0 (MVP)
 **Date:** 2026-06-12
 **Author:** Ilya Naryzhnyy
@@ -9,11 +9,11 @@
 
 ## 1. Overview
 
-Aural is a native macOS command-line utility, shipped as a single Swift binary, that captures audio from physical input sources (microphones) and from the system itself — all system audio or the output of specific applications — using Core Audio process taps (macOS 14.4+) or ScreenCaptureKit (macOS 15+), selectable per the environment. No third-party virtual audio driver (e.g., BlackHole) is required. Recordings are saved locally and serve as the foundation for downstream audio processing workflows, most notably automatic speech-to-text transcription.
+Hark is a native macOS command-line utility, shipped as a single Swift binary, that captures audio from physical input sources (microphones) and from the system itself — all system audio or the output of specific applications — using Core Audio process taps (macOS 14.4+) or ScreenCaptureKit (macOS 15+), selectable per the environment. No third-party virtual audio driver (e.g., BlackHole) is required. Recordings are saved locally and serve as the foundation for downstream audio processing workflows, most notably automatic speech-to-text transcription.
 
 The tool strictly follows Unix/Linux design patterns, treating audio as a stream that can be manipulated, piped, and extended by other command-line programs. The primary goal is to provide a simple, scriptable, and composable replacement for GUI-based audio recording, enabling users to automate meeting recordings, create transcription pipelines, or build custom audio-processing chains without leaving the terminal.
 
-Beyond batch and pipe usage, Aural can run **interactively** — a minimal terminal UI that shows the live transcript and accepts pause/resume/stop from the keyboard — and as an on-demand **remote-control agent** that external programs (including browser userscripts) drive over a local HTTP/JSON API to decide when, what, and where to record.
+Beyond batch and pipe usage, Hark can run **interactively** — a minimal terminal UI that shows the live transcript and accepts pause/resume/stop from the keyboard — and as an on-demand **remote-control agent** that external programs (including browser userscripts) drive over a local HTTP/JSON API to decide when, what, and where to record.
 
 ---
 
@@ -49,13 +49,13 @@ Beyond batch and pipe usage, Aural can run **interactively** — a minimal termi
 | 2 | Audio capture from any single source | P0 | Record from a specified input device (built-in microphone, USB headset). Configurable sample rate, bit-depth, and channel count. Falls back to default input device. |
 | 3 | System & per-app audio capture | P0 | Capture all system audio (`--system`), specific application(s) (`--app`, repeatable), or everything except listed apps (`--exclude-app`). Mixed mic + system capture via `--mix`. Two interchangeable backends — ScreenCaptureKit (macOS 15+, GUI session) and Core Audio process taps (macOS 14.4+, headless-capable) — selected with `--capture-backend` (default auto); see §6.2. |
 | 4 | File output — native formats | P0 | Save to WAV (PCM), M4A/AAC, or FLAC using native CoreAudio encoders. |
-| 5 | Stream-mode operation | P0 | Stream a WAV container to stdout with `-a -` (e.g., `aural -a - \| ffmpeg ...`), or headerless PCM with `--raw`; accept audio from stdin (`-i -`) for transcoding/transcription. |
+| 5 | Stream-mode operation | P0 | Stream a WAV container to stdout with `-a -` (e.g., `hark -a - \| ffmpeg ...`), or headerless PCM with `--raw`; accept audio from stdin (`-i -`) for transcoding/transcription. |
 | 6 | Signal handling & graceful shutdown | P0 | On SIGINT (Ctrl+C) or SIGTERM, finalise the output file header so it remains playable. |
 | 7 | File output — additional formats | P1 | MP3 (vendored libmp3lame) and Ogg/Opus (native CoreAudio encoder + hand-written Ogg muxer, zero deps). All output formats verified compatible with major transcription tools (whisper.cpp, Fabric AI, cloud APIs). |
 | 8 | Time-based chunking | P1 | Split recordings into sequential files by duration (`--split duration=SEC`). |
 | 9 | Transcription integration | P1 | Transcription is built into the root verb: any input (live capture or `-i` file/stream) can be transcribed by a local engine (e.g., `whisper.cpp`) via `-t/--transcript`. Audio and transcript can be produced in the same run (`-a rec.m4a -t notes.srt`); naming no output transcribes to stdout. |
 | 12 | Live transcription | P1 | During live capture, emit the transcript incrementally — as close to runtime as possible — by segmenting the stream on natural pauses and transcribing each segment as it completes (true streaming is post-MVP). |
-| 13 | Multi-language & translation | P1 | Transcribe ~99 languages with a multilingual model via `--language CODE` or auto-detect (`--language auto`, default); `--translate` emits English from any spoken language (engines that support it). `aural models list/download` manages local models. |
+| 13 | Multi-language & translation | P1 | Transcribe ~99 languages with a multilingual model via `--language CODE` or auto-detect (`--language auto`, default); `--translate` emits English from any spoken language (engines that support it). `hark models list/download` manages local models. |
 | 14 | Pluggable transcription engines | P2 | Select the engine with `--engine`: `whisper` (whisper.cpp, default), `apple` (native Speech.framework, no extra deps), `whisperkit` (CoreML, on-device, multilingual + translate). Capabilities (auto-detect, translate, model semantics) vary and are validated. |
 | 10 | Silence-based splitting | P2 | Split on continuous silence exceeding a configurable threshold (`--split silence=SEC`). |
 | 11 | Basic metadata embedding | P2 | Store recording start time, source name, and sample rate in WAV INFO, MP4, or ID3 tags. |
@@ -64,10 +64,10 @@ Beyond batch and pipe usage, Aural can run **interactively** — a minimal termi
 | 17 | VAD-based live segmentation | P1 | Replace amplitude/silence-threshold segment cutting with Silero VAD (FluidAudio) for stable speech/pause boundaries at runtime; graceful fallback to the existing amplitude method when VAD models are unavailable. Feeds both transcription and the speaker pipeline. |
 | 18 | Combined source-split + per-source diarization | P2 | Label You (mic) plus each distinct remote participant (diarize the system track) so multi-party calls resolve both sides at once. |
 | 19 | Named speaker identification (enrolled voiceprints) | Post-MVP | Match voices to named people via stored speaker embeddings; enrollment + a local voiceprint store (FluidAudio embedding extraction). |
-| 20 | Working directory for artifacts | P1 | A base directory for resolving **relative** input/output paths (`-i`, `-a`, `-t`, and `--split` outputs), defaulting to the current working directory and overridable via `--directory`/`-C`, `$AURAL_DIRECTORY`, or config `directory`. Absolute paths and `-` (stdin/stdout) are unaffected; the directory must exist. Foundation for headless/remote operation (see §4.2). |
+| 20 | Working directory for artifacts | P1 | A base directory for resolving **relative** input/output paths (`-i`, `-a`, `-t`, and `--split` outputs), defaulting to the current working directory and overridable via `--directory`/`-C`, `$HARK_DIRECTORY`, or config `directory`. Absolute paths and `-` (stdin/stdout) are unaffected; the directory must exist. Foundation for headless/remote operation (see §4.2). |
 | 21 | Startup status summary | P1 | On capture start, print a concise status block to stderr — engine, model, language, source/device, capture backend, format, output destinations, speaker mode, VAD, and any duration limit. Shown when stderr is a TTY or with `-v`; suppressed when stderr is redirected so pipelines/cron stay clean. Never written to stdout. See §6.8. |
 | 22 | Interactive mode | P1 | `--interactive`: a minimal terminal UI for live capture — a status header, the live transcript, and single-key controls (**space** = pause/resume, **Enter** = finish; Ctrl-C also stops). The live transcript is always shown on screen; naming `-t FILE`/`-a FILE` concurrently persists the transcript/audio to those files. **Pause excludes the paused interval** from both audio and transcript (a true gap, so output is shorter than wall-clock). Requires a controlling TTY; incompatible with stdout (`-`) streaming and with `--remote-control`. See §6.9. |
-| 23 | Remote-control agent | P1 | `aural --remote-control [ADDR]` runs Aural as a control agent (no immediate capture) exposing an **HTTP/JSON API over TCP** — bound to loopback by default, or to an explicit `interface:port`. External scripts choose **when** (start/stop/pause/resume), **what** (sources/format/engine/model), and **where** (output paths resolved under the working `directory`). Documented wire protocol (no bundled client) plus a Tampermonkey Google-Meet reference userscript. See §6.10. |
+| 23 | Remote-control agent | P1 | `hark --remote-control [ADDR]` runs Hark as a control agent (no immediate capture) exposing an **HTTP/JSON API over TCP** — bound to loopback by default, or to an explicit `interface:port`. External scripts choose **when** (start/stop/pause/resume), **what** (sources/format/engine/model), and **where** (output paths resolved under the working `directory`). Documented wire protocol (no bundled client) plus a Tampermonkey Google-Meet reference userscript. See §6.10. |
 
 ### 4.2 Post-MVP Features (Future)
 
@@ -89,44 +89,44 @@ Beyond batch and pipe usage, Aural can run **interactively** — a minimal termi
 ### US01 — Quick voice notes
 As a **developer**, I want to quickly capture my microphone input for five minutes and save it to a file, so that I can review my spoken notes later without opening Audacity.
 - Acceptance Criteria:
-  - [ ] `aural -a notes.m4a --duration 300` records from the default input device without specifying a device UID (and writes no transcript, since only `-a` is named)
+  - [ ] `hark -a notes.m4a --duration 300` records from the default input device without specifying a device UID (and writes no transcript, since only `-a` is named)
   - [ ] Recording stops automatically after 300 seconds with exit code 0
   - [ ] Resulting file plays correctly in QuickTime/`afplay` and duration is 300 s ± 1 s
 
 ### US02 — Record a meeting without echo
 As a **developer**, I want to record the audio from an ongoing Zoom call without echoing my own voice, so that I can later transcribe the meeting and extract action items.
 - Acceptance Criteria:
-  - [ ] `aural apps` lists the running Zoom process with its bundle ID
-  - [ ] `aural --app us.zoom.xos -a call.m4a` captures only Zoom's output audio
+  - [ ] `hark apps` lists the running Zoom process with its bundle ID
+  - [ ] `hark --app us.zoom.xos -a call.m4a` captures only Zoom's output audio
   - [ ] The user's own microphone is not captured unless `--mix` is explicitly given
   - [ ] First-run macOS "System Audio Recording" permission prompt and approval flow is documented
 
 ### US03 — Zero-touch transcription pipeline
 As a **data engineer**, I want to capture audio and get a transcript with zero manual steps, so that I can build a fully automated transcription pipeline.
 - Acceptance Criteria:
-  - [ ] `aural --duration 60 -t -` captures from the default mic and produces transcript text on stdout in one step
-  - [ ] The equivalent pipeline `aural -a - --duration 60 | aural -i -` produces the same transcript text on stdout
+  - [ ] `hark --duration 60 -t -` captures from the default mic and produces transcript text on stdout in one step
+  - [ ] The equivalent pipeline `hark -a - --duration 60 | hark -i -` produces the same transcript text on stdout
   - [ ] A failure in the transcription engine propagates a non-zero exit code through the pipeline
 
 ### US04 — Manageable chunks
 As a **power user**, I want to split a long recording into chunks based on silence, so that I can easily manage large audio files and focus on important segments.
 - Acceptance Criteria:
-  - [ ] `aural --split silence=1.5 -a name.wav` produces sequentially numbered files (`name_001.wav`, `name_002.wav`, …)
+  - [ ] `hark --split silence=1.5 -a name.wav` produces sequentially numbered files (`name_001.wav`, `name_002.wav`, …)
   - [ ] Each chunk is independently playable with a valid, finalised header
   - [ ] The silence detection threshold (dBFS) is configurable
 
 ### US05 — Unattended compliance recording
 As a **sysadmin**, I want to install the tool via Homebrew and have it run in a crontab, so that I can automatically record every team stand-up for compliance.
 - Acceptance Criteria:
-  - [ ] `brew install aural` installs a working, signed binary
+  - [ ] `brew install hark` installs a working, signed binary
   - [ ] Once the TCC permission is granted, recording runs unattended from cron/launchd without GUI interaction
   - [ ] Exit codes and stderr logging are suitable for cron-based monitoring and alerting
 
 ### US06 — Script-parseable enumeration
 As an **ML researcher**, I want to list all available audio devices and capturable applications in a script-parseable format, so that I can write robust automation that adapts to different machine setups.
 - Acceptance Criteria:
-  - [ ] `aural devices --json` outputs valid JSON with UID, name, channel count, and sample rates
-  - [ ] `aural apps --json` outputs valid JSON with name, bundle ID, and PID
+  - [ ] `hark devices --json` outputs valid JSON with UID, name, channel count, and sample rates
+  - [ ] `hark apps --json` outputs valid JSON with name, bundle ID, and PID
   - [ ] Commands exit 0 with an empty array when nothing is found
 
 ### US07 — Focused app capture
@@ -139,36 +139,36 @@ As a **developer**, I want to capture audio from one specific app while excludin
 ### US08 — Know who said what
 As a **developer**, I want my meeting transcript to label who said each line — me versus the call, and distinct remote speakers — so that I can produce accurate minutes and attribute action items.
 - Acceptance Criteria:
-  - [ ] `aural --system --mix --speakers -t mtg.srt` tags each cue with a speaker label (e.g. `You`, `Speaker 1`)
+  - [ ] `hark --system --mix --speakers -t mtg.srt` tags each cue with a speaker label (e.g. `You`, `Speaker 1`)
   - [ ] Lines spoken into my microphone are labeled distinctly from the call audio (deterministic source attribution, not a guess)
-  - [ ] `aural --system --mix --speakers -t mtg.json` includes a `speaker` field on every segment
+  - [ ] `hark --system --mix --speakers -t mtg.json` includes a `speaker` field on every segment
   - [ ] Diarization runs fully on-device; the first run may download CoreML models, after which it is offline
   - [ ] During live capture, speaker labels appear close to runtime (streaming), not only after the call ends
 
 ### US09 — Interactive recording with a break
 As a **developer**, I want to record interactively and pause during a break, so that the break is not part of the recording and I can stop cleanly when done.
 - Acceptance Criteria:
-  - [ ] `aural --interactive -a notes.m4a` shows a status header and the live transcript, and accepts single-key controls
-  - [ ] `aural --interactive -a notes.m4a -t notes.txt` shows the live transcript on screen **while** concurrently writing `notes.m4a` and `notes.txt`
+  - [ ] `hark --interactive -a notes.m4a` shows a status header and the live transcript, and accepts single-key controls
+  - [ ] `hark --interactive -a notes.m4a -t notes.txt` shows the live transcript on screen **while** concurrently writing `notes.m4a` and `notes.txt`
   - [ ] Pressing **space** pauses; the paused interval is absent from both `notes.m4a` and the transcript (a true gap), and **space** again resumes
   - [ ] Pressing **Enter** (or Ctrl-C) stops and finalises the file so it remains playable (same guarantee as Ctrl+C)
   - [ ] When stdout is not a TTY (or `-a -`/`-t -` is requested), `--interactive` exits with a clear usage error; the terminal is restored on exit and on SIGINT/SIGTERM
 
 ### US10 — Know what's running before I speak
-As a **power user**, I want Aural to tell me which engine, model, and source it's using when a capture starts, so that I can catch a misconfiguration before recording a whole meeting.
+As a **power user**, I want Hark to tell me which engine, model, and source it's using when a capture starts, so that I can catch a misconfiguration before recording a whole meeting.
 - Acceptance Criteria:
   - [ ] Starting a live capture in a terminal prints a status block to stderr (engine, model, language, source/device, capture backend, format, outputs, speaker mode, VAD, duration)
   - [ ] The status block is suppressed when stderr is redirected/piped, and always shown with `-v`
   - [ ] The status block is never written to stdout (it does not corrupt `-a -`/`-t -` streams)
 
 ### US11 — Browser-driven meeting capture
-As a **knowledge worker**, I want my browser to start and stop Aural automatically around Google Meet calls, so that every meeting is recorded and named without my intervention.
+As a **knowledge worker**, I want my browser to start and stop Hark automatically around Google Meet calls, so that every meeting is recorded and named without my intervention.
 - Acceptance Criteria:
-  - [ ] `aural --remote-control` starts an agent listening on loopback and prints its address; it does not begin capturing on its own
+  - [ ] `hark --remote-control` starts an agent listening on loopback and prints its address; it does not begin capturing on its own
   - [ ] A Tampermonkey userscript (shipped as a reference in the docs) calls `POST /start` when a Meet call is joined, with a filename derived from the meeting title and date, and `POST /stop` when the call ends
   - [ ] The recording is written under the agent's working `directory`; `GET /status` reports the session's state, elapsed time, and output paths (the API never serves the transcript/audio content itself)
   - [ ] A second `POST /start` while a recording is active is rejected with `409 Conflict` (single active session)
-  - [ ] With a non-loopback bind address, the agent refuses to start unless a token (`$AURAL_REMOTE_TOKEN`) is configured, and rejects unauthenticated requests
+  - [ ] With a non-loopback bind address, the agent refuses to start unless a token (`$HARK_REMOTE_TOKEN`) is configured, and rejects unauthenticated requests
 
 ---
 
@@ -176,12 +176,12 @@ As a **knowledge worker**, I want my browser to start and stop Aural automatical
 
 ### 6.1 CLI Commands & Flags
 
-`aural` itself is the verb — "listen and transcribe." It takes one input (live capture by default, or an existing file/stream via `-i`) and writes the outputs you name. Utility subcommands cover inspection and setup.
+`hark` itself is the verb — "listen and transcribe." It takes one input (live capture by default, or an existing file/stream via `-i`) and writes the outputs you name. Utility subcommands cover inspection and setup.
 
 ```
-aural [INPUT] [OUTPUTS] [OPTIONS]        # capture / transcribe / convert
-aural devices | apps | info              # inspection utilities
-aural models | config                    # model + default management
+hark [INPUT] [OUTPUTS] [OPTIONS]        # capture / transcribe / convert
+hark devices | apps | info              # inspection utilities
+hark models | config                    # model + default management
 ```
 
 **Input — pick one (default: system default microphone):**
@@ -200,7 +200,7 @@ aural models | config                    # model + default management
 - At most one output may be `-` — stdout carries a single stream.
 
 **Working directory:**
-- `--directory, -C PATH` : base directory for resolving **relative** artifact paths (`-i`, `-a`, `-t`, split outputs). Absolute paths and `-` (stdin/stdout) are unaffected. Defaults to the process CWD; also `$AURAL_DIRECTORY` or config `directory`. A non-existent directory is a usage error (Aural never creates it).
+- `--directory, -C PATH` : base directory for resolving **relative** artifact paths (`-i`, `-a`, `-t`, split outputs). Absolute paths and `-` (stdin/stdout) are unaffected. Defaults to the process CWD; also `$HARK_DIRECTORY` or config `directory`. A non-existent directory is a usage error (Hark never creates it).
 
 **Capture format & timing (live capture):**
 - `-r, --rate Hz` : sample rate (live default 44100; file convert defaults to the source rate).
@@ -208,13 +208,13 @@ aural models | config                    # model + default management
 - `-c, --channels 1|2` : channel count (default based on the source, capped at 2).
 - `--duration SEC` : stop live capture after SEC seconds (otherwise Ctrl+C).
 - `--split duration=SEC` / `--split silence=SEC` : split the audio file into sequentially numbered chunks (requires `-a FILE`; silence threshold via `--silence-threshold` dBFS).
-- `--capture-backend auto|sckit|coreaudio` : system/app capture backend (default `auto`, or `$AURAL_CAPTURE`); see §6.2.
+- `--capture-backend auto|sckit|coreaudio` : system/app capture backend (default `auto`, or `$HARK_CAPTURE`); see §6.2.
 
 **Format overrides & transcription:**
 - `--format wav|m4a|flac|mp3|opus` : force the audio format, overriding the extension.
 - `--transcript-format txt|srt|json` : force the transcript format, overriding the extension.
 - `-e, --engine whisper|apple|whisperkit` : recognition engine (default `whisper`; `cloud` is post-MVP). Capabilities vary — see §6.6.
-- `--model NAME|PATH` : engine-specific model selector. `whisper`: ggml path or short name (`large-v3-turbo`); `whisperkit`: a WhisperKit model name (`large-v3-v20240930_626MB`); `apple`: ignored (OS assets). whisper precedence: `--model` › `$AURAL_WHISPER_MODEL` › config `model` (`aural config` / `~/.aural/config.json`).
+- `--model NAME|PATH` : engine-specific model selector. `whisper`: ggml path or short name (`large-v3-turbo`); `whisperkit`: a WhisperKit model name (`large-v3-v20240930_626MB`); `apple`: ignored (OS assets). whisper precedence: `--model` › `$HARK_WHISPER_MODEL` › config `model` (`hark config` / `~/.hark/config.json`).
 - `--language CODE` : spoken language (e.g. `de`); `auto` (default) detects it where the engine supports detection.
 - `--translate` : output English regardless of the spoken language (whisper/whisperkit only).
 - `--raw` : with `-a -`, stream headerless raw PCM to stdout instead of a WAV container.
@@ -228,86 +228,86 @@ aural models | config                    # model + default management
 
 **Interactive & remote control (§6.8–§6.10):**
 - `--interactive` : run live capture in a minimal terminal UI (status header + live transcript + single-key **space** pause/resume, **Enter** finish; Ctrl-C also stops). Pause omits the paused interval from the outputs. Requires a controlling TTY; mutually exclusive with `-` (stdout) outputs and with `--remote-control`. (Modal flag — not a persisted config key.)
-- `--remote-control [host:]port` : start Aural as a control **agent** instead of capturing immediately, serving an HTTP/JSON API over TCP. The value is required: a bare port or an empty host binds **loopback** (conventionally `8473`, e.g. `8473` or `:8473`); `0.0.0.0:8473` or a specific IPv4 binds elsewhere. Any other capture/transcription flags given at launch become the per-session **defaults** for recordings started via the API. Non-loopback binds require `$AURAL_REMOTE_TOKEN`. (Modal flag — not a persisted config key.)
+- `--remote-control [host:]port` : start Hark as a control **agent** instead of capturing immediately, serving an HTTP/JSON API over TCP. The value is required: a bare port or an empty host binds **loopback** (conventionally `8473`, e.g. `8473` or `:8473`); `0.0.0.0:8473` or a specific IPv4 binds elsewhere. Any other capture/transcription flags given at launch become the per-session **defaults** for recordings started via the API. Non-loopback binds require `$HARK_REMOTE_TOKEN`. (Modal flag — not a persisted config key.)
 
 **Examples:**
 ```
-aural                                       # live mic, transcript -> stdout
-aural -i recording.m4a                       # transcribe a file -> stdout
-aural -a rec.m4a                             # record only (no transcription)
-aural -a rec.m4a -t notes.txt                # record + transcribe to files
-aural --system --mix -a mtg.m4a -t mtg.srt   # capture a meeting, keep both
-aural -i in.wav -a out.m4a                   # convert between formats
-aural -a - | ffmpeg -i - ...                 # stream WAV into a pipe
-aural -i talk.mp3 --language auto -t talk.srt        # detect language -> subtitles
-aural --system --engine whisperkit --translate -t -  # any language -> English, live
-aural --system --mix --speakers -t mtg.srt           # meeting w/ speaker labels (You / Speaker N)
-aural -i mtg.wav --speakers=acoustic -t mtg.json     # diarize a recording -> labeled JSON
-aural --interactive --system --mix -a mtg.m4a        # interactive meeting capture (pause/stop)
-aural --remote-control 127.0.0.1:8080                # run the control agent on loopback:8080
+hark                                       # live mic, transcript -> stdout
+hark -i recording.m4a                       # transcribe a file -> stdout
+hark -a rec.m4a                             # record only (no transcription)
+hark -a rec.m4a -t notes.txt                # record + transcribe to files
+hark --system --mix -a mtg.m4a -t mtg.srt   # capture a meeting, keep both
+hark -i in.wav -a out.m4a                   # convert between formats
+hark -a - | ffmpeg -i - ...                 # stream WAV into a pipe
+hark -i talk.mp3 --language auto -t talk.srt        # detect language -> subtitles
+hark --system --engine whisperkit --translate -t -  # any language -> English, live
+hark --system --mix --speakers -t mtg.srt           # meeting w/ speaker labels (You / Speaker N)
+hark -i mtg.wav --speakers=acoustic -t mtg.json     # diarize a recording -> labeled JSON
+hark --interactive --system --mix -a mtg.m4a        # interactive meeting capture (pause/stop)
+hark --remote-control 127.0.0.1:8080                # run the control agent on loopback:8080
 ```
 
-**`aural devices`**
+**`hark devices`**
 - `--list-inputs` / `--list-outputs`
 - `--json` : output in JSON for scripting.
 
-**`aural apps`**
+**`hark apps`**
 - List running applications whose audio can be captured via process taps.
 - Output: application name, bundle ID, PID.
 - `--json` : output in JSON for scripting.
 
-**`aural info <file>`**
+**`hark info <file>`**
 - Print duration, sample rate, channels, and metadata of an audio file.
 - `--json` : output in JSON for scripting.
 
-**`aural models`**
+**`hark models`**
 - `list` : show installed models across engines (name, engine, size) and the active default (`*`).
 - `list --available` : show the downloadable catalog across engines with an `ENGINE` column, language coverage, and installed/current status.
-- `download <name>` : fetch a model. Names are engine-tagged: a bare ggml short name is a whisper model (`base.en`); CoreML engines use a prefix (`whisperkit:tiny`, `parakeet:v3`). whisper models land in `~/.aural/models`; whisperkit/parakeet delegate to their SDK caches. `--force` re-downloads. `--default` makes it the default: for whisper the first download is auto-adopted; for whisperkit/parakeet `--default` also sets `config.engine`.
+- `download <name>` : fetch a model. Names are engine-tagged: a bare ggml short name is a whisper model (`base.en`); CoreML engines use a prefix (`whisperkit:tiny`, `parakeet:v3`). whisper models land in `~/.hark/models`; whisperkit/parakeet delegate to their SDK caches. `--force` re-downloads. `--default` makes it the default: for whisper the first download is auto-adopted; for whisperkit/parakeet `--default` also sets `config.engine`.
 - Applies to file-based engines (`whisper`, `whisperkit`, `parakeet`); `apple` uses OS-managed assets.
 - `--json` on `list` for scripting.
 
-**`aural config`** — persisted defaults in `~/.aural/config.json` (JSON; user-editable, kebab-case keys).
+**`hark config`** — persisted defaults in `~/.hark/config.json` (JSON; user-editable, kebab-case keys).
 - `show` (default; `--json`) / `set <key> <value>` / `unset <key>` / `path`.
-- Keys (kebab-case): `engine`, `model`, `language`, `translate`, `device`, `directory`, `capture-backend`, `rate`, `bits`, `channels`, `silence-threshold`, `vad`, `vad-threshold`, `gain`, `speakers`, `speaker-mode`, `speaker-labels`, `diarize-engine`, `max-speakers`, `speaker-threshold`. Values are type-checked (e.g. `translate`/`vad`/`gain`/`speakers` boolean; `silence-threshold` negative; `engine` a known engine; `directory` an existing directory; `vad-threshold`/`speaker-threshold` in 0–1); unknown keys are rejected. `aural config show` lists every setting with its value, source, and a one-line description. Values beginning with `-` are taken verbatim (e.g. `aural config set silence-threshold -40`).
+- Keys (kebab-case): `engine`, `model`, `language`, `translate`, `device`, `directory`, `capture-backend`, `rate`, `bits`, `channels`, `silence-threshold`, `vad`, `vad-threshold`, `gain`, `speakers`, `speaker-mode`, `speaker-labels`, `diarize-engine`, `max-speakers`, `speaker-threshold`. Values are type-checked (e.g. `translate`/`vad`/`gain`/`speakers` boolean; `silence-threshold` negative; `engine` a known engine; `directory` an existing directory; `vad-threshold`/`speaker-threshold` in 0–1); unknown keys are rejected. `hark config show` lists every setting with its value, source, and a one-line description. Values beginning with `-` are taken verbatim (e.g. `hark config set silence-threshold -40`).
 
-**Defaults precedence (environment & configuration).** Each setting resolves in the order **flag › environment (`$AURAL_*`) › config (`aural config`) › built-in default** (the order `aural config show` displays):
+**Defaults precedence (environment & configuration).** Each setting resolves in the order **flag › environment (`$HARK_*`) › config (`hark config`) › built-in default** (the order `hark config show` displays):
 
 | Setting | Flag | Env var | Config key | Default |
 |---------|------|---------|------------|---------|
-| engine | `-e/--engine` | `$AURAL_ENGINE` | `engine` | `whisper` |
-| model | `--model` | `$AURAL_WHISPER_MODEL` | `model` | (required) |
-| language | `--language` | `$AURAL_LANGUAGE` | `language` | `auto` |
-| translate | `--translate`/`--no-translate` | `$AURAL_TRANSLATE` | `translate` | `false` |
-| input device | `-d/--device` | `$AURAL_DEVICE` | `device` | system default input |
-| working directory | `--directory`/`-C` | `$AURAL_DIRECTORY` | `directory` | current working directory |
-| capture backend | `--capture-backend` | `$AURAL_CAPTURE` | `capture-backend` | `auto` |
-| sample rate | `-r/--rate` | `$AURAL_RATE` | `rate` | contextual (live 44100) |
-| bit depth | `-b/--bits` | `$AURAL_BITS` | `bits` | contextual (live 16) |
-| channels | `-c/--channels` | `$AURAL_CHANNELS` | `channels` | auto (source, ≤2) |
-| silence threshold | `--silence-threshold` | `$AURAL_SILENCE_THRESHOLD` | `silence-threshold` | `-50` |
-| VAD | `--vad`/`--no-vad` | `$AURAL_VAD` | `vad` | `true` |
-| VAD threshold | `--vad-threshold` | `$AURAL_VAD_THRESHOLD` | `vad-threshold` | `0.5` |
-| gain | `--gain`/`--no-gain` | `$AURAL_GAIN` | `gain` | `true` |
-| speakers | `--speakers`/`--no-speakers` | `$AURAL_SPEAKERS` | `speakers` | `false` |
-| speaker mode | `--speaker-mode` | `$AURAL_SPEAKER_MODE` | `speaker-mode` | `auto` |
-| speaker labels | `--speaker-labels` | `$AURAL_SPEAKER_LABELS` | `speaker-labels` | `You,Others` |
-| diarize engine | `--diarize-engine` | `$AURAL_DIARIZE_ENGINE` | `diarize-engine` | `auto` |
-| max speakers | `--max-speakers` | `$AURAL_MAX_SPEAKERS` | `max-speakers` | (unset) |
-| speaker threshold | `--speaker-threshold` | `$AURAL_SPEAKER_THRESHOLD` | `speaker-threshold` | `~0.65` |
+| engine | `-e/--engine` | `$HARK_ENGINE` | `engine` | `whisper` |
+| model | `--model` | `$HARK_WHISPER_MODEL` | `model` | (required) |
+| language | `--language` | `$HARK_LANGUAGE` | `language` | `auto` |
+| translate | `--translate`/`--no-translate` | `$HARK_TRANSLATE` | `translate` | `false` |
+| input device | `-d/--device` | `$HARK_DEVICE` | `device` | system default input |
+| working directory | `--directory`/`-C` | `$HARK_DIRECTORY` | `directory` | current working directory |
+| capture backend | `--capture-backend` | `$HARK_CAPTURE` | `capture-backend` | `auto` |
+| sample rate | `-r/--rate` | `$HARK_RATE` | `rate` | contextual (live 44100) |
+| bit depth | `-b/--bits` | `$HARK_BITS` | `bits` | contextual (live 16) |
+| channels | `-c/--channels` | `$HARK_CHANNELS` | `channels` | auto (source, ≤2) |
+| silence threshold | `--silence-threshold` | `$HARK_SILENCE_THRESHOLD` | `silence-threshold` | `-50` |
+| VAD | `--vad`/`--no-vad` | `$HARK_VAD` | `vad` | `true` |
+| VAD threshold | `--vad-threshold` | `$HARK_VAD_THRESHOLD` | `vad-threshold` | `0.5` |
+| gain | `--gain`/`--no-gain` | `$HARK_GAIN` | `gain` | `true` |
+| speakers | `--speakers`/`--no-speakers` | `$HARK_SPEAKERS` | `speakers` | `false` |
+| speaker mode | `--speaker-mode` | `$HARK_SPEAKER_MODE` | `speaker-mode` | `auto` |
+| speaker labels | `--speaker-labels` | `$HARK_SPEAKER_LABELS` | `speaker-labels` | `You,Others` |
+| diarize engine | `--diarize-engine` | `$HARK_DIARIZE_ENGINE` | `diarize-engine` | `auto` |
+| max speakers | `--max-speakers` | `$HARK_MAX_SPEAKERS` | `max-speakers` | (unset) |
+| speaker threshold | `--speaker-threshold` | `$HARK_SPEAKER_THRESHOLD` | `speaker-threshold` | `~0.65` |
 
-Model values (flag/env/config) may each be a ggml path or a short name resolved under `~/.aural/models`. Malformed env values (non-boolean `$AURAL_TRANSLATE`, non-negative/non-numeric `$AURAL_SILENCE_THRESHOLD`) are reported as usage errors.
+Model values (flag/env/config) may each be a ggml path or a short name resolved under `~/.hark/models`. Malformed env values (non-boolean `$HARK_TRANSLATE`, non-negative/non-numeric `$HARK_SILENCE_THRESHOLD`) are reported as usage errors.
 
-**Working directory & path resolution.** All **relative** artifact paths — `-i`, `-a`, `-t`, and `--split` outputs — resolve against the working directory (`--directory`/`-C` › `$AURAL_DIRECTORY` › config `directory` › process CWD). Absolute paths, `-` (stdin/stdout), and Aural's own state (`~/.aural/…` config and models) are unaffected. A non-existent directory is a usage error; Aural never creates it. This makes invocations reproducible regardless of the launcher's CWD and is the basis for the planned remote-control feature, where a controlling process/host points Aural at a shared artifact directory.
+**Working directory & path resolution.** All **relative** artifact paths — `-i`, `-a`, `-t`, and `--split` outputs — resolve against the working directory (`--directory`/`-C` › `$HARK_DIRECTORY` › config `directory` › process CWD). Absolute paths, `-` (stdin/stdout), and Hark's own state (`~/.hark/…` config and models) are unaffected. A non-existent directory is a usage error; Hark never creates it. This makes invocations reproducible regardless of the launcher's CWD and is the basis for the planned remote-control feature, where a controlling process/host points Hark at a shared artifact directory.
 
 All invocations accept `-h, --help` and `-v, --verbose`.
 
-> **Note on the root verb.** `aural` with no arguments starts live microphone capture and prints a transcript to stdout; full usage is available via `aural --help`. Naming no output transcribes to stdout, so the default behaviour matches the product's one-line description. Transcoding (`aural -i in -a out`) replaces the former `convert` subcommand, which has been removed.
+> **Note on the root verb.** `hark` with no arguments starts live microphone capture and prints a transcript to stdout; full usage is available via `hark --help`. Naming no output transcribes to stdout, so the default behaviour matches the product's one-line description. Transcoding (`hark -i in -a out`) replaces the former `convert` subcommand, which has been removed.
 
 ### 6.2 Source Handling
 
 - Use CoreAudio APIs to enumerate AudioDeviceIDs; automatically exclude inactive devices.
-- **System/app capture uses one of two interchangeable backends** (both deliver the same packed-PCM stream); `--capture-backend auto|sckit|coreaudio` (default `auto`, or `$AURAL_CAPTURE`) selects:
+- **System/app capture uses one of two interchangeable backends** (both deliver the same packed-PCM stream); `--capture-backend auto|sckit|coreaudio` (default `auto`, or `$HARK_CAPTURE`) selects:
   - **`sckit` — ScreenCaptureKit** (`SCStream`, macOS 15+): captures system/app audio and, for `--mix`, the microphone in the same synchronized stream. Audio is delivered continuously (silence when idle), so `--mix` keeps recording the microphone even when no system audio is playing. Requires the **Screen Recording** TCC permission and a graphical login session (it cannot run headless / over SSH / as a LaunchDaemon).
   - **`coreaudio` — Core Audio process taps** (`CATapDescription` / `AudioHardwareCreateProcessTap`, macOS 14.4+): no virtual audio driver. Uses a private aggregate device; for `--mix` the **microphone is the aggregate's clock master** so capture runs continuously regardless of system-audio activity. Requires the narrower **System Audio Recording** permission and **works headless** (cron/launchd/SSH).
   - **`auto`** prefers `sckit` when available (macOS 15+, a GUI session is present, and Screen Recording is granted) and otherwise falls back to `coreaudio`, printing a one-line notice on stderr. Headless and macOS 14.x always use `coreaudio`.
@@ -341,8 +341,8 @@ All invocations accept `-h, --help` and `-v, --verbose`.
 - Input is normalised internally to 16 kHz mono 16-bit WAV (the whisper.cpp requirement) before the engine runs; any readable input format is therefore accepted without prior conversion.
 - For live capture, transcription should run as close to runtime as possible: the stream is segmented on natural pauses (with a maximum-window cap) and each segment is transcribed as it completes, appending to the destination. True streaming transcription is post-MVP; batch (transcribe-at-end) is the minimum acceptable behaviour for v1. **Segment boundaries are determined by voice-activity detection (VAD) when available** (Silero via FluidAudio — far more stable than a raw amplitude threshold), falling back to the `--silence-threshold` amplitude heuristic when VAD models are absent; see §6.7. When `--speakers` is active, the same segmentation feeds the speaker pipeline so each emitted segment carries a speaker label.
 - When both `-a` and `-t` are given, audio and transcript are produced in the same capture pass.
-- If `--engine whisper`, call a system-installed whisper.cpp binary (`whisper-cli`/`whisper-cpp` on `PATH`, or `$AURAL_WHISPER_BIN`); if not found, provide a clear error with installation instructions (e.g., `brew install whisper-cpp`). The model comes from `--model` or `$AURAL_WHISPER_MODEL`.
-- Live transcription prefers a model-resident backend when `whisper-server` is available (`$AURAL_WHISPER_SERVER_BIN` to override the path): the server is launched once on loopback (127.0.0.1) so the model loads a single time, and each segment is transcribed via a local HTTP request to its `/inference` endpoint. This is local IPC with Aural's own child process — not an external network call. It is disabled with `AURAL_WHISPER_SERVER=0`, and Aural falls back to spawning `whisper-cli` per segment whenever the server is absent or fails to start, so transcription is never blocked by the optimization.
+- If `--engine whisper`, call a system-installed whisper.cpp binary (`whisper-cli`/`whisper-cpp` on `PATH`, or `$HARK_WHISPER_BIN`); if not found, provide a clear error with installation instructions (e.g., `brew install whisper-cpp`). The model comes from `--model` or `$HARK_WHISPER_MODEL`.
+- Live transcription prefers a model-resident backend when `whisper-server` is available (`$HARK_WHISPER_SERVER_BIN` to override the path): the server is launched once on loopback (127.0.0.1) so the model loads a single time, and each segment is transcribed via a local HTTP request to its `/inference` endpoint. This is local IPC with Hark's own child process — not an external network call. It is disabled with `HARK_WHISPER_SERVER=0`, and Hark falls back to spawning `whisper-cli` per segment whenever the server is absent or fails to start, so transcription is never blocked by the optimization.
 - STDERR from the transcription engine is passed through for debugging (suppressed for the high-volume per-segment live calls unless `-v`); a non-zero engine exit code propagates through the pipeline.
 - Recognition uses a selectable engine (`--engine`, default `whisper`). All engines share one internal primitive — "transcribe a 16 kHz mono WAV (optionally translating) → text (+ optional timestamps)" — used by both batch and live paths.
 
@@ -353,26 +353,26 @@ All invocations accept `-h, --help` and `-v, --verbose`.
 | `whisperkit` | WhisperKit CoreML (SwiftPM dep) | ~99 | yes | yes | WhisperKit model name; auto-downloaded |
 | `parakeet` | FluidAudio CoreML (SwiftPM dep) | 25 European (v3) / English (v2) | yes (auto) | no | `--model v2`/`v3`; auto-downloaded |
 
-- An `.en` whisper model ignores `--language`; Aural warns when a non-English language is requested with such a model.
+- An `.en` whisper model ignores `--language`; Hark warns when a non-English language is requested with such a model.
 - `--translate` is rejected with a clear error on engines that don't support it (`apple`, `parakeet`).
-- `apple` requires the macOS Speech Recognition TCC permission (docs/permissions.md) and on-device locale assets; it runs fully on-device (`requiresOnDeviceRecognition`, no network) and recognizes in one locale (`--language CODE` → locale, e.g. `de`→`de-DE`; `auto` uses the current locale). It produces plain text: batch (`-i`) rejects `--transcript-format srt|json` with a clear hint, while live `-t out.srt`/`.json` still works (timestamps come from Aural's segmenter).
+- `apple` requires the macOS Speech Recognition TCC permission (docs/permissions.md) and on-device locale assets; it runs fully on-device (`requiresOnDeviceRecognition`, no network) and recognizes in one locale (`--language CODE` → locale, e.g. `de`→`de-DE`; `auto` uses the current locale). It produces plain text: batch (`-i`) rejects `--transcript-format srt|json` with a clear hint, while live `-t out.srt`/`.json` still works (timestamps come from Hark's segmenter).
 - `whisperkit` and `parakeet` are Apple-Silicon-first (clear error on Intel) and load their CoreML model once, reused across live segments (model-resident, like the whisper-server backend). Both build `srt`/`json` from engine timings (whisperkit segments, parakeet token timings).
-- `parakeet` auto-detects within its language set; a specific `--language` emits a notice and is ignored. `whisperkit` caches models under `~/.aural/models/whisperkit`; `parakeet` uses FluidAudio's managed cache (`~/Library/Application Support/FluidAudio/Models`). `aural models list` shows both.
+- `parakeet` auto-detects within its language set; a specific `--language` emits a notice and is ignored. `whisperkit` caches models under `~/.hark/models/whisperkit`; `parakeet` uses FluidAudio's managed cache (`~/Library/Application Support/FluidAudio/Models`). `hark models list` shows both.
 
 ### 6.7 Speaker Recognition & Diarization
 
 Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--diarize` (§6.1); without it, transcript output is unchanged. Two complementary mechanisms combine, because each is strong where the other is weak:
 
-**a) Source attribution (deterministic, no ML).** When Aural already captures two distinct sources — `--mix`, or `--system`/`--app` with the microphone — the microphone (you) and the system audio (everyone on the call) are *inherently separate signals*. Today they are summed into one stream before transcription (`StreamMixer`/`StreamMixing`), which discards that separation and forces any "who spoke" decision onto an unreliable single-stream heuristic. Under `--speakers`, Aural **keeps the mic and system as separate internal tracks**, transcribes/segments each independently, and tags segments by origin: the mic side is labeled `You`, the system side `Others` (relabel with `--speaker-labels "You,Others"`). This is exact, cheap, headless-safe, and needs no model download. **The packaged audio output (`-a`) remains the mixed stream** by default; separate-track *audio* output is out of scope here (see §4.2 / Open Questions).
+**a) Source attribution (deterministic, no ML).** When Hark already captures two distinct sources — `--mix`, or `--system`/`--app` with the microphone — the microphone (you) and the system audio (everyone on the call) are *inherently separate signals*. Today they are summed into one stream before transcription (`StreamMixer`/`StreamMixing`), which discards that separation and forces any "who spoke" decision onto an unreliable single-stream heuristic. Under `--speakers`, Hark **keeps the mic and system as separate internal tracks**, transcribes/segments each independently, and tags segments by origin: the mic side is labeled `You`, the system side `Others` (relabel with `--speaker-labels "You,Others"`). This is exact, cheap, headless-safe, and needs no model download. **The packaged audio output (`-a`) remains the mixed stream** by default; separate-track *audio* output is out of scope here (see §4.2 / Open Questions).
 
-**b) Acoustic diarization (FluidAudio CoreML, on-device/ANE).** To resolve multiple distinct speakers *within* one stream — several remote participants on the system side, or a single-source/in-room recording — Aural uses FluidAudio's diarization models, reusing the dependency already linked for the `parakeet` engine (no new heavy dependency). Anonymous speakers are labeled `Speaker 1`, `Speaker 2`, …
+**b) Acoustic diarization (FluidAudio CoreML, on-device/ANE).** To resolve multiple distinct speakers *within* one stream — several remote participants on the system side, or a single-source/in-room recording — Hark uses FluidAudio's diarization models, reusing the dependency already linked for the `parakeet` engine (no new heavy dependency). Anonymous speakers are labeled `Speaker 1`, `Speaker 2`, …
    - **Offline mode** (default for `-i` file input, and for live capture with `--diarize-engine offline`): the most accurate pipeline (Pyannote Community-1 — segmentation + speaker embeddings + clustering). Runs over the whole recording; for live capture it records the stream(s) and diarizes at stop (transcript at end).
    - **Streaming mode** (default for live capture): real-time **end-to-end neural diarization** (FluidAudio **LS-EEND**, a long-form streaming EEND model). The diarizer ingests the system/single stream continuously and maintains a frame-level "who-spoke-when" **timeline** (~100 ms updates) that is independent of the ASR segmentation — so speaker turns are detected **by voice** (including mid-utterance changes and overlapping speech), not by silence. Each completed ASR segment is then attributed to the speaker who dominates its time window → `Speaker N`. Identity is held in the model's persistent streaming state across the whole session. This supersedes the earlier per-segment embedding-clustering approach, which collapsed distinct speakers when a VAD segment blended several voices.
    - `--diarize-engine auto|streaming|offline` overrides the mode. `--max-speakers N` and `--speaker-threshold` apply to the **offline/batch clustering** pipeline only; the streaming EEND model has no clustering threshold (its speaker capacity is fixed by the model, currently up to 10).
 
-**c) Combined.** With `--speakers` (auto/acoustic) and two sources, Aural attributes the mic side as `You` (deterministic) and diarizes the system side, yielding `You` plus `Speaker 1/2…` for the remote participants in one transcript — live (streaming) or as an accurate offline pass at stop. `You` is a live-only label (a single mixed `-i` file can't separate your voice — everyone is `Speaker N`).
+**c) Combined.** With `--speakers` (auto/acoustic) and two sources, Hark attributes the mic side as `You` (deterministic) and diarizes the system side, yielding `You` plus `Speaker 1/2…` for the remote participants in one transcript — live (streaming) or as an accurate offline pass at stop. `You` is a live-only label (a single mixed `-i` file can't separate your voice — everyone is `Speaker N`).
 
-**Runtime segmentation (the "delay in a sound" fix).** Live segmentation no longer relies solely on an amplitude/silence threshold. On Apple Silicon, **FluidAudio VAD (Silero) drives the speech/pause boundaries by default** (a full streaming state machine with hysteresis and speech padding; and, in streaming diarization, speaker-change turns also cut segments). The Silero CoreML model is fetched on the first live run (then fully local) — the one network-using exception on the default live path, opt out with `AURAL_VAD=0`. The existing `--silence-threshold` amplitude method remains the graceful fallback on Intel or whenever the VAD model can't be loaded, so transcription is never blocked. This stabilizes both transcription boundaries and speaker turns at runtime.
+**Runtime segmentation (the "delay in a sound" fix).** Live segmentation no longer relies solely on an amplitude/silence threshold. On Apple Silicon, **FluidAudio VAD (Silero) drives the speech/pause boundaries by default** (a full streaming state machine with hysteresis and speech padding; and, in streaming diarization, speaker-change turns also cut segments). The Silero CoreML model is fetched on the first live run (then fully local) — the one network-using exception on the default live path, opt out with `HARK_VAD=0`. The existing `--silence-threshold` amplitude method remains the graceful fallback on Intel or whenever the VAD model can't be loaded, so transcription is never blocked. This stabilizes both transcription boundaries and speaker turns at runtime.
 
 **Output.** Speaker labels are carried in every transcript format:
   - `txt` : each line is prefixed `Speaker 1: …` / `You: …`.
@@ -380,12 +380,12 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
   - `json` : every segment object gains a `"speaker"` field alongside `start`/`end`/`text`.
 
 **Models & platform.**
-  - Diarization/VAD CoreML models are managed through `aural models` (engine-tagged, e.g. `fluidaudio:diarizer`, `fluidaudio:vad`) and FluidAudio's own cache (`~/Library/Application Support/FluidAudio/Models`); `aural models list` shows them. They download from Hugging Face on first use (opt-in network, then fully local) — consistent with the `whisperkit`/`parakeet` engines and §7 Security & Privacy.
+  - Diarization/VAD CoreML models are managed through `hark models` (engine-tagged, e.g. `fluidaudio:diarizer`, `fluidaudio:vad`) and FluidAudio's own cache (`~/Library/Application Support/FluidAudio/Models`); `hark models list` shows them. They download from Hugging Face on first use (opt-in network, then fully local) — consistent with the `whisperkit`/`parakeet` engines and §7 Security & Privacy.
   - Acoustic diarization and VAD are **Apple-Silicon-first** (runtime-gated with a clear error on Intel, like `whisperkit`/`parakeet`). **Source attribution (a) has no such requirement** — it is pure stream routing and works everywhere `--mix` works, including headless. No new TCC permission is required (same captured audio).
 
 ### 6.8 Startup Status
 
-- When a **live capture** starts, Aural prints a concise, human-readable status block to **stderr** summarising the resolved configuration: recognition engine, model, language (and `--translate`), input source/device (and capture backend for system/app), audio format (rate/bits/channels), output destinations (audio path/format, transcript path/format, or "stdout"), speaker mode, VAD on/off, and any `--duration`/`--split` limit.
+- When a **live capture** starts, Hark prints a concise, human-readable status block to **stderr** summarising the resolved configuration: recognition engine, model, language (and `--translate`), input source/device (and capture backend for system/app), audio format (rate/bits/channels), output destinations (audio path/format, transcript path/format, or "stdout"), speaker mode, VAD on/off, and any `--duration`/`--split` limit.
 - **Visibility:** shown by default when stderr is a TTY, and always with `-v`; **suppressed when stderr is not a TTY** (redirected/piped/cron) so machine pipelines stay clean. It is **never written to stdout** and therefore never corrupts `-a -`/`-t -` streams.
 - It reuses already-resolved values (the same data `-v` logs today via `Log.verbose`), so it adds no new resolution work; it is a presentation layer over the existing settings resolution.
 
@@ -399,7 +399,7 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 
 ### 6.10 Remote-Control Agent
 
-- `aural --remote-control [host:]port` starts Aural as a long-running **control agent** that does **not** capture on its own; it serves a small HTTP/1.1 + JSON API over TCP and waits for commands. The value is required: a bare port or empty host binds **loopback `127.0.0.1`** (conventionally port **8473**); `0.0.0.0:PORT` or a specific IPv4 binds elsewhere (IPv6 is not supported). The agent prints its bound address to stderr on start.
+- `hark --remote-control [host:]port` starts Hark as a long-running **control agent** that does **not** capture on its own; it serves a small HTTP/1.1 + JSON API over TCP and waits for commands. The value is required: a bare port or empty host binds **loopback `127.0.0.1`** (conventionally port **8473**); `0.0.0.0:PORT` or a specific IPv4 binds elsewhere (IPv6 is not supported). The agent prints its bound address to stderr on start.
 - **Defaults from launch flags:** any capture/transcription flags supplied at launch (e.g. `--system --mix --engine whisperkit -C ~/Recordings`) become the **session defaults**; a `POST /start` body may override them.
 - **Where:** output paths in a start request are resolved against the agent's working `directory` (Feature 20 / §6.1). Relative names (e.g. derived from a meeting title) are therefore written to a known, configured location; absolute paths are honoured as-is.
 - **Endpoints — flat control verbs (one active session):**
@@ -409,8 +409,8 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
   - `POST /stop` — stop and finalise the active recording.
 - **Single active session:** the agent records **one session at a time**; a `POST /start` while a recording is active is rejected with `409 Conflict`. (Concurrent sessions are out of scope for now.)
 - **Control + status only:** the API exposes **controls and status metadata only** — it **never serves transcript or audio content**. Produced artifacts are retrieved from the working `directory` over the filesystem, not the API.
-- **Errors** map Aural's exit-code semantics onto HTTP status codes (e.g. permission denied → `403`, bad parameters → `400`, engine/model missing → `404`/`422`, already recording → `409`) with a JSON `{ "error": … }` body.
-- **Security:** the listener is **loopback-only by default**, consistent with §7 "no external network calls by default" (it accepts local connections; it makes none). Binding to a **non-loopback** interface is explicit opt-in and **requires a bearer token** (`$AURAL_REMOTE_TOKEN`, sent as `Authorization: Bearer …`); the agent **refuses to bind** to a non-loopback address without one. `--remote-control` is mutually exclusive with `--interactive` and with the immediate-capture/`-i` input modes.
+- **Errors** map Hark's exit-code semantics onto HTTP status codes (e.g. permission denied → `403`, bad parameters → `400`, engine/model missing → `404`/`422`, already recording → `409`) with a JSON `{ "error": … }` body.
+- **Security:** the listener is **loopback-only by default**, consistent with §7 "no external network calls by default" (it accepts local connections; it makes none). Binding to a **non-loopback** interface is explicit opt-in and **requires a bearer token** (`$HARK_REMOTE_TOKEN`, sent as `Authorization: Bearer …`); the agent **refuses to bind** to a non-loopback address without one. `--remote-control` is mutually exclusive with `--interactive` and with the immediate-capture/`-i` input modes.
 - **Clients:** no client is bundled — the wire protocol is documented so any language can drive it (`curl`, scripts, browser userscripts). A **Tampermonkey Google-Meet reference userscript** ships in the docs: it watches `meet.google.com`, calls `POST /start` on call-join with a filename derived from the meeting title + date, and `POST /stop` on call-end, using `GM_xmlhttpRequest` to the loopback agent.
 
 ---
@@ -423,9 +423,9 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 | **Reliability** | 24-hour continuous recording must produce a valid, non-corrupted file when terminated via SIGINT/SIGTERM. Resilience to hard kills (SIGKILL, power loss) is parked — see Open Questions. |
 | **Usability** | CLI help and error messages are clear, include examples, and follow POSIX utility conventions. The startup status summary (§6.8) shows the resolved configuration on stderr without polluting stdout. Interactive mode (§6.9) uses single-key controls and **always restores the terminal** (raw/alternate-screen state) on exit, error, or signal. |
 | **Compatibility** | macOS 14.4 (Sonoma) and later — required by the Core Audio process-tap API; both Intel and Apple Silicon. The ScreenCaptureKit capture backend additionally needs macOS 15+ and a graphical login session; on macOS 14.x or headless it falls back to the Core Audio tap (see §6.2). The `whisperkit` and `parakeet` engines, and **acoustic diarization / VAD (§6.7b)**, are Apple-Silicon-first (runtime-gated with a clear error on Intel); `whisper` and `apple` cover Intel. **Source attribution (§6.7a) is platform-agnostic** (pure stream routing) and works wherever `--mix` works, including headless. Interactive mode (§6.9) requires a controlling TTY (clear usage error otherwise); the status summary (§6.8) and the remote-control agent (§6.10) are platform-agnostic and run headless. |
-| **Security & Privacy** | No external network calls by default; cloud transcription backends are opt-in and use HTTPS with user-provided API keys. (Live transcription may run a local `whisper-server` bound to loopback 127.0.0.1 for performance — IPC with Aural's own child process, never an external connection; disable with `AURAL_WHISPER_SERVER=0`.) **The remote-control agent (§6.10) opens a TCP listener only when `--remote-control` is given; it binds loopback `127.0.0.1` by default (accepting local connections, making none — still no outbound calls). Binding to a non-loopback interface is explicit opt-in and requires a bearer token (`$AURAL_REMOTE_TOKEN`); the agent refuses to bind otherwise.** System/app audio capture requires a TCC permission that depends on the backend (§6.2): the Core Audio tap uses the narrower "System Audio Recording" permission (and works headless); the ScreenCaptureKit backend requires the broader "Screen Recording" permission and a GUI session. Both are terminal-attributed for unbundled CLIs and their approval flows are documented. The `apple` engine uses the Speech Recognition TCC permission; `whisperkit` and `parakeet` download CoreML models from Hugging Face on first use (model fetch only, then fully local). Speaker diarization/VAD (§6.7) likewise fetch FluidAudio CoreML models from Hugging Face on first use, then run fully on-device, and require **no additional TCC permission** (they operate on already-captured audio). Note: live VAD segmentation is on by default on Apple Silicon, so its Silero model is fetched on the first live run — a deliberate, documented exception to "no network by default", opt out with `AURAL_VAD=0`. |
+| **Security & Privacy** | No external network calls by default; cloud transcription backends are opt-in and use HTTPS with user-provided API keys. (Live transcription may run a local `whisper-server` bound to loopback 127.0.0.1 for performance — IPC with Hark's own child process, never an external connection; disable with `HARK_WHISPER_SERVER=0`.) **The remote-control agent (§6.10) opens a TCP listener only when `--remote-control` is given; it binds loopback `127.0.0.1` by default (accepting local connections, making none — still no outbound calls). Binding to a non-loopback interface is explicit opt-in and requires a bearer token (`$HARK_REMOTE_TOKEN`); the agent refuses to bind otherwise.** System/app audio capture requires a TCC permission that depends on the backend (§6.2): the Core Audio tap uses the narrower "System Audio Recording" permission (and works headless); the ScreenCaptureKit backend requires the broader "Screen Recording" permission and a GUI session. Both are terminal-attributed for unbundled CLIs and their approval flows are documented. The `apple` engine uses the Speech Recognition TCC permission; `whisperkit` and `parakeet` download CoreML models from Hugging Face on first use (model fetch only, then fully local). Speaker diarization/VAD (§6.7) likewise fetch FluidAudio CoreML models from Hugging Face on first use, then run fully on-device, and require **no additional TCC permission** (they operate on already-captured audio). Note: live VAD segmentation is on by default on Apple Silicon, so its Silero model is fetched on the first live run — a deliberate, documented exception to "no network by default", opt out with `HARK_VAD=0`. |
 | **Maintainability** | Single Swift binary built with SwiftPM; modular targets: `DeviceManager`, `TapEngine`, `Encoders`, `CLI`. Well-documented code. The CoreML engines add the `argmaxinc/argmax-oss-swift` (whisperkit) and `FluidInference/FluidAudio` (parakeet) SwiftPM dependencies, currently always linked (a lean/trait-gated build is a future option — they increase binary size). Speaker diarization and VAD (§6.7) reuse the already-linked `FluidInference/FluidAudio` dependency, so they add no new SwiftPM dependency (only additional model assets). |
-| **Installability** | Distributed via Homebrew (`brew install aural`) and direct download from GitHub Releases; binary is signed and notarized so TCC permission flows work cleanly. |
+| **Installability** | Distributed via Homebrew (`brew install hark`) and direct download from GitHub Releases; binary is signed and notarized so TCC permission flows work cleanly. |
 | **Auditability** | All recorded file paths and durations are logged to STDERR when `-v` is enabled. |
 
 ---
@@ -433,7 +433,7 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 ## 8. Success Metrics (KPIs)
 
 - **Adoption:** 1000 Homebrew installs within 3 months of public release.
-- **Pipeline integration:** At least two open-source transcription projects (e.g., `whisper.cpp`, `faster-whisper`) officially list Aural as a recommended capture tool.
+- **Pipeline integration:** At least two open-source transcription projects (e.g., `whisper.cpp`, `faster-whisper`) officially list Hark as a recommended capture tool.
 - **Reliability:** Crash-free session rate > 99.5%, measured via strictly opt-in telemetry (consistent with the "no network calls by default" security requirement; mechanism TBD — see Open Questions).
 - **Community engagement:** Minimum 10 pull requests contributed from external developers within 6 months (discouraging feature bloat, but demonstrating extendability).
 - **Source attribution accuracy:** ~100% — in a two-source capture, every segment is attributed to its true origin (mic vs system) because the routing is deterministic, not inferred.
@@ -453,8 +453,8 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 | **M3 – Formats & Chunking** | M4A/FLAC output, MP3/Opus (static libs), time-based splitting, transcoding via `-i in -a out` | Week 5–6 | M1 |
 | **M4 – Transcription MVP** | Root-verb transcription with local Whisper support; stdin/file/live input; combined `-a`+`-t` | Week 7 | M3 |
 | **M5 – Polish & Release** | Code signing & notarization, Homebrew formula, man page, example scripts, CI/CD, public beta | Week 8–9 | M2, M3, M4 |
-| **M6 – Engines & Languages** | Engine abstraction; multilingual + `--translate` + `--language auto` on whisper; `aural models`; `apple` (Speech.framework) and `whisperkit` (CoreML) engines | Post-M5 | M4 |
-| **M7 – Speaker Recognition & Runtime Segmentation** | Source attribution (You/Others) via internal multi-track capture; acoustic diarization (FluidAudio, offline + streaming); VAD-based live segmentation; `--speakers`/`--diarize` flags; speaker labels in txt/srt/json; diarization/VAD models in `aural models` | Post-M6 | M4, M6 |
+| **M6 – Engines & Languages** | Engine abstraction; multilingual + `--translate` + `--language auto` on whisper; `hark models`; `apple` (Speech.framework) and `whisperkit` (CoreML) engines | Post-M5 | M4 |
+| **M7 – Speaker Recognition & Runtime Segmentation** | Source attribution (You/Others) via internal multi-track capture; acoustic diarization (FluidAudio, offline + streaming); VAD-based live segmentation; `--speakers`/`--diarize` flags; speaker labels in txt/srt/json; diarization/VAD models in `hark models` | Post-M6 | M4, M6 |
 | **M8 – Status, Interactive & Remote Control** | Startup status summary (§6.8); `--interactive` minimal UI with pause(gap)/resume/stop (§6.9); `--remote-control` HTTP/JSON agent (§6.10) with start/stop/pause/resume/status, loopback default + token for non-loopback; working-directory path resolution for outputs; documented protocol + Tampermonkey Google-Meet reference userscript | Post-M7 | M4, Feature 20 (working directory) |
 | **Post-MVP** | Scheduled/unattended launchd daemon, cross-host/authenticated remote control, streaming transcription, cloud backends, configuration profiles, named speaker identification (voiceprints), overlapping-speech handling | Ongoing | M5, M8 |
 
@@ -462,12 +462,12 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 
 ## 10. Open Questions & Assumptions
 
-1. **Crash resilience (parked):** How should recordings survive hard kills (SIGKILL, power loss)? Candidates: periodic header flush every N seconds, or a `aural repair` subcommand for truncated files. Decision deferred.
+1. **Crash resilience (parked):** How should recordings survive hard kills (SIGKILL, power loss)? Candidates: periodic header flush every N seconds, or a `hark repair` subcommand for truncated files. Decision deferred.
 2. **Whisper bundling:** Will the tool bundle a transcription engine or expect the user to install it separately? (Assumption: no bundling to keep the binary small; document external dependencies.)
 3. **Telemetry mechanism:** What opt-in mechanism (if any) will measure the crash-free-rate KPI without violating the no-network-by-default principle?
 4. **TCC for unbundled CLI:** Confirm the exact permission-attribution behaviour for a signed standalone binary vs. terminal-attributed permission, and document the recommended setup.
-5. **Named speaker identification (deferred):** How should enrolled voiceprints be stored and matched (local embedding store, privacy, cross-recording identity), and what CLI surface (`aural speakers enroll`?) does it need? Deferred to Post-MVP.
-6. **Overlapping speech:** The streaming EEND diarizer (LS-EEND) models overlap internally (independent per-speaker activity per frame), so its timeline can mark concurrent speakers. Aural still emits one label per ASR segment (the dominant speaker), because the ASR engine produces one text per segment; true per-word/overlap attribution (WhisperX-style word-level alignment) is deferred.
+5. **Named speaker identification (deferred):** How should enrolled voiceprints be stored and matched (local embedding store, privacy, cross-recording identity), and what CLI surface (`hark speakers enroll`?) does it need? Deferred to Post-MVP.
+6. **Overlapping speech:** The streaming EEND diarizer (LS-EEND) models overlap internally (independent per-speaker activity per frame), so its timeline can mark concurrent speakers. Hark still emits one label per ASR segment (the dominant speaker), because the ASR engine produces one text per segment; true per-word/overlap attribution (WhisperX-style word-level alignment) is deferred.
 7. ~~**Diarization streaming model choice:** LS-EEND vs Sortformer~~ → **Resolved:** live streaming uses **LS-EEND** — FluidAudio's long-form streaming end-to-end neural diarizer — maintaining a continuous frame-level speaker timeline decoupled from the ASR VAD segmentation. This replaced the original per-segment embedding-clustering approach, which collapsed distinct speakers whenever a VAD segment blended several voices (the whole-segment embedding was not discriminative). Sortformer (4-speaker cap, steadier identities) remains a possible alternative. (FluidAudio model-download footprint of always-linking the diarization assets is still open.)
 8. **Separate-track audio output:** Whether to expose the internal mic/system separation as user-facing audio output (e.g. dual files or L/R channels), beyond its use for transcript attribution. Currently scoped out (see §4.2).
 9. ~~**Remote control (deferred):** Transport/protocol, auth, and exposed operations are open.~~ → **Resolved into scope (M8, §6.10):** transport is **HTTP/1.1 + JSON over TCP**, loopback by default with `[interface:]port` override; operations are **flat control verbs** (`GET /status`, `POST /start|/pause|/resume|/stop`) over a **single active session** (control + status only — no content download); outputs resolve under the working `directory`; clients are external (documented protocol + a Tampermonkey Google-Meet reference userscript). **Still open:** hardened **non-loopback auth** beyond the bearer-token gate (TLS, allow-lists); and whether to later allow **concurrent sessions** (currently rejected with `409`). (Conventional loopback port resolved to **8473**.) Scheduled/unattended and cross-host control remain Post-MVP (§4.2).
@@ -476,9 +476,9 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 ### Resolved (2026-06-12)
 - ~~Language/stack~~ → **Swift**, single binary, SwiftPM modular targets.
 - ~~System audio without a virtual device~~ → **Core Audio process taps** (macOS 14.4+); BlackHole no longer required.
-- ~~Product/binary naming~~ → **aural**.
+- ~~Product/binary naming~~ → **hark**.
 
 ---
 
 **Document Status:** MVP implemented; v0.1.0 beta release.
-**Next Steps:** Post-beta — code signing + notarization for direct downloads; long-run reliability (24 h) and CPU performance validation; homebrew-core submission for bare `brew install aural`; decide crash-resilience strategy (Open Question 1).
+**Next Steps:** Post-beta — code signing + notarization for direct downloads; long-run reliability (24 h) and CPU performance validation; homebrew-core submission for bare `brew install hark`; decide crash-resilience strategy (Open Question 1).

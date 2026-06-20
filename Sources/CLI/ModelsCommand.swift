@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// `aural models` — inspect and fetch local transcription models (PRD §6.1).
+/// `hark models` — inspect and fetch local transcription models (PRD §6.1).
 struct Models: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "models",
@@ -67,8 +67,8 @@ struct ModelsList: ParsableCommand {
         }
         guard !models.isEmpty else {
             print("no models in \(ModelRegistry.modelsDirectory.path)")
-            print("see downloadable models with: aural models list --available")
-            print("then fetch one with:          aural models download base.en")
+            print("see downloadable models with: hark models list --available")
+            print("then fetch one with:          hark models download base.en")
             printCurrentNote(models: models)
             return
         }
@@ -122,35 +122,35 @@ struct ModelsList: ParsableCommand {
         }
         print(OutputFormatting.table(
             header: ["NAME", "ENGINE", "LANGUAGES", "INSTALLED", "CURRENT"], rows: rows))
-        print("\ndownload with: aural models download <name>")
+        print("\ndownload with: hark models download <name>")
         print("(whisper: any ggml name from ggerganov/whisper.cpp also works)")
     }
 
     /// Clarifies the active default when no listed row carries `*`: either a
-    /// whisper model resolved outside ~/.aural/models, or no default configured.
+    /// whisper model resolved outside ~/.hark/models, or no default configured.
     private func printCurrentNote(models: [LocalModel]) {
         guard !models.contains(where: { $0.current }) else { return }
         if let current = ModelRegistry.currentModelPath() {
             print("\ncurrent model: \(current)")
             print(
                 "(outside \(ModelRegistry.modelsDirectory.path); "
-                    + "set via $AURAL_WHISPER_MODEL or aural config)")
+                    + "set via $HARK_WHISPER_MODEL or hark config)")
             return
         }
         print("\nno default model set — pass --model, or configure one:")
-        print("  aural config set engine <whisper|apple|whisperkit|parakeet>")
-        print("  aural config set model <name>")
+        print("  hark config set engine <whisper|apple|whisperkit|parakeet>")
+        print("  hark config set model <name>")
     }
 }
 
 struct ModelsDownload: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "download",
-        abstract: "Download a whisper ggml model into ~/.aural/models.")
+        abstract: "Download a whisper ggml model into ~/.hark/models.")
 
     @Argument(help: ArgumentHelp(
         "Model name. whisper: a ggml short name (base.en). CoreML: engine-tagged "
-            + "(whisperkit:tiny, parakeet:v3). See 'aural models list --available'.",
+            + "(whisperkit:tiny, parakeet:v3). See 'hark models list --available'.",
         valueName: "name"))
     var name: String
 
@@ -158,7 +158,7 @@ struct ModelsDownload: ParsableCommand {
     var force = false
 
     @Flag(name: .customLong("default"), help: """
-        Make this the default (~/.aural/config.json). For whisper the first \
+        Make this the default (~/.hark/config.json). For whisper the first \
         download is auto-adopted; for whisperkit/parakeet --default also sets \
         the engine.
         """)
@@ -184,14 +184,14 @@ struct ModelsDownload: ParsableCommand {
                 config.model = spec.modelId
                 if spec.engine != "whisper" { config.engine = spec.engine }
                 try config.save()
-                Log.notice("set '\(spec.name)' as the default (aural config)")
+                Log.notice("set '\(spec.name)' as the default (hark config)")
             }
         }
     }
 }
 
 /// Downloads transcription models. The whisper ggml path is the only direct
-/// network code in Aural; whisperkit/parakeet downloads are delegated to their
+/// network code in Hark; whisperkit/parakeet downloads are delegated to their
 /// SDKs. Always explicitly invoked.
 enum ModelDownloader {
     /// Whether a freshly downloaded whisper model should become the default:
@@ -239,7 +239,7 @@ enum ModelDownloader {
         do {
             try FileManager.default.moveItem(at: staged, to: destination)
         } catch {
-            throw AuralError.ioError("could not save model to \(destination.path): \(error)")
+            throw HarkError.ioError("could not save model to \(destination.path): \(error)")
         }
         let size = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         Log.notice("saved \(destination.path) (\(ModelRegistry.formatBytes(size)))")
@@ -253,28 +253,28 @@ enum ModelDownloader {
         let task = session.downloadTask(with: url) { tempURL, response, error in
             defer { semaphore.signal() }
             if let error {
-                box.set(.failure(AuralError.ioError("download failed: \(error.localizedDescription)")))
+                box.set(.failure(HarkError.ioError("download failed: \(error.localizedDescription)")))
                 return
             }
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                box.set(.failure(AuralError.ioError(
+                box.set(.failure(HarkError.ioError(
                     "download failed: HTTP \(http.statusCode) — is '\(modelName)' a valid "
                         + "model name? (see https://huggingface.co/ggerganov/whisper.cpp)")))
                 return
             }
             guard let tempURL else {
-                box.set(.failure(AuralError.ioError("download produced no file")))
+                box.set(.failure(HarkError.ioError("download produced no file")))
                 return
             }
             // URLSession deletes tempURL once this handler returns; move it to a
             // path we own before signaling.
             let owned = FileManager.default.temporaryDirectory
-                .appendingPathComponent("aural-dl-\(UUID().uuidString).bin")
+                .appendingPathComponent("hark-dl-\(UUID().uuidString).bin")
             do {
                 try FileManager.default.moveItem(at: tempURL, to: owned)
                 box.set(.success(owned))
             } catch {
-                box.set(.failure(AuralError.ioError("could not stage download: \(error)")))
+                box.set(.failure(HarkError.ioError("could not stage download: \(error)")))
             }
         }
         task.resume()
@@ -286,7 +286,7 @@ enum ModelDownloader {
 /// Thread-safe holder for the async download result.
 private final class DownloadBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var value: Result<URL, Error> = .failure(AuralError.ioError("download did not run"))
+    private var value: Result<URL, Error> = .failure(HarkError.ioError("download did not run"))
 
     func set(_ result: Result<URL, Error>) {
         lock.lock(); defer { lock.unlock() }

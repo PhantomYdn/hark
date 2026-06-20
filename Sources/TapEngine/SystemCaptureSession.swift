@@ -29,10 +29,10 @@ public final class SystemCaptureSession: MultiTrackCaptureSession, @unchecked Se
     /// When set before `start` (and a mic is mixed in), each source is also
     /// delivered separately for attribution (PRD §6.7a).
     public var onSourceAudio: (@Sendable (CaptureSource, Data) -> Void)?
-    private let ioQueue = DispatchQueue(label: "aural.tap.io")
+    private let ioQueue = DispatchQueue(label: "hark.tap.io")
     private var started = false
     private var processListListener: AudioObjectPropertyListenerBlock?
-    private let listenerQueue = DispatchQueue(label: "aural.tap.lifecycle")
+    private let listenerQueue = DispatchQueue(label: "hark.tap.lifecycle")
     private let sourceLostLock = NSLock()
     private var sourceLostFired = false
 
@@ -68,7 +68,7 @@ public final class SystemCaptureSession: MultiTrackCaptureSession, @unchecked Se
         // 2. Build the private aggregate device hosting the tap (and the
         // mic as a drift-compensated sub-device when mixing).
         var composition: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "aural-capture",
+            kAudioAggregateDeviceNameKey: "hark-capture",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceTapAutoStartKey: true,
@@ -155,7 +155,7 @@ public final class SystemCaptureSession: MultiTrackCaptureSession, @unchecked Se
         }
 
         // 4. IO callback: wrap tap bytes, convert, deliver.
-        let debug = ProcessInfo.processInfo.environment["AURAL_DEBUG"] != nil
+        let debug = ProcessInfo.processInfo.environment["HARK_DEBUG"] != nil
         nonisolated(unsafe) var callbackCount = 0
         status = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue) {
             [weak self] _, inInputData, _, _, _ in
@@ -166,7 +166,7 @@ public final class SystemCaptureSession: MultiTrackCaptureSession, @unchecked Se
             if debug {
                 callbackCount += 1
                 if callbackCount <= 3 {
-                    var info = "AURAL_DEBUG cb#\(callbackCount): buffers=\(ablPointer.count)"
+                    var info = "HARK_DEBUG cb#\(callbackCount): buffers=\(ablPointer.count)"
                     for (i, b) in ablPointer.enumerated() {
                         var nonZero = false
                         if let p = b.mData?.assumingMemoryBound(to: Float32.self) {

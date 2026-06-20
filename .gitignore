@@ -3,7 +3,7 @@
 .swiftpm/
 
 # Local test binary copied to the repo root (e.g. for manual runs)
-/aural
+/hark
 
 # Xcode
 *.xcodeproj/

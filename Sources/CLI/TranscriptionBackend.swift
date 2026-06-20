@@ -174,13 +174,13 @@ enum TranscriptionEngine {
         case "parakeet":
             return try ParakeetBackend.make(model: rawModel(modelFlag), language: language)
         default:
-            throw AuralError.software("engine '\(engineName)' has no batch backend.")
+            throw HarkError.software("engine '\(engineName)' has no batch backend.")
         }
     }
 
     /// Live backend. whisper: prefers the model-resident `whisper-server`
     /// (loads the model once) when available and not disabled via
-    /// `AURAL_WHISPER_SERVER=0`, falling back to per-segment `whisper-cli` (so a
+    /// `HARK_WHISPER_SERVER=0`, falling back to per-segment `whisper-cli` (so a
     /// server start failure never blocks transcription). apple: a resident
     /// on-device recognizer reused across segments.
     static func makeLive(
@@ -191,7 +191,7 @@ enum TranscriptionEngine {
             let engine = try TranscribeEngine.resolveWhisper(
                 engineName: engineName, modelFlag: modelFlag)
             let environment = ProcessInfo.processInfo.environment
-            let disabled = environment["AURAL_WHISPER_SERVER"] == "0"
+            let disabled = environment["HARK_WHISPER_SERVER"] == "0"
             if !disabled, let serverBinary = WhisperEngine.discoverServer(environment: environment) {
                 do {
                     let server = try WhisperServerEngine.start(
@@ -211,15 +211,15 @@ enum TranscriptionEngine {
         case "parakeet":
             return try ParakeetBackend.make(model: rawModel(modelFlag), language: language)
         default:
-            throw AuralError.software("engine '\(engineName)' has no live backend.")
+            throw HarkError.software("engine '\(engineName)' has no live backend.")
         }
     }
 
     /// Resolves a non-whisper model name (no ggml file lookup): flag, then
-    /// `$AURAL_WHISPER_MODEL`, then the config default; nil lets the engine pick.
+    /// `$HARK_WHISPER_MODEL`, then the config default; nil lets the engine pick.
     static func rawModel(_ flag: String?) -> String? {
         if let flag, !flag.isEmpty { return flag }
-        let env = ProcessInfo.processInfo.environment["AURAL_WHISPER_MODEL"]
+        let env = ProcessInfo.processInfo.environment["HARK_WHISPER_MODEL"]
         if let env, !env.isEmpty { return env }
         return Configuration.load().model
     }
@@ -227,10 +227,10 @@ enum TranscriptionEngine {
     /// Validates the engine is recognized and implemented, returning its name.
     private static func requireImplemented(_ name: String) throws -> String {
         guard let spec = EngineSpec.named(name) else {
-            throw AuralError.usage("unknown engine '\(name)' (known: \(EngineSpec.knownNames)).")
+            throw HarkError.usage("unknown engine '\(name)' (known: \(EngineSpec.knownNames)).")
         }
         guard spec.isImplemented else {
-            throw AuralError.unavailable(
+            throw HarkError.unavailable(
                 (spec.plannedNote ?? "engine '\(name)' is not available") + "; use --engine whisper.")
         }
         return name

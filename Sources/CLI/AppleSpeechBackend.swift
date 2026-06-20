@@ -5,7 +5,7 @@ import Speech
 /// `apple`). Zero external dependencies and fully local (no network): it
 /// recognizes in a single locale (no auto-detect) and cannot translate. It
 /// produces plain text — the batch path rejects srt/json, while live output
-/// still gets timestamps from aural's own segmenter.
+/// still gets timestamps from hark's own segmenter.
 final class AppleSpeechBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: false, translate: false, usesModelFile: false)
 
@@ -27,12 +27,12 @@ final class AppleSpeechBackend: TranscriptionBackend {
         try authorize()
         let locale = matchLocale(language, in: Array(SFSpeechRecognizer.supportedLocales()))
         guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-            throw AuralError.unavailable(
+            throw HarkError.unavailable(
                 "the apple engine does not support locale '\(locale.identifier)'. "
                     + "Try a different --language, or --engine whisper.")
         }
         guard recognizer.supportsOnDeviceRecognition else {
-            throw AuralError.unavailable(
+            throw HarkError.unavailable(
                 "on-device speech recognition is unavailable for '\(locale.identifier)'. "
                     + "Add the language under System Settings → Keyboard → Dictation, "
                     + "or use --engine whisper.")
@@ -59,7 +59,7 @@ final class AppleSpeechBackend: TranscriptionBackend {
         let box = LockBox<Result<String, Error>>()
         let task = recognizer.recognitionTask(with: request) { result, error in
             if let error {
-                box.set(.failure(AuralError.software(
+                box.set(.failure(HarkError.software(
                     "apple recognition failed: \(error.localizedDescription)")))
                 return
             }
@@ -72,7 +72,7 @@ final class AppleSpeechBackend: TranscriptionBackend {
         // off-main in practice; the pump handles either case.
         guard RunLoopBridge.waitPumping(timeout: 120, until: { box.get() != nil }) else {
             task.cancel()
-            throw AuralError.software("apple recognition timed out.")
+            throw HarkError.software("apple recognition timed out.")
         }
         return try box.get()!.get()
     }
@@ -83,13 +83,13 @@ final class AppleSpeechBackend: TranscriptionBackend {
     /// (translation, or a non-text format), else nil. Pure, for testing.
     static func unsupportedRequest(
         translate: Bool, format: TranscriptOutputFormat
-    ) -> AuralError? {
+    ) -> HarkError? {
         if translate {
-            return AuralError.usage(
+            return HarkError.usage(
                 "the apple engine cannot translate to English; use --engine whisper.")
         }
         if format != .txt {
-            return AuralError.usage(
+            return HarkError.usage(
                 "the apple engine writes plain text; transcribe to .txt "
                     + "(--transcript-format txt), or use --engine whisper for \(format.rawValue).")
         }
@@ -105,22 +105,22 @@ final class AppleSpeechBackend: TranscriptionBackend {
         """
 
     /// Ensures Speech authorization, prompting once if undetermined. Throws
-    /// `AuralError.noPermission` when denied/restricted.
+    /// `HarkError.noPermission` when denied/restricted.
     private static func authorize() throws {
         switch SFSpeechRecognizer.authorizationStatus() {
         case .authorized:
             return
         case .denied, .restricted:
-            throw AuralError.noPermission(deniedMessage)
+            throw HarkError.noPermission(deniedMessage)
         case .notDetermined:
             let box = LockBox<SFSpeechRecognizerAuthorizationStatus>()
             SFSpeechRecognizer.requestAuthorization { box.set($0) }
             _ = RunLoopBridge.waitPumping(timeout: 120, until: { box.get() != nil })
             guard box.get() == .authorized else {
-                throw AuralError.noPermission(deniedMessage)
+                throw HarkError.noPermission(deniedMessage)
             }
         @unknown default:
-            throw AuralError.noPermission(deniedMessage)
+            throw HarkError.noPermission(deniedMessage)
         }
     }
 

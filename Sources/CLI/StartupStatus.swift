@@ -24,7 +24,7 @@ enum StartupStatus {
         duration: Double?,
         split: String?
     ) -> String {
-        var lines = ["aural — listening"]
+        var lines = ["hark — listening"]
         func row(_ key: String, _ value: String) {
             let padded = key.padding(toLength: 11, withPad: " ", startingAt: 0)
             lines.append("  \(padded) \(value)")

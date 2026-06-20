@@ -70,11 +70,11 @@ final class FluidVadClassifier: VoiceActivityStream, @unchecked Sendable {
     }
 
     /// Pre-downloads the Silero VAD model (no streaming run), for
-    /// `aural models download fluidaudio:vad` — lets privacy-conscious users
+    /// `hark models download fluidaudio:vad` — lets privacy-conscious users
     /// avoid the first-live-run fetch.
     static func downloadModel() throws {
         guard Platform.isAppleSilicon else {
-            throw AuralError.unavailable("the VAD model runs on Apple Silicon (CoreML/ANE).")
+            throw HarkError.unavailable("the VAD model runs on Apple Silicon (CoreML/ANE).")
         }
         Log.notice("downloading VAD model …")
         _ = try RunLoopBridge.runBlocking(timeout: 1800) {
@@ -85,7 +85,7 @@ final class FluidVadClassifier: VoiceActivityStream, @unchecked Sendable {
 
 /// Builds the live `SpeechSegmenter`: VAD (Silero, FluidAudio) when usable,
 /// otherwise the amplitude-threshold `StreamSegmenter` (current behavior).
-/// VAD is used unless `AURAL_VAD=0`, on Apple Silicon, and only if its model
+/// VAD is used unless `HARK_VAD=0`, on Apple Silicon, and only if its model
 /// loads; any failure falls back so transcription is never blocked (PRD §6.7).
 enum SpeechSegmenterFactory {
     static func make(

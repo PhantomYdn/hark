@@ -40,7 +40,7 @@ public final class ScreenCaptureSession: NSObject, MultiTrackCaptureSession, SCS
                     coreaudio for headless capture.
                     """
             case .appNotFound(let spec):
-                return "no capturable application matches '\(spec)' (see 'aural apps')"
+                return "no capturable application matches '\(spec)' (see 'hark apps')"
             case .startFailed(let why):
                 return "failed to start ScreenCaptureKit capture: \(why)"
             }
@@ -54,7 +54,7 @@ public final class ScreenCaptureSession: NSObject, MultiTrackCaptureSession, SCS
     private let mixMic: Bool
     private let outputFormat: PCMFormat
 
-    private let ioQueue = DispatchQueue(label: "aural.sckit.io")
+    private let ioQueue = DispatchQueue(label: "hark.sckit.io")
     private var stream: SCStream?
     private var systemConverter: PCMStreamConverter?
     private var micConverter: PCMStreamConverter?
@@ -167,9 +167,9 @@ public final class ScreenCaptureSession: NSObject, MultiTrackCaptureSession, SCS
     }
 
     public func stream(_ stream: SCStream, didStopWithError error: Error) {
-        if ProcessInfo.processInfo.environment["AURAL_DEBUG"] != nil {
+        if ProcessInfo.processInfo.environment["HARK_DEBUG"] != nil {
             FileHandle.standardError.write(
-                Data("aural: ScreenCaptureKit stream stopped: \(error.localizedDescription)\n".utf8))
+                Data("hark: ScreenCaptureKit stream stopped: \(error.localizedDescription)\n".utf8))
         }
     }
 
@@ -288,7 +288,7 @@ public final class ScreenCaptureSession: NSObject, MultiTrackCaptureSession, SCS
 /// Thread-safe one-shot result holder for the async→sync bridges.
 private final class ResultBox<T>: @unchecked Sendable {
     private let lock = NSLock()
-    private var value: Result<T, Error> = .failure(NSError(domain: "aural", code: -1))
+    private var value: Result<T, Error> = .failure(NSError(domain: "hark", code: -1))
     func set(_ result: Result<T, Error>) { lock.lock(); value = result; lock.unlock() }
     func get() throws -> T { lock.lock(); defer { lock.unlock() }; return try value.get() }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Output container/codec formats Aural knows about.
+/// Output container/codec formats Hark knows about.
 public enum AudioFileFormat: String, CaseIterable, Sendable {
     case wav
     case m4a

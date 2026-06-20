@@ -20,7 +20,7 @@ final class LockBox<T>: @unchecked Sendable {
 }
 
 /// Bridges callback- and `async`-based engine SDKs (Speech, WhisperKit,
-/// FluidAudio) into Aural's synchronous command flow without deadlocking the
+/// FluidAudio) into Hark's synchronous command flow without deadlocking the
 /// main thread: it spins the current run loop while waiting, so work delivered
 /// on the main queue (or main actor) still runs.
 enum RunLoopBridge {
@@ -46,7 +46,7 @@ enum RunLoopBridge {
             do { box.set(.success(try await operation())) } catch { box.set(.failure(error)) }
         }
         guard waitPumping(timeout: timeout, until: { box.get() != nil }) else {
-            throw AuralError.software("engine operation timed out after \(Int(timeout))s.")
+            throw HarkError.software("engine operation timed out after \(Int(timeout))s.")
         }
         return try box.get()!.get()
     }
@@ -142,7 +142,7 @@ enum Platform {
     /// Throws an actionable error when running on Intel.
     static func requireAppleSilicon(engine: String) throws {
         guard isAppleSilicon else {
-            throw AuralError.unavailable(
+            throw HarkError.unavailable(
                 "the '\(engine)' engine is Apple-Silicon-only; use --engine whisper or apple "
                     + "on an Intel Mac.")
         }

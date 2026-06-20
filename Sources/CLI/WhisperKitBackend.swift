@@ -5,7 +5,7 @@ import WhisperKit
 /// `whisperkit`). Apple-Silicon-first; multilingual with auto-detect and
 /// translation. The model is loaded once (resident) and reused across batch and
 /// live segments. Models are CoreML bundles downloaded from Hugging Face on
-/// first use into `~/.aural/models/whisperkit`.
+/// first use into `~/.hark/models/whisperkit`.
 final class WhisperKitBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: true, translate: true, usesModelFile: true)
 
@@ -20,12 +20,12 @@ final class WhisperKitBackend: TranscriptionBackend {
     var label: String { "whisperkit (CoreML, \(modelLabel))" }
 
     /// Where WhisperKit downloads its CoreML bundles (kept alongside ggml models
-    /// so `aural models list` can show them).
+    /// so `hark models list` can show them).
     static var downloadBase: URL {
         ModelRegistry.modelsDirectory.appendingPathComponent("whisperkit", isDirectory: true)
     }
 
-    /// Variants offered by `aural models list --available` / `download`. Any
+    /// Variants offered by `hark models list --available` / `download`. Any
     /// valid WhisperKit variant also works with `download whisperkit:<variant>`.
     static let downloadableVariants = [
         "tiny", "base", "small",

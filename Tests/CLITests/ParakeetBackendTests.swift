@@ -66,16 +66,16 @@ struct ParakeetEngineSpecTests {
 }
 
 /// On-device Parakeet transcription. Heavy (downloads CoreML models), so it only
-/// runs when AURAL_TEST_PARAKEET=1 and on Apple Silicon.
+/// runs when HARK_TEST_PARAKEET=1 and on Apple Silicon.
 @Suite("Parakeet transcription (integration)")
 struct ParakeetIntegrationTests {
     @Test func transcribesSpeech() throws {
         guard Platform.isAppleSilicon,
-            ProcessInfo.processInfo.environment["AURAL_TEST_PARAKEET"] == "1"
+            ProcessInfo.processInfo.environment["HARK_TEST_PARAKEET"] == "1"
         else { return }
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-pk-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-pk-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 

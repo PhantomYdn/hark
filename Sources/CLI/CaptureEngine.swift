@@ -45,7 +45,7 @@ struct CaptureEngine {
                 do {
                     try MicCaptureSession.ensureMicrophonePermission()
                 } catch let error as TapEngineError {
-                    throw AuralError.noPermission(error.description)
+                    throw HarkError.noPermission(error.description)
                 }
                 micUID = micDevice.uid
                 micSuffix = " + mic (\(micDevice.name))"
@@ -54,7 +54,7 @@ struct CaptureEngine {
             let backend = resolveCaptureBackend()
             if backend == .screenCaptureKit {
                 guard #available(macOS 15.0, *) else {
-                    throw AuralError.unavailable(
+                    throw HarkError.unavailable(
                         "the ScreenCaptureKit backend needs macOS 15+; use --capture-backend coreaudio.")
                 }
                 let label = screenCaptureLabel() + micSuffix
@@ -67,7 +67,7 @@ struct CaptureEngine {
 
             // Core Audio process tap (headless-capable).
             guard let (scope, label) = try makeTapScope() else {
-                throw AuralError.software("no capture scope")
+                throw HarkError.software("no capture scope")
             }
             let sourceLabel = label + micSuffix
             Log.verbose(
@@ -86,7 +86,7 @@ struct CaptureEngine {
         do {
             try MicCaptureSession.ensureMicrophonePermission()
         } catch let error as TapEngineError {
-            throw AuralError.noPermission(error.description)
+            throw HarkError.noPermission(error.description)
         }
         return (MicCaptureSession(deviceID: deviceID, outputFormat: format), format, inputDevice.name)
     }
@@ -120,7 +120,7 @@ struct CaptureEngine {
                 }
             }
         }
-        let ioQueue = DispatchQueue(label: "aural.capture.io")
+        let ioQueue = DispatchQueue(label: "hark.capture.io")
         let failure = FailureBox()
         let done = DispatchSemaphore(value: 0)
 
@@ -189,7 +189,7 @@ struct CaptureEngine {
             do {
                 try sink.finalize()
             } catch {
-                throw AuralError.ioError("failed to finalize output: \(error)")
+                throw HarkError.ioError("failed to finalize output: \(error)")
             }
         }
 
@@ -197,7 +197,7 @@ struct CaptureEngine {
             if isBrokenPipe(error) {
                 Log.verbose("downstream pipe closed, stopping")
             } else {
-                throw AuralError.ioError("write failed: \(error)")
+                throw HarkError.ioError("write failed: \(error)")
             }
         }
         let elapsed = Date().timeIntervalSince(startedAt)
@@ -231,7 +231,7 @@ struct CaptureEngine {
                     destination: .file(url), format: format, metadata: metadata)
                 return WAVSink(writer: writer, label: url.path)
             } catch {
-                throw AuralError.ioError("cannot open output file: \(error)")
+                throw HarkError.ioError("cannot open output file: \(error)")
             }
         case .m4a, .flac:
             do {
@@ -239,21 +239,21 @@ struct CaptureEngine {
                     url: url, fileFormat: fileFormat, pcmFormat: format)
                 return EncodedSink(writer: writer, label: "\(url.path) (\(fileFormat.rawValue))")
             } catch {
-                throw AuralError.ioError("cannot open output file: \(error)")
+                throw HarkError.ioError("cannot open output file: \(error)")
             }
         case .mp3:
             do {
                 let writer = try MP3FileWriter(url: url, pcmFormat: format)
                 return MP3Sink(writer: writer, label: "\(url.path) (mp3)")
             } catch {
-                throw AuralError.ioError("cannot open output file: \(error)")
+                throw HarkError.ioError("cannot open output file: \(error)")
             }
         case .opus:
             do {
                 let writer = try OpusFileWriter(url: url, pcmFormat: format)
                 return OpusSink(writer: writer, label: "\(url.path) (opus)")
             } catch {
-                throw AuralError.ioError("cannot open output file: \(error)")
+                throw HarkError.ioError("cannot open output file: \(error)")
             }
         }
     }
@@ -313,16 +313,16 @@ struct CaptureEngine {
             }
             return resolved
         } catch let error as AppResolutionError {
-            throw AuralError.noInput(error.description)
+            throw HarkError.noInput(error.description)
         } catch {
-            throw AuralError.software("failed to resolve applications: \(error)")
+            throw HarkError.software("failed to resolve applications: \(error)")
         }
     }
 
     /// Maps TapEngine failures to user-facing errors with exit codes. Tap
     /// creation failures most commonly mean a System Audio Recording TCC
     /// denial, so they carry the permission guidance (exit 77).
-    private func mapped(_ error: TapEngineError) -> AuralError {
+    private func mapped(_ error: TapEngineError) -> HarkError {
         switch error {
         case .tapCreationFailed(let status):
             return .noPermission(
@@ -340,27 +340,27 @@ struct CaptureEngine {
             do {
                 devices = try DeviceManager.listDevices(scope: .all)
             } catch {
-                throw AuralError.software("failed to enumerate devices: \(error)")
+                throw HarkError.software("failed to enumerate devices: \(error)")
             }
             guard let device = devices.first(where: { $0.uid == deviceUID }) else {
-                throw AuralError.noInput(
-                    "no device with UID '\(deviceUID)' (see 'aural devices')")
+                throw HarkError.noInput(
+                    "no device with UID '\(deviceUID)' (see 'hark devices')")
             }
             guard device.inputChannels > 0 else {
-                throw AuralError.noInput(
+                throw HarkError.noInput(
                     "device '\(device.name)' has no input channels")
             }
             return device
         }
         do {
             guard let device = try DeviceManager.defaultInputDevice() else {
-                throw AuralError.noInput("no default input device available")
+                throw HarkError.noInput("no default input device available")
             }
             return device
-        } catch let error as AuralError {
+        } catch let error as HarkError {
             throw error
         } catch {
-            throw AuralError.noInput("no default input device available (\(error))")
+            throw HarkError.noInput("no default input device available (\(error))")
         }
     }
 }

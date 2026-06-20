@@ -1,45 +1,45 @@
 #!/usr/bin/env zsh
 #
-# aural-meeting — record a meeting (system + mic) interactively, then summarize.
+# hark-meeting — record a meeting (system + mic) interactively, then summarize.
 #
-# Captures all system audio mixed with your microphone in Aural's interactive
+# Captures all system audio mixed with your microphone in Hark's interactive
 # UI (space = pause/resume, Enter = finish, Ctrl-C = stop), writing both an MP3
 # and a speaker-labeled transcript named after the meeting. When it ends, it
 # runs the transcript through fabric-ai's `summarize_meeting` pattern to produce
 # a Markdown summary.
 #
 # Usage:
-#   aural-meeting "Team Sync"
+#   hark-meeting "Team Sync"
 #
-# Output (in $AURAL_MEETINGS_DIR, default current directory):
+# Output (in $HARK_MEETINGS_DIR, default current directory):
 #   2026-06-20-team-sync.mp3   audio recording
 #   2026-06-20-team-sync.txt   transcript (You / Others + Speaker N)
 #   2026-06-20-team-sync.md    meeting summary
 #
 # Environment:
-#   AURAL_MEETINGS_DIR   where to write artifacts          (default: .)
+#   HARK_MEETINGS_DIR   where to write artifacts          (default: .)
 #   FABRIC_PATTERN       fabric pattern for the summary     (default: summarize_meeting)
 #   FABRIC_MODEL         model passed to fabric-ai (-m)     (default: fabric's default)
-#   AURAL_ENGINE/...     any AURAL_* var Aural already honors (engine, model, language…)
+#   HARK_ENGINE/...     any HARK_* var Hark already honors (engine, model, language…)
 #
-# Requirements: `aural`, `fabric-ai`, and the macOS "System Audio Recording"
+# Requirements: `hark`, `fabric-ai`, and the macOS "System Audio Recording"
 # permission for your terminal (see docs/permissions.md). Acoustic speaker
 # diarization needs Apple Silicon; on Intel it falls back to You/Others.
 
 set -euo pipefail
 
-die() { print -u2 -- "aural-meeting: $*"; exit 1 }
+die() { print -u2 -- "hark-meeting: $*"; exit 1 }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1" }
 
-[[ $# -ge 1 && -n "${1:-}" ]] || die 'usage: aural-meeting "Meeting name"'
+[[ $# -ge 1 && -n "${1:-}" ]] || die 'usage: hark-meeting "Meeting name"'
 [[ "$1" == "-h" || "$1" == "--help" ]] && { sed -n '2,30p' "$0"; exit 0 }
 
-need aural
+need hark
 need fabric-ai
 
 name="$1"
-dir="${AURAL_MEETINGS_DIR:-.}"
-[[ -d "$dir" ]] || die "AURAL_MEETINGS_DIR does not exist: $dir"
+dir="${HARK_MEETINGS_DIR:-.}"
+[[ -d "$dir" ]] || die "HARK_MEETINGS_DIR does not exist: $dir"
 
 # Slugify: lowercase, runs of non-alphanumerics -> single dash, trim dashes.
 slug=$(print -r -- "${name:l}" | tr -cs 'a-z0-9' '-')
@@ -51,24 +51,24 @@ mp3="$base.mp3"
 txt="$base.txt"
 md="$base.md"
 
-print -u2 -- "aural-meeting: recording → $mp3 (Enter to finish, space to pause)"
+print -u2 -- "hark-meeting: recording → $mp3 (Enter to finish, space to pause)"
 
 # Don't let a signal-based exit (Ctrl-C => 130) abort the script before we
 # summarize; decide based on whether a transcript was actually produced.
 set +e
-aural --interactive --system --mix --speakers -a "$mp3" -t "$txt"
+hark --interactive --system --mix --speakers -a "$mp3" -t "$txt"
 status=$?
 set -e
 
 if [[ ! -s "$txt" ]]; then
-  die "no transcript was produced (aural exited $status); nothing to summarize."
+  die "no transcript was produced (hark exited $status); nothing to summarize."
 fi
 
 pattern="${FABRIC_PATTERN:-summarize_meeting}"
 typeset -a model_args; model_args=()
 [[ -n "${FABRIC_MODEL:-}" ]] && model_args=(-m "$FABRIC_MODEL")
 
-print -u2 -- "aural-meeting: summarizing with fabric-ai ($pattern) → $md"
+print -u2 -- "hark-meeting: summarizing with fabric-ai ($pattern) → $md"
 fabric-ai -p "$pattern" "${model_args[@]}" -o "$md" < "$txt"
 
 print -- "Saved:"

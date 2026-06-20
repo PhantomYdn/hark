@@ -36,7 +36,7 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
 
     // Transcription runs on a serial queue so segments are transcribed and
     // emitted strictly in order.
-    private let worker = DispatchQueue(label: "aural.live.transcribe")
+    private let worker = DispatchQueue(label: "hark.live.transcribe")
     private let failure = FailureBox()
 
     let label: String
@@ -193,11 +193,11 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         _ pcm: Data, format: PCMFormat, start: Double, end: Double
     ) throws -> (text: String, speaker: String?) {
         let raw = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-seg-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-seg-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: raw) }
         // Boost quiet segments toward a target peak so the engine recognizes
         // low-level captures (the `-a` recording is unaffected — this only
-        // touches the temp WAV fed to the engine). Disable with AURAL_GAIN=off.
+        // touches the temp WAV fed to the engine). Disable with HARK_GAIN=off.
         let boosted = useGain ? GainNormalizer.normalize(pcm, format: format) : pcm
         let writer = try WAVFileWriter(destination: .file(raw), format: format)
         try writer.write(boosted)
@@ -346,7 +346,7 @@ final class LiveTranscriptWriter: @unchecked Sendable {
         case .file(let path):
             FileManager.default.createFile(atPath: path, contents: nil)
             guard let handle = FileHandle(forWritingAtPath: path) else {
-                throw AuralError.ioError("cannot open transcript file '\(path)' for writing")
+                throw HarkError.ioError("cannot open transcript file '\(path)' for writing")
             }
             self.handle = handle
             self.closeHandle = true
@@ -375,7 +375,7 @@ final class LiveTranscriptWriter: @unchecked Sendable {
             // so the graceful broken-pipe handlers (rethrowErrors / CaptureEngine)
             // recognize it instead of masking it as a generic write failure.
             if isBrokenPipe(error) { throw error }
-            throw AuralError.ioError("transcript write failed: \(error)")
+            throw HarkError.ioError("transcript write failed: \(error)")
         }
     }
 

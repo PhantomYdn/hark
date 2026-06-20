@@ -14,7 +14,7 @@ struct WhisperDiscoveryTests {
 
     private func tempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-whisper-\(UUID().uuidString)")
+            .appendingPathComponent("hark-whisper-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -56,7 +56,7 @@ struct WhisperDiscoveryTests {
         try makeExecutable(named: "my-whisper", in: dir)
         let env = [
             "PATH": "/nonexistent",
-            "AURAL_WHISPER_BIN": dir.appendingPathComponent("my-whisper").path,
+            "HARK_WHISPER_BIN": dir.appendingPathComponent("my-whisper").path,
         ]
         #expect(WhisperEngine.discover(environment: env)?.lastPathComponent == "my-whisper")
     }
@@ -82,7 +82,7 @@ struct WhisperDiscoveryTests {
         try makeExecutable(named: "my-server", in: dir)
         let env = [
             "PATH": "/nonexistent",
-            "AURAL_WHISPER_SERVER_BIN": dir.appendingPathComponent("my-server").path,
+            "HARK_WHISPER_SERVER_BIN": dir.appendingPathComponent("my-server").path,
         ]
         #expect(
             WhisperEngine.discoverServer(environment: env)?.lastPathComponent == "my-server")
@@ -146,7 +146,7 @@ struct WhisperServerTests {
         else { return }
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-srv-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-srv-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 
@@ -178,21 +178,21 @@ struct WhisperServerTests {
 struct WhisperModelTests {
     @Test func flagWinsOverEnvironment() throws {
         let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-model-\(UUID().uuidString).bin")
+            .appendingPathComponent("hark-model-\(UUID().uuidString).bin")
         try Data([0x01]).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
         let resolved = try WhisperEngine.resolveModel(
-            flag: file.path, environment: ["AURAL_WHISPER_MODEL": "/other.bin"])
+            flag: file.path, environment: ["HARK_WHISPER_MODEL": "/other.bin"])
         #expect(resolved == file.path)
     }
 
     @Test func environmentFallback() throws {
         let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-model-\(UUID().uuidString).bin")
+            .appendingPathComponent("hark-model-\(UUID().uuidString).bin")
         try Data([0x01]).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
         let resolved = try WhisperEngine.resolveModel(
-            flag: nil, environment: ["AURAL_WHISPER_MODEL": file.path])
+            flag: nil, environment: ["HARK_WHISPER_MODEL": file.path])
         #expect(resolved == file.path)
     }
 
@@ -212,7 +212,7 @@ struct WhisperModelTests {
 
     @Test func configModelUsedWhenNoFlagOrEnv() throws {
         let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-cfg-model-\(UUID().uuidString).bin")
+            .appendingPathComponent("hark-cfg-model-\(UUID().uuidString).bin")
         try Data([0x01]).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
         let resolved = try WhisperEngine.resolveModel(
@@ -222,7 +222,7 @@ struct WhisperModelTests {
 
     @Test func precedenceFlagBeatsEnvBeatsConfig() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-prec-\(UUID().uuidString)")
+            .appendingPathComponent("hark-prec-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let flagFile = dir.appendingPathComponent("flag.bin")
@@ -230,7 +230,7 @@ struct WhisperModelTests {
         let cfgFile = dir.appendingPathComponent("cfg.bin")
         for f in [flagFile, envFile, cfgFile] { try Data([0x01]).write(to: f) }
 
-        let env = ["AURAL_WHISPER_MODEL": envFile.path]
+        let env = ["HARK_WHISPER_MODEL": envFile.path]
         let config = Configuration(model: cfgFile.path)
         // Flag wins over everything.
         #expect(
@@ -333,13 +333,13 @@ struct EngineSpecTests {
     }
 
     @Test func resolveRejectsUnknownEngine() {
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try TranscribeEngine.resolveWhisper(engineName: "bogus", modelFlag: nil)
         }
     }
 
     @Test func resolveRejectsUnimplementedEngine() {
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try TranscribeEngine.resolveWhisper(engineName: "cloud", modelFlag: nil)
         }
     }

@@ -26,14 +26,14 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tarball=aural-$VERSION-macos-arm64.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "tarball=hark-$VERSION-macos-arm64.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Build release
         run: swift build -c release
 
       - name: Verify binary
         run: |
-          BIN=.build/release/aural
+          BIN=.build/release/hark
           test -x "$BIN"
           "$BIN" --version
           "$BIN" --version | grep -qx "${{ steps.version.outputs.version }}"
@@ -43,12 +43,12 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TARBALL="${{ steps.version.outputs.tarball }}"
-          STAGE="dist/aural-$VERSION"
+          STAGE="dist/hark-$VERSION"
           mkdir -p "$STAGE"
-          cp .build/release/aural "$STAGE/"
-          cp man/aural.1 "$STAGE/"
+          cp .build/release/hark "$STAGE/"
+          cp man/hark.1 "$STAGE/"
           cp LICENSE NOTICES README.md CHANGELOG.md "$STAGE/"
-          tar -czf "$TARBALL" -C dist "aural-$VERSION"
+          tar -czf "$TARBALL" -C dist "hark-$VERSION"
           SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
           echo "Packaged $TARBALL ($SHA)"
@@ -63,19 +63,22 @@ jobs:
             echo "Apple Silicon (arm64) build. Install with Homebrew:"
             echo
             echo '```sh'
-            echo "brew tap PhantomYdn/aural https://github.com/PhantomYdn/Aural"
-            echo "brew install phantomydn/aural/aural"
+            echo "brew tap PhantomYdn/hark https://github.com/PhantomYdn/hark"
+            echo "brew install phantomydn/hark/hark"
             echo '```'
             echo
             echo "This beta binary is not yet notarized. A direct download must be"
-            echo "de-quarantined (\`xattr -dr com.apple.quarantine ./aural\`); Homebrew"
+            echo "de-quarantined (\`xattr -dr com.apple.quarantine ./hark\`); Homebrew"
             echo "installs do not need this. Requires macOS 14.4+ and, for the default"
             echo "\`whisper\` engine, \`brew install whisper-cpp\`."
             echo
-            echo "See [CHANGELOG.md](https://github.com/PhantomYdn/Aural/blob/main/CHANGELOG.md) for details."
+            echo "See [CHANGELOG.md](https://github.com/PhantomYdn/hark/blob/main/CHANGELOG.md) for details."
           } > release-notes.md
+          # Make re-tagging idempotent: drop any existing release for this tag
+          # (e.g. a renamed/re-cut release) but keep the triggering tag itself.
+          gh release delete "$GITHUB_REF_NAME" --yes 2>/dev/null || true
           gh release create "$GITHUB_REF_NAME" "$TARBALL" \
-            --title "Aural $VERSION" \
+            --title "Hark $VERSION" \
             --notes-file release-notes.md
 
       - name: Bump Homebrew formula on main
@@ -84,18 +87,18 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           SHA="${{ steps.package.outputs.sha256 }}"
-          URL="https://github.com/PhantomYdn/Aural/releases/download/v$VERSION/aural-$VERSION-macos-arm64.tar.gz"
+          URL="https://github.com/PhantomYdn/hark/releases/download/v$VERSION/hark-$VERSION-macos-arm64.tar.gz"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout main
-          sed -i '' -E "s#^  url \".*\"#  url \"$URL\"#" Formula/aural.rb
-          sed -i '' -E "s#^  version \".*\"#  version \"$VERSION\"#" Formula/aural.rb
-          sed -i '' -E "s#^  sha256 \".*\"#  sha256 \"$SHA\"#" Formula/aural.rb
-          if git diff --quiet Formula/aural.rb; then
+          sed -i '' -E "s#^  url \".*\"#  url \"$URL\"#" Formula/hark.rb
+          sed -i '' -E "s#^  version \".*\"#  version \"$VERSION\"#" Formula/hark.rb
+          sed -i '' -E "s#^  sha256 \".*\"#  sha256 \"$SHA\"#" Formula/hark.rb
+          if git diff --quiet Formula/hark.rb; then
             echo "Formula already up to date."
           else
-            git add Formula/aural.rb
-            git commit -m "release: aural $VERSION formula [skip ci]"
+            git add Formula/hark.rb
+            git commit -m "release: hark $VERSION formula [skip ci]"
             git push origin main
           fi

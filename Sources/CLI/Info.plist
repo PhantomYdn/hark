@@ -3,16 +3,16 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>dev.aural.cli</string>
+    <string>dev.hark.cli</string>
     <key>CFBundleName</key>
-    <string>aural</string>
+    <string>hark</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Aural records audio from your microphone when you run 'aural'.</string>
+    <string>Hark records audio from your microphone when you run 'hark'.</string>
     <key>NSAudioCaptureUsageDescription</key>
-    <string>Aural captures system and per-application audio when you run 'aural --system' or '--app'.</string>
+    <string>Hark captures system and per-application audio when you run 'hark --system' or '--app'.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Aural transcribes audio on-device when you run 'aural --engine apple'.</string>
+    <string>Hark transcribes audio on-device when you run 'hark --engine apple'.</string>
 </dict>
 </plist>

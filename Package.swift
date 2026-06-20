@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Aural",
+    name: "Hark",
     platforms: [
         .macOS("14.4")  // Core Audio process-tap API (PRD §7 Compatibility)
     ],
     products: [
-        .executable(name: "aural", targets: ["CLI"])
+        .executable(name: "hark", targets: ["CLI"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -39,7 +39,7 @@ let package = Package(
             ]),
         // Audio file writers/encoders: WAV/M4A/FLAC native; MP3 via CLame; Opus next.
         .target(name: "Encoders", dependencies: ["CLame"]),
-        // The `aural` command-line interface.
+        // The `hark` command-line interface.
         .executableTarget(
             name: "CLI",
             dependencies: [
@@ -55,7 +55,7 @@ let package = Package(
             exclude: ["Info.plist"],
             linkerSettings: [
                 // Embed Info.plist (bundle ID + TCC usage descriptions) so
-                // macOS can attribute audio-capture permissions to aural.
+                // macOS can attribute audio-capture permissions to hark.
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
                     "-Xlinker", "__TEXT",

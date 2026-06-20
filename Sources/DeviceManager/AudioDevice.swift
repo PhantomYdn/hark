@@ -3,7 +3,7 @@ import Foundation
 
 /// A physical or virtual audio device known to the CoreAudio HAL.
 public struct AudioDevice: Codable, Equatable, Sendable {
-    /// Stable unique identifier (use this for `aural -d`).
+    /// Stable unique identifier (use this for `hark -d`).
     public let uid: String
     /// Human-readable device name.
     public let name: String

@@ -18,14 +18,14 @@ import Foundation
 /// transcription worker; the serial queue keeps those ordered.
 final class EENDStreamingDiarizer: LiveSpeakerResolver, @unchecked Sendable {
     private let diarizer: LSEENDDiarizer
-    private let queue = DispatchQueue(label: "aural.live.eend")
+    private let queue = DispatchQueue(label: "hark.live.eend")
     private var numbering = SpeakerNumbering()
     private var finalized = false
 
     private init(diarizer: LSEENDDiarizer) { self.diarizer = diarizer }
 
     /// FluidAudio LS-EEND variant + step. `callhome` is trained on 2-party
-    /// single-channel telephone audio — the closest match to Aural's use case
+    /// single-channel telephone audio — the closest match to Hark's use case
     /// (a call/meeting mixed into one system stream). On real recordings it
     /// separated both a 2-party conversation and a multi-party meeting correctly,
     /// where `ami` (multi-headset meetings) collapsed the 2-party case to one
@@ -36,7 +36,7 @@ final class EENDStreamingDiarizer: LiveSpeakerResolver, @unchecked Sendable {
 
     static func make() throws -> EENDStreamingDiarizer {
         guard Platform.isAppleSilicon else {
-            throw AuralError.unavailable("""
+            throw HarkError.unavailable("""
                 streaming diarization requires Apple Silicon (CoreML/ANE). Deterministic \
                 source attribution (--system/--app --mix --speakers --speaker-mode source) \
                 works on Intel.
@@ -56,10 +56,10 @@ final class EENDStreamingDiarizer: LiveSpeakerResolver, @unchecked Sendable {
     }
 
     /// Pre-downloads the LS-EEND CoreML model (no inference run), for
-    /// `aural models download fluidaudio:streaming-diarizer`.
+    /// `hark models download fluidaudio:streaming-diarizer`.
     static func download() throws {
         guard Platform.isAppleSilicon else {
-            throw AuralError.unavailable("streaming diarization requires Apple Silicon (CoreML/ANE).")
+            throw HarkError.unavailable("streaming diarization requires Apple Silicon (CoreML/ANE).")
         }
         Log.notice("downloading streaming diarization model …")
         _ = try RunLoopBridge.runBlocking(timeout: 3600) {

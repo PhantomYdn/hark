@@ -2,16 +2,16 @@
 # End-to-end validation of per-app capture isolation (US02 / US07).
 #
 # Plays a 440 Hz tone via afplay (the "target app") and verifies:
-#   1. `aural --app <afplay-pid> -a out.wav` captures the tone (RMS high)
-#   2. `aural --exclude-app <afplay-pid> -a out.wav` does not (RMS low)
+#   1. `hark --app <afplay-pid> -a out.wav` captures the tone (RMS high)
+#   2. `hark --exclude-app <afplay-pid> -a out.wav` does not (RMS low)
 #
 # Requirements: System Audio Recording permission granted to the terminal;
 # best run on a quiet system (other apps' audio raises the exclusion RMS).
 # Audible: plays a quiet tone through the speakers twice.
 set -euo pipefail
 
-AURAL="${AURAL:-.build/debug/aural}"
-WORK="$(mktemp -d /tmp/aural-e2e.XXXXXX)"
+HARK="${HARK:-.build/debug/hark}"
+WORK="$(mktemp -d /tmp/hark-e2e.XXXXXX)"
 trap 'rm -rf "$WORK"; kill $(jobs -p) 2>/dev/null || true' EXIT
 
 echo "== generating tone"
@@ -46,7 +46,7 @@ echo "== case 1: --app captures the target app"
 afplay -v 0.3 "$WORK/tone.wav" &
 AFPLAY_PID=$!
 sleep 0.8
-"$AURAL" --app "$AFPLAY_PID" --duration 2 -a "$WORK/included.wav"
+"$HARK" --app "$AFPLAY_PID" --duration 2 -a "$WORK/included.wav"
 kill $AFPLAY_PID 2>/dev/null || true
 wait $AFPLAY_PID 2>/dev/null || true
 INCLUDED_AMP=$(tone_amp "$WORK/included.wav")
@@ -56,7 +56,7 @@ echo "== case 2: --exclude-app suppresses the target app"
 afplay -v 0.3 "$WORK/tone.wav" &
 AFPLAY_PID=$!
 sleep 0.8
-"$AURAL" --exclude-app "$AFPLAY_PID" --duration 2 -a "$WORK/excluded.wav"
+"$HARK" --exclude-app "$AFPLAY_PID" --duration 2 -a "$WORK/excluded.wav"
 kill $AFPLAY_PID 2>/dev/null || true
 wait $AFPLAY_PID 2>/dev/null || true
 EXCLUDED_AMP=$(tone_amp "$WORK/excluded.wav")

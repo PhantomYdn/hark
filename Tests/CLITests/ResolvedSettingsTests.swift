@@ -8,7 +8,7 @@ struct ResolvedSettingsTests {
     private func settings(
         _ args: [String] = [], env: [String: String] = [:], config: Configuration = Configuration()
     ) throws -> ResolvedSettings {
-        try ResolvedSettings.resolve(from: try Aural.parse(args), environment: env, config: config)
+        try ResolvedSettings.resolve(from: try Hark.parse(args), environment: env, config: config)
     }
 
     @Test func builtInDefaultsWhenNothingSet() throws {
@@ -68,13 +68,13 @@ struct ResolvedSettingsTests {
         config.vad = true
         config.speakerMode = "auto"
         let env = [
-            "AURAL_ENGINE": "whisperkit", "AURAL_RATE": "48000",
-            "AURAL_VAD": "0", "AURAL_SPEAKER_MODE": "source",
+            "HARK_ENGINE": "whisperkit", "HARK_RATE": "48000",
+            "HARK_VAD": "0", "HARK_SPEAKER_MODE": "source",
         ]
         let s = try settings(env: env, config: config)
         #expect(s.engine == "whisperkit")
         #expect(s.rate == 48000)
-        #expect(s.useVad == false)  // AURAL_VAD=0 back-compat
+        #expect(s.useVad == false)  // HARK_VAD=0 back-compat
         #expect(s.speakerMode == .source)
     }
 
@@ -83,7 +83,7 @@ struct ResolvedSettingsTests {
         config.engine = "whisper"
         config.rate = 44100
         config.vad = true
-        let env = ["AURAL_ENGINE": "apple", "AURAL_RATE": "16000", "AURAL_VAD": "1"]
+        let env = ["HARK_ENGINE": "apple", "HARK_RATE": "16000", "HARK_VAD": "1"]
         let s = try settings(
             ["--engine", "whisperkit", "--rate", "48000", "--no-vad",
              "--silence-threshold=-25", "--speaker-mode", "acoustic"],
@@ -99,31 +99,31 @@ struct ResolvedSettingsTests {
         var config = Configuration()
         config.engine = "whisperkit"
         config.language = "de"
-        let s = try settings(env: ["AURAL_ENGINE": "", "AURAL_LANGUAGE": ""], config: config)
+        let s = try settings(env: ["HARK_ENGINE": "", "HARK_LANGUAGE": ""], config: config)
         #expect(s.engine == "whisperkit")
         #expect(s.language == "de")
     }
 
     @Test func malformedEnvThrows() {
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_TRANSLATE": "maybe"]) }
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_SILENCE_THRESHOLD": "loud"]) }
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_SILENCE_THRESHOLD": "5"]) }
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_RATE": "abc"]) }
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_VAD_THRESHOLD": "2"]) }
-        #expect(throws: AuralError.self) { _ = try settings(env: ["AURAL_CAPTURE": "bogus"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_TRANSLATE": "maybe"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_SILENCE_THRESHOLD": "loud"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_SILENCE_THRESHOLD": "5"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_RATE": "abc"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_VAD_THRESHOLD": "2"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_CAPTURE": "bogus"]) }
     }
 
     @Test func validateRejectsMergedConflicts() throws {
         var unknownEngine = Configuration(); unknownEngine.engine = "bogus"
-        #expect(throws: AuralError.self) { try settings(config: unknownEngine).validate() }
+        #expect(throws: HarkError.self) { try settings(config: unknownEngine).validate() }
 
         var appleTranslate = Configuration()
         appleTranslate.engine = "apple"
         appleTranslate.translate = true
-        #expect(throws: AuralError.self) { try settings(config: appleTranslate).validate() }
+        #expect(throws: HarkError.self) { try settings(config: appleTranslate).validate() }
 
         var badThreshold = Configuration(); badThreshold.silenceThreshold = 0
-        #expect(throws: AuralError.self) { try settings(config: badThreshold).validate() }
+        #expect(throws: HarkError.self) { try settings(config: badThreshold).validate() }
     }
 
     @Test func validateAcceptsValidMerged() throws {
@@ -140,17 +140,17 @@ struct ResolvedSettingsTests {
         #expect(try settings(config: config).directory == "/cfg")
 
         // env outranks config; flag outranks env.
-        #expect(try settings(env: ["AURAL_DIRECTORY": "/env"], config: config).directory == "/env")
+        #expect(try settings(env: ["HARK_DIRECTORY": "/env"], config: config).directory == "/env")
         #expect(
-            try settings(["-C", "/flag"], env: ["AURAL_DIRECTORY": "/env"], config: config)
+            try settings(["-C", "/flag"], env: ["HARK_DIRECTORY": "/env"], config: config)
                 .directory == "/flag")
     }
 
     @Test func applyWorkingDirectoryValidatesExistence() throws {
         // Missing directory is a usage error; nil is a no-op.
         var missing = ResolvedSettings.resolveForTest()
-        missing = missing.with(directory: "/no/such/dir/aural")
-        #expect(throws: AuralError.self) { try missing.applyWorkingDirectory() }
+        missing = missing.with(directory: "/no/such/dir/hark")
+        #expect(throws: HarkError.self) { try missing.applyWorkingDirectory() }
         try ResolvedSettings.resolveForTest().applyWorkingDirectory()  // nil → no-op, no throw
     }
 }
@@ -158,7 +158,7 @@ struct ResolvedSettingsTests {
 extension ResolvedSettings {
     /// Minimal all-defaults instance for unit tests.
     static func resolveForTest() -> ResolvedSettings {
-        try! ResolvedSettings.resolve(from: try! Aural.parse([]), environment: [:], config: Configuration())
+        try! ResolvedSettings.resolve(from: try! Hark.parse([]), environment: [:], config: Configuration())
     }
 
     /// Copy with a different working directory (test helper).

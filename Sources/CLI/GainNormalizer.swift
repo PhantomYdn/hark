@@ -79,10 +79,10 @@ enum GainNormalizer {
         }
     }
 
-    /// Whether normalization is enabled (default on; `AURAL_GAIN=off` disables).
+    /// Whether normalization is enabled (default on; `HARK_GAIN=off` disables).
     static func isEnabled(environment: [String: String] = ProcessInfo.processInfo.environment)
         -> Bool
     {
-        environment["AURAL_GAIN"]?.lowercased() != "off"
+        environment["HARK_GAIN"]?.lowercased() != "off"
     }
 }

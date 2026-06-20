@@ -12,13 +12,13 @@ struct LocalModel: Codable {
 }
 
 /// Resolves whisper ggml models by short name and manages the local model
-/// directory (`~/.aural/models`). Short names map to `ggml-<name>.bin`
+/// directory (`~/.hark/models`). Short names map to `ggml-<name>.bin`
 /// (PRD §6.1: `--model NAME|PATH`).
 enum ModelRegistry {
-    /// `~/.aural/models`, where `aural models download` stores ggml files.
+    /// `~/.hark/models`, where `hark models download` stores ggml files.
     static var modelsDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aural/models", isDirectory: true)
+            .appendingPathComponent(".hark/models", isDirectory: true)
     }
 
     /// Hugging Face repo serving ggml whisper models.
@@ -101,7 +101,7 @@ enum ModelRegistry {
                 + "Use a multilingual model (e.g. --model large-v3-turbo).")
     }
 
-    /// The active default model: the absolute path that `$AURAL_WHISPER_MODEL`,
+    /// The active default model: the absolute path that `$HARK_WHISPER_MODEL`,
     /// then the config `model`, resolves to (a path or a short name), or nil when
     /// neither is set/resolvable. This mirrors `WhisperEngine.resolveModel`'s
     /// default (everything below an explicit `--model` flag).
@@ -110,7 +110,7 @@ enum ModelRegistry {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         config: Configuration = .load()
     ) -> String? {
-        let value = environment["AURAL_WHISPER_MODEL"].flatMap { $0.isEmpty ? nil : $0 }
+        let value = environment["HARK_WHISPER_MODEL"].flatMap { $0.isEmpty ? nil : $0 }
             ?? config.model
         guard let value, !value.isEmpty else { return nil }
         return resolvePath(value, directory: directory)

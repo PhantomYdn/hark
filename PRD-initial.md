@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-## Product: Aural
+## Product: Hark
 **Version:** 1.0 (MVP)
 **Date:** 2026-06-12
 **Author:** TBD
@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-Aural is a native macOS command-line utility, shipped as a single Swift binary, that captures audio from physical input sources (microphones) and from the system itself — all system audio or the output of specific applications — using Core Audio process taps (macOS 14.4+). No third-party virtual audio driver (e.g., BlackHole) is required. Recordings are saved locally and serve as the foundation for downstream audio processing workflows, most notably automatic speech-to-text transcription.
+Hark is a native macOS command-line utility, shipped as a single Swift binary, that captures audio from physical input sources (microphones) and from the system itself — all system audio or the output of specific applications — using Core Audio process taps (macOS 14.4+). No third-party virtual audio driver (e.g., BlackHole) is required. Recordings are saved locally and serve as the foundation for downstream audio processing workflows, most notably automatic speech-to-text transcription.
 
 The tool strictly follows Unix/Linux design patterns, treating audio as a stream that can be manipulated, piped, and extended by other command-line programs. The primary goal is to provide a simple, scriptable, and composable replacement for GUI-based audio recording, enabling users to automate meeting recordings, create transcription pipelines, or build custom audio-processing chains without leaving the terminal.
 
@@ -46,7 +46,7 @@ The tool strictly follows Unix/Linux design patterns, treating audio as a stream
 | 2 | Audio capture from any single source | P0 | Record from a specified input device (built-in microphone, USB headset). Configurable sample rate, bit-depth, and channel count. Falls back to default input device. |
 | 3 | System & per-app audio capture (Core Audio taps) | P0 | Capture all system audio (`--system`), specific application(s) (`--app`, repeatable), or everything except listed apps (`--exclude-app`). Mixed mic + system capture via `--mix`. |
 | 4 | File output — native formats | P0 | Save to WAV (PCM), M4A/AAC, or FLAC using native CoreAudio encoders. |
-| 5 | Stream-mode operation | P0 | Output raw audio samples to stdout (e.g., `aural record | ffmpeg ...`); accept audio from stdin for transcoding/transcription. |
+| 5 | Stream-mode operation | P0 | Output raw audio samples to stdout (e.g., `hark record | ffmpeg ...`); accept audio from stdin for transcoding/transcription. |
 | 6 | Signal handling & graceful shutdown | P0 | On SIGINT (Ctrl+C) or SIGTERM, finalise the output file header so it remains playable. |
 | 7 | File output — additional formats | P1 | MP3 (statically linked LAME) and Ogg/Opus (statically linked libopus/libogg). All output formats verified compatible with major transcription tools (whisper.cpp, Fabric AI, cloud APIs). |
 | 8 | Time-based chunking | P1 | Split recordings into sequential files by duration (`--split duration=SEC`). |
@@ -71,22 +71,22 @@ The tool strictly follows Unix/Linux design patterns, treating audio as a stream
 ### US01 — Quick voice notes
 As a **developer**, I want to quickly capture my microphone input for five minutes and save it as an MP3, so that I can review my spoken notes later without opening Audacity.
 - Acceptance Criteria:
-  - [ ] `aural record -t 300 -o notes.mp3` records from the default input device without specifying a device UID
+  - [ ] `hark record -t 300 -o notes.mp3` records from the default input device without specifying a device UID
   - [ ] Recording stops automatically after 300 seconds with exit code 0
   - [ ] Resulting file plays correctly in QuickTime/`afplay` and duration is 300 s ± 1 s
 
 ### US02 — Record a meeting without echo
 As a **developer**, I want to record the audio from an ongoing Zoom call without echoing my own voice, so that I can later transcribe the meeting and extract action items.
 - Acceptance Criteria:
-  - [ ] `aural apps` lists the running Zoom process with its bundle ID
-  - [ ] `aural record --app us.zoom.xos -o call.m4a` captures only Zoom's output audio
+  - [ ] `hark apps` lists the running Zoom process with its bundle ID
+  - [ ] `hark record --app us.zoom.xos -o call.m4a` captures only Zoom's output audio
   - [ ] The user's own microphone is not captured unless `--mix` is explicitly given
   - [ ] First-run macOS "System Audio Recording" permission prompt and approval flow is documented
 
 ### US03 — Zero-touch transcription pipeline
 As a **data engineer**, I want to pipe recorded audio directly to a speech-to-text engine, so that I can build a fully automated transcription pipeline with zero manual steps.
 - Acceptance Criteria:
-  - [ ] `aural record -t 60 --stdout | aural transcribe -i -` produces transcript text on stdout
+  - [ ] `hark record -t 60 --stdout | hark transcribe -i -` produces transcript text on stdout
   - [ ] No temporary files are created in stream mode
   - [ ] A failure in the transcription engine propagates a non-zero exit code through the pipeline
 
@@ -100,15 +100,15 @@ As a **power user**, I want to split a long recording into chunks based on silen
 ### US05 — Unattended compliance recording
 As a **sysadmin**, I want to install the tool via Homebrew and have it run in a crontab, so that I can automatically record every team stand-up for compliance.
 - Acceptance Criteria:
-  - [ ] `brew install aural` installs a working, signed binary
+  - [ ] `brew install hark` installs a working, signed binary
   - [ ] Once the TCC permission is granted, recording runs unattended from cron/launchd without GUI interaction
   - [ ] Exit codes and stderr logging are suitable for cron-based monitoring and alerting
 
 ### US06 — Script-parseable enumeration
 - [ ] As an **ML researcher**, I want to list all available audio devices and capturable applications in a script-parseable format, so that I can write robust automation that adapts to different machine setups.
 - Acceptance Criteria:
-  - [ ] `aural devices --json` outputs valid JSON with UID, name, channel count, and sample rates
-  - [ ] `aural apps --json` outputs valid JSON with name, bundle ID, and PID
+  - [ ] `hark devices --json` outputs valid JSON with UID, name, channel count, and sample rates
+  - [ ] `hark apps --json` outputs valid JSON with name, bundle ID, and PID
   - [ ] Commands exit 0 with an empty array when nothing is found
 
 ### US07 — Focused app capture
@@ -125,19 +125,19 @@ As a **developer**, I want to capture audio from one specific app while excludin
 ### 6.1 CLI Commands & Flags
 
 ```
-aural {devices|apps|record|transcribe|convert|info} [OPTIONS]
+hark {devices|apps|record|transcribe|convert|info} [OPTIONS]
 ```
 
-**`aural devices`**
+**`hark devices`**
 - `--list-inputs` / `--list-outputs`
 - `--json` : output in JSON for scripting.
 
-**`aural apps`**
+**`hark apps`**
 - List running applications whose audio can be captured via process taps.
 - Output: application name, bundle ID, PID.
 - `--json` : output in JSON for scripting.
 
-**`aural record [SOURCE] -o <output_file> [OPTIONS]`**
+**`hark record [SOURCE] -o <output_file> [OPTIONS]`**
 
 Source selection (exactly one mode; mic capture is the default):
 - `-d, --device UID` : input device UID (defaults to system default input).
@@ -158,7 +158,7 @@ Output & format:
 - `--no-output` : run in "dry-run" mode, no file written (useful for testing).
 - `--stdout` : force raw PCM output to stdout (implied if no `-o`).
 
-**`aural transcribe -i <input_file|-|source> [OPTIONS]`**
+**`hark transcribe -i <input_file|-|source> [OPTIONS]`**
 - `-i, --input PATH|"-"|UID` : file path, `-` for stdin, or a device UID to capture and transcribe on the fly.
 - `-e, --engine whisper|cloud` : transcription engine (default `whisper`).
 - `--model PATH` : path to Whisper model.
@@ -166,10 +166,10 @@ Output & format:
 - `--output-format txt|srt|json` : transcription output format.
 - Integration: if a device UID is given, record in memory, pipe to engine, output text to stdout.
 
-**`aural convert -i <input> -o <output> [OPTIONS]`**
+**`hark convert -i <input> -o <output> [OPTIONS]`**
 - Simple format conversion (WAV → M4A, FLAC → MP3, etc.) reusing CoreAudio codecs where available.
 
-**`aural info -i <input>`**
+**`hark info -i <input>`**
 - Print duration, sample rate, channels, and metadata of an audio file.
 
 All commands accept `-h, --help` and `-v, --verbose`.
@@ -219,7 +219,7 @@ All commands accept `-h, --help` and `-v, --verbose`.
 | **Compatibility** | macOS 14.4 (Sonoma) and later — required by the Core Audio process-tap API; both Intel and Apple Silicon. |
 | **Security & Privacy** | No network calls by default; cloud transcription backends are opt-in and use HTTPS with user-provided API keys. System/app audio capture requires the macOS "System Audio Recording" TCC permission; the prompt and approval flow (including terminal-attributed permission for unbundled CLIs) must be documented. |
 | **Maintainability** | Single Swift binary built with SwiftPM; modular targets: `DeviceManager`, `TapEngine`, `Encoders`, `CLI`. Well-documented code. |
-| **Installability** | Distributed via Homebrew (`brew install aural`) and direct download from GitHub Releases; binary is signed and notarized so TCC permission flows work cleanly. |
+| **Installability** | Distributed via Homebrew (`brew install hark`) and direct download from GitHub Releases; binary is signed and notarized so TCC permission flows work cleanly. |
 | **Auditability** | All recorded file paths and durations are logged to STDERR when `-v` is enabled. |
 
 ---
@@ -227,7 +227,7 @@ All commands accept `-h, --help` and `-v, --verbose`.
 ## 8. Success Metrics (KPIs)
 
 - **Adoption:** 1000 Homebrew installs within 3 months of public release.
-- **Pipeline integration:** At least two open-source transcription projects (e.g., `whisper.cpp`, `faster-whisper`) officially list Aural as a recommended capture tool.
+- **Pipeline integration:** At least two open-source transcription projects (e.g., `whisper.cpp`, `faster-whisper`) officially list Hark as a recommended capture tool.
 - **Reliability:** Crash-free session rate > 99.5%, measured via strictly opt-in telemetry (consistent with the "no network calls by default" security requirement; mechanism TBD — see Open Questions).
 - **Community engagement:** Minimum 10 pull requests contributed from external developers within 6 months (discouraging feature bloat, but demonstrating extendability).
 
@@ -248,7 +248,7 @@ All commands accept `-h, --help` and `-v, --verbose`.
 
 ## 10. Open Questions & Assumptions
 
-1. **Crash resilience (parked):** How should recordings survive hard kills (SIGKILL, power loss)? Candidates: periodic header flush every N seconds, or a `aural repair` subcommand for truncated files. Decision deferred.
+1. **Crash resilience (parked):** How should recordings survive hard kills (SIGKILL, power loss)? Candidates: periodic header flush every N seconds, or a `hark repair` subcommand for truncated files. Decision deferred.
 2. **Whisper bundling:** Will the tool bundle a transcription engine or expect the user to install it separately? (Assumption: no bundling to keep the binary small; document external dependencies.)
 3. **Telemetry mechanism:** What opt-in mechanism (if any) will measure the crash-free-rate KPI without violating the no-network-by-default principle?
 4. **TCC for unbundled CLI:** Confirm the exact permission-attribution behaviour for a signed standalone binary vs. terminal-attributed permission, and document the recommended setup.
@@ -256,7 +256,7 @@ All commands accept `-h, --help` and `-v, --verbose`.
 ### Resolved (2026-06-12)
 - ~~Language/stack~~ → **Swift**, single binary, SwiftPM modular targets.
 - ~~System audio without a virtual device~~ → **Core Audio process taps** (macOS 14.4+); BlackHole no longer required.
-- ~~Product/binary naming~~ → **aural**.
+- ~~Product/binary naming~~ → **hark**.
 
 ---
 

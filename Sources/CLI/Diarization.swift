@@ -78,7 +78,7 @@ final class SpeakerDiarizer {
 
     static func makeOffline(maxSpeakers: Int?, threshold: Double?) throws -> SpeakerDiarizer {
         guard Platform.isAppleSilicon else {
-            throw AuralError.unavailable("""
+            throw HarkError.unavailable("""
                 acoustic diarization requires Apple Silicon (CoreML/ANE). Deterministic \
                 source attribution (--system/--app --mix --speakers) works on Intel.
                 """)
@@ -100,10 +100,10 @@ final class SpeakerDiarizer {
     }
 
     /// Pre-downloads the diarization CoreML models (no diarization run), for
-    /// `aural models download fluidaudio:diarizer`.
+    /// `hark models download fluidaudio:diarizer`.
     static func download() throws {
         guard Platform.isAppleSilicon else {
-            throw AuralError.unavailable("acoustic diarization requires Apple Silicon (CoreML/ANE).")
+            throw HarkError.unavailable("acoustic diarization requires Apple Silicon (CoreML/ANE).")
         }
         Log.notice("downloading diarization models …")
         _ = try RunLoopBridge.runBlocking(timeout: 3600) {
@@ -188,7 +188,7 @@ enum BatchDiarization {
             withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
         }
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-diar-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-diar-\(UUID().uuidString).wav")
         let writer = try WAVFileWriter(
             destination: .file(url),
             format: PCMFormat(sampleRate: 16000, bitsPerSample: 16, channels: 1))

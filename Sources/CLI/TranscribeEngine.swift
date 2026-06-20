@@ -48,16 +48,16 @@ struct TranscribeEngine {
     }
 
     /// Resolves the transcription engine: validates the backend is known and
-    /// implemented, locates the whisper binary on PATH (or `$AURAL_WHISPER_BIN`),
+    /// implemented, locates the whisper binary on PATH (or `$HARK_WHISPER_BIN`),
     /// and the model. Used to fail fast before capture starts and by the live
     /// transcriber.
     static func resolveWhisper(engineName: String, modelFlag: String?) throws -> WhisperEngine {
         guard let spec = EngineSpec.named(engineName) else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "unknown engine '\(engineName)' (known: \(EngineSpec.knownNames)).")
         }
         guard spec.isImplemented else {
-            throw AuralError.unavailable(
+            throw HarkError.unavailable(
                 (spec.plannedNote ?? "engine '\(engineName)' is not available")
                     + "; use --engine whisper.")
         }
@@ -79,7 +79,7 @@ struct TranscribeEngine {
             do {
                 try transcript.write(toFile: path, atomically: true, encoding: .utf8)
             } catch {
-                throw AuralError.ioError("cannot write transcript to '\(path)': \(error)")
+                throw HarkError.ioError("cannot write transcript to '\(path)': \(error)")
             }
             Log.verbose("wrote transcript to \(path)")
         }
@@ -93,12 +93,12 @@ extension TranscribeEngine {
     /// format hints; WAV streams are self-describing.
     static func stageStdin(rate: Int, bits: Int, channels: Int) throws -> URL {
         guard isatty(STDIN_FILENO) == 0 else {
-            throw AuralError.usage(
-                "refusing to read audio from a terminal; pipe data into 'aural -i -'.")
+            throw HarkError.usage(
+                "refusing to read audio from a terminal; pipe data into 'hark -i -'.")
         }
         let reader = StreamReader(handle: .standardInput)
 
-        // Sniff: WAV stream (aural -a -) or raw PCM (aural --raw -a -)?
+        // Sniff: WAV stream (hark -a -) or raw PCM (hark --raw -a -)?
         let sniff = reader.peek(4)
         let format: PCMFormat
         var remainingPayload: UInt64 = .max
@@ -107,7 +107,7 @@ extension TranscribeEngine {
             do {
                 header = try WAVStreamParser.parseHeader { try reader.next($0) }
             } catch let error as WAVParseError {
-                throw AuralError.noInput("stdin: \(error.description)")
+                throw HarkError.noInput("stdin: \(error.description)")
             }
             format = header.format
             if !header.dataSizeIsUnknown { remainingPayload = UInt64(header.dataSize) }
@@ -120,7 +120,7 @@ extension TranscribeEngine {
         }
 
         let staged = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-stdin-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-stdin-\(UUID().uuidString).wav")
         let writer = try WAVFileWriter(destination: .file(staged), format: format)
         while remainingPayload > 0 {
             let chunk = try reader.next(Int(min(65536, remainingPayload)))
@@ -132,7 +132,7 @@ extension TranscribeEngine {
         Log.verbose("stdin: staged \(writer.bytesWritten) PCM bytes")
         guard writer.bytesWritten > 0 else {
             try? FileManager.default.removeItem(at: staged)
-            throw AuralError.noInput("stdin contained no audio payload")
+            throw HarkError.noInput("stdin contained no audio payload")
         }
         return staged
     }

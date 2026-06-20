@@ -7,7 +7,7 @@ import Testing
 struct ConfigurationTests {
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-cfg-\(UUID().uuidString)/config.json")
+            .appendingPathComponent("hark-cfg-\(UUID().uuidString)/config.json")
     }
 
     @Test func saveThenLoadRoundTrips() throws {
@@ -94,7 +94,7 @@ struct ConfigurationTests {
     @Test func showResolvesValueAndSource() {
         var config = Configuration()
         config.engine = "parakeet"
-        let env = ["AURAL_VAD_THRESHOLD": "0.4"]
+        let env = ["HARK_VAD_THRESHOLD": "0.4"]
         func effective(_ key: ConfigKey) -> (value: String, source: SettingSource) {
             Configuration.settingsByKey[key]!.effective(config: config, env: env)
         }
@@ -118,26 +118,26 @@ struct ConfigurationTests {
     @Test func typedSetValidatesValues() {
         var config = Configuration()
         // translate: bool parsing
-        #expect(throws: AuralError.self) { try config.set(.translate, rawValue: "maybe") }
+        #expect(throws: HarkError.self) { try config.set(.translate, rawValue: "maybe") }
         #expect((try? { var c = Configuration(); try c.set(.translate, rawValue: "yes"); return c.translate }()) == true)
         // silence-threshold: numeric + must be negative
-        #expect(throws: AuralError.self) { try config.set(.silenceThreshold, rawValue: "abc") }
-        #expect(throws: AuralError.self) { try config.set(.silenceThreshold, rawValue: "10") }
+        #expect(throws: HarkError.self) { try config.set(.silenceThreshold, rawValue: "abc") }
+        #expect(throws: HarkError.self) { try config.set(.silenceThreshold, rawValue: "10") }
         #expect((try? { var c = Configuration(); try c.set(.silenceThreshold, rawValue: "-40"); return c.silenceThreshold }()) == -40)
         // engine: must be known
-        #expect(throws: AuralError.self) { try config.set(.engine, rawValue: "bogus") }
+        #expect(throws: HarkError.self) { try config.set(.engine, rawValue: "bogus") }
         #expect((try? { var c = Configuration(); try c.set(.engine, rawValue: "apple"); return c.engine }()) == "apple")
         // non-empty strings
-        #expect(throws: AuralError.self) { try config.set(.model, rawValue: "") }
+        #expect(throws: HarkError.self) { try config.set(.model, rawValue: "") }
     }
 
     @Test func environmentNameMapping() {
-        #expect(ConfigKey.model.environmentName == "AURAL_WHISPER_MODEL")
-        #expect(ConfigKey.engine.environmentName == "AURAL_ENGINE")
-        #expect(ConfigKey.language.environmentName == "AURAL_LANGUAGE")
-        #expect(ConfigKey.translate.environmentName == "AURAL_TRANSLATE")
-        #expect(ConfigKey.silenceThreshold.environmentName == "AURAL_SILENCE_THRESHOLD")
-        #expect(ConfigKey.device.environmentName == "AURAL_DEVICE")
+        #expect(ConfigKey.model.environmentName == "HARK_WHISPER_MODEL")
+        #expect(ConfigKey.engine.environmentName == "HARK_ENGINE")
+        #expect(ConfigKey.language.environmentName == "HARK_LANGUAGE")
+        #expect(ConfigKey.translate.environmentName == "HARK_TRANSLATE")
+        #expect(ConfigKey.silenceThreshold.environmentName == "HARK_SILENCE_THRESHOLD")
+        #expect(ConfigKey.device.environmentName == "HARK_DEVICE")
     }
 
     @Test func thresholdDisplayTrimsWholeNumbers() {
@@ -159,11 +159,11 @@ struct ConfigurationTests {
         let note = ConfigSet.modelNote(
             value: "parakeet-tdt-0.6b-v3", configuredEngine: nil, installedEngine: "parakeet")
         #expect(note?.contains("is a parakeet model") == true)
-        #expect(note?.contains("aural config set engine parakeet") == true)
+        #expect(note?.contains("hark config set engine parakeet") == true)
         // whisperkit model while engine is whisper.
         let wk = ConfigSet.modelNote(
             value: "openai_whisper-base", configuredEngine: "whisper", installedEngine: "whisperkit")
-        #expect(wk?.contains("aural config set engine whisperkit") == true)
+        #expect(wk?.contains("hark config set engine whisperkit") == true)
     }
 
     @Test func configSetRecognizesHelpRequest() {
@@ -180,7 +180,7 @@ struct ConfigurationTests {
         // Unknown value, whisper engine -> "not present" download hint.
         let whisper = ConfigSet.modelNote(value: "nope", configuredEngine: nil, installedEngine: nil)
         #expect(whisper?.contains("not present yet") == true)
-        #expect(whisper?.contains("aural models download nope") == true)
+        #expect(whisper?.contains("hark models download nope") == true)
         // Unknown value, parakeet engine -> no note (CoreML engines auto-download).
         #expect(ConfigSet.modelNote(value: "v3", configuredEngine: "parakeet", installedEngine: nil) == nil)
     }

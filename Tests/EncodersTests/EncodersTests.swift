@@ -56,7 +56,7 @@ struct WAVHeaderTests {
 struct WAVFileWriterTests {
     private func temporaryFile() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-test-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-test-\(UUID().uuidString).wav")
     }
 
     @Test func finalizePatchesSizes() throws {
@@ -145,25 +145,25 @@ struct AudioFileFormatTests {
 struct WAVMetadataTests {
     @Test func infoListChunkLayout() {
         let chunk = WAVFileWriter.infoListChunk(
-            WAVMetadata(creationDate: nil, software: "aural", title: nil))
-        // LIST + size + INFO + ISFT + size(6) + "aural\0" (padded even)
+            WAVMetadata(creationDate: nil, software: "hark", title: nil))
+        // LIST + size + INFO + ISFT + size(6) + "hark\0\0" (4 chars + null, padded even)
         let expected: [UInt8] =
             Array("LIST".utf8) + [0x12, 0, 0, 0]
             + Array("INFO".utf8)
             + Array("ISFT".utf8) + [0x06, 0, 0, 0]
-            + Array("aural".utf8) + [0x00]
+            + Array("hark".utf8) + [0x00, 0x00]
         #expect([UInt8](chunk) == expected)
     }
 
     @Test func finalizeAppendsMetadataAndPatchesRiffSize() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-meta-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-meta-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
 
         let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
         let writer = try WAVFileWriter(
             destination: .file(url), format: format,
-            metadata: WAVMetadata(software: "aural", title: "Test Mic"))
+            metadata: WAVMetadata(software: "hark", title: "Test Mic"))
         try writer.write(Data([1, 2, 3, 4]))
         try writer.finalize()
 
@@ -182,7 +182,7 @@ struct WAVMetadataTests {
 
     @Test func noMetadataMeansNoListChunk() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-nometa-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-nometa-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
         let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
         let writer = try WAVFileWriter(destination: .file(url), format: format)
@@ -198,14 +198,14 @@ struct WAVMetadataTests {
 struct WAVMetadataReadbackTests {
     @Test func coreAudioReadsInfoChunk() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-metard-\(UUID().uuidString).wav")
+            .appendingPathComponent("hark-metard-\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: url) }
 
         let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
         let writer = try WAVFileWriter(
             destination: .file(url), format: format,
             metadata: WAVMetadata(
-                creationDate: Date(), software: "aural 0.1.0", title: "Test Source"))
+                creationDate: Date(), software: "hark 0.1.0", title: "Test Source"))
         try writer.write(Data(count: 44100 * 2))  // 1s silence
         try writer.finalize()
 

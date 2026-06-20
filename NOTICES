@@ -3,7 +3,7 @@ Third-party components bundled in this repository
 
 LAME (libmp3lame) — MP3 encoding
 --------------------------------
-Aural's MP3 output uses libmp3lame, vendored (encode-only) under
+Hark's MP3 output uses libmp3lame, vendored (encode-only) under
 Sources/CLame/ from LAME 3.100 (https://lame.sourceforge.io/).
 
 LAME is licensed under the GNU Lesser General Public License (LGPL),
@@ -17,7 +17,7 @@ replaces LAME's autoconf-generated config.h.
 
 FlyingFox / FlyingSocks — embedded HTTP server
 ----------------------------------------------
-The remote-control agent (`aural --remote-control`, PRD §6.10) serves its
+The remote-control agent (`hark --remote-control`, PRD §6.10) serves its
 HTTP/JSON control API using FlyingFox and FlyingSocks
 (https://github.com/swhitty/FlyingFox), added as SwiftPM dependencies and
 statically linked into the binary (nothing for users to install).
@@ -45,4 +45,4 @@ Runtime tools (not bundled)
 ---------------------------
 The default `whisper` engine invokes an external whisper.cpp binary
 (`whisper-cli`/`whisper-server`, e.g. `brew install whisper-cpp`); it is not
-bundled with or linked into Aural.
+bundled with or linked into Hark.

@@ -13,8 +13,8 @@ struct WhisperKitBackendTests {
         #expect(WhisperKitBackend.languageCode("DE") == "de")
     }
 
-    @Test func downloadBaseIsUnderAuralModels() {
-        #expect(WhisperKitBackend.downloadBase.path.hasSuffix("/.aural/models/whisperkit"))
+    @Test func downloadBaseIsUnderHarkModels() {
+        #expect(WhisperKitBackend.downloadBase.path.hasSuffix("/.hark/models/whisperkit"))
     }
 
     @Test func cleanStripsSpecialTokens() {
@@ -56,7 +56,7 @@ struct TranscriptFormattingTests {
 struct CoreMLModelsTests {
     @Test func listsVariantDirectoriesContainingMlmodelc() throws {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-coreml-\(UUID().uuidString)")
+            .appendingPathComponent("hark-coreml-\(UUID().uuidString)")
         // root/variantA/Encoder.mlmodelc/<file> and root/variantB/Decoder.mlmodelc/<file>
         let fm = FileManager.default
         for variant in ["variantA", "variantB"] {
@@ -78,22 +78,22 @@ struct CoreMLModelsTests {
 
     @Test func missingDirectoryYieldsEmpty() {
         let missing = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-none-\(UUID().uuidString)")
+            .appendingPathComponent("hark-none-\(UUID().uuidString)")
         #expect(ModelRegistry.coreMLModels(engine: "whisperkit", directory: missing).isEmpty)
     }
 }
 
 /// On-device WhisperKit transcription. Heavy (downloads a CoreML model), so it
-/// only runs when AURAL_TEST_WHISPERKIT=1 and on Apple Silicon.
+/// only runs when HARK_TEST_WHISPERKIT=1 and on Apple Silicon.
 @Suite("WhisperKit transcription (integration)")
 struct WhisperKitIntegrationTests {
     @Test func transcribesSpeech() throws {
         guard Platform.isAppleSilicon,
-            ProcessInfo.processInfo.environment["AURAL_TEST_WHISPERKIT"] == "1"
+            ProcessInfo.processInfo.environment["HARK_TEST_WHISPERKIT"] == "1"
         else { return }
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-wk-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-wk-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 

@@ -1,18 +1,18 @@
-.\" Manpage for aural.
-.TH AURAL 1 2026-06-16 "aural 0.1.0" "User Commands"
+.\" Manpage for hark.
+.TH HARK 1 2026-06-16 "hark 0.1.0" "User Commands"
 .SH NAME
-aural \- capture audio and produce transcripts on macOS
+hark \- capture audio and produce transcripts on macOS
 .SH SYNOPSIS
-.B aural
+.B hark
 .RI [ input ]
 .RI [ output ]
 .RI [ options ]
 .br
-.B aural
+.B hark
 .BR devices | apps | info | models | config
 .RI [ ... ]
 .SH DESCRIPTION
-.B aural
+.B hark
 is the verb \(em "listen and transcribe." It takes one input (live capture from
 the microphone by default, system or per\-application audio, or an existing
 file) and writes the outputs you name: an audio file, a transcript, or a stream
@@ -26,7 +26,7 @@ Choose at most one. The default is the system default microphone.
 .TP
 .BI \-d ", " \-\-device " UID"
 Live capture from a specific input device (see
-.BR "aural devices" ).
+.BR "hark devices" ).
 .TP
 .B \-\-system
 Capture all system audio via a process tap.
@@ -62,7 +62,7 @@ when it can run (macOS 15+, Screen Recording granted, a display present) and
 otherwise falls back to
 .BR coreaudio .
 Also settable via
-.BR $AURAL_CAPTURE .
+.BR $HARK_CAPTURE .
 .TP
 .BI \-i ", " \-\-input " PATH|\-"
 Read an existing audio file, or
@@ -143,7 +143,7 @@ a version
 .RB ( v2 / v3 );
 .B apple
 ignores it. See
-.BR "aural models list \-\-available" .
+.BR "hark models list \-\-available" .
 .TP
 .BI \-\-language " CODE"
 Spoken language code (e.g.
@@ -207,7 +207,7 @@ field.
 .TP
 .BR \-\-speakers ", " \-\-diarize ", " \-\-no\-speakers
 Enable speaker labels (off by default; or
-.B $AURAL_SPEAKERS
+.B $HARK_SPEAKERS
 / config). A meeting capture
 .RB ( \-\-mix
 with
@@ -254,7 +254,7 @@ is a live\-only label: a single mixed
 file cannot separate your voice, so everyone is
 .BR "Speaker N" .
 Acoustic models download from Hugging Face on first use
-.RB ( "aural models download fluidaudio:diarizer" );
+.RB ( "hark models download fluidaudio:diarizer" );
 on Intel, diarized modes fall back to
 .BR You / Others .
 .SH OTHER OPTIONS
@@ -269,7 +269,7 @@ outputs) against
 absolute paths and
 .B \-
 are unaffected. Defaults to the current directory (also
-.BR $AURAL_DIRECTORY ).
+.BR $HARK_DIRECTORY ).
 The directory must already exist.
 .TP
 .B \-\-interactive
@@ -289,7 +289,7 @@ so scripts can start/pause/resume/stop/query one recording. A bare port or
 empty host binds loopback (conventionally
 .BR 8473 );
 a non\-loopback bind requires
-.BR $AURAL_REMOTE_TOKEN .
+.BR $HARK_REMOTE_TOKEN .
 Launch\-time capture flags become per\-session defaults. See
 .I docs/remote-control.md
 in the project.
@@ -304,22 +304,22 @@ Print the version.
 Show help.
 .SH SUBCOMMANDS
 .TP
-.B aural devices [\-\-list\-inputs|\-\-list\-outputs] [\-\-json]
+.B hark devices [\-\-list\-inputs|\-\-list\-outputs] [\-\-json]
 Enumerate audio input and output devices.
 .TP
-.B aural apps [\-\-json]
+.B hark apps [\-\-json]
 List running applications whose audio can be captured.
 .TP
-.B aural info <file> [\-\-json]
+.B hark info <file> [\-\-json]
 Print duration, sample rate, channels, and metadata of an audio file.
 .TP
-.B aural models list [\-\-available] [\-\-json]
+.B hark models list [\-\-available] [\-\-json]
 List installed models across engines, or the downloadable catalog with
 .BR \-\-available .
 The active default is marked with
 .BR * .
 .TP
-.B aural models download <name> [\-\-default] [\-\-force]
+.B hark models download <name> [\-\-default] [\-\-force]
 Download a model. Names are engine\-tagged: a bare ggml name is a whisper model
 .RB ( base.en );
 CoreML engines use a prefix
@@ -327,76 +327,76 @@ CoreML engines use a prefix
 .B \-\-default
 makes it the default (also setting the engine for whisperkit/parakeet).
 .TP
-.B aural config show|set <key> <value>|unset <key>|path
+.B hark config show|set <key> <value>|unset <key>|path
 View and edit persisted defaults. Keys include
 .BR model ", " engine ", " language ", " translate ", " silence\-threshold ", " device ", " directory
 and the capture/speaker settings; run
-.B aural config show
+.B hark config show
 for the full list.
 .PP
 Use
-.B aural help <subcommand>
+.B hark help <subcommand>
 for a subcommand's full options.
 .SH ENVIRONMENT
 Most defaults resolve flag, then environment, then config, then a built\-in
 default. Every config key (see
-.BR "aural config show" )
+.BR "hark config show" )
 has a matching variable
-.BR AURAL_<KEY> ,
+.BR HARK_<KEY> ,
 uppercased with
 .B \-
 mapped to
 .BR _ ,
 except
 .B model
-.RB ( AURAL_WHISPER_MODEL )
+.RB ( HARK_WHISPER_MODEL )
 and
 .B capture\-backend
-.RB ( AURAL_CAPTURE ).
+.RB ( HARK_CAPTURE ).
 The common ones:
 .TP
-.B AURAL_WHISPER_MODEL
+.B HARK_WHISPER_MODEL
 Default ggml model (path or short name).
 .TP
-.B AURAL_ENGINE
+.B HARK_ENGINE
 Default engine.
 .TP
-.B AURAL_LANGUAGE
+.B HARK_LANGUAGE
 Default spoken language, or
 .BR auto .
 .TP
-.B AURAL_TRANSLATE
+.B HARK_TRANSLATE
 Default translate behavior
 .RB ( true / false ).
 .TP
-.B AURAL_SILENCE_THRESHOLD
+.B HARK_SILENCE_THRESHOLD
 Default silence threshold in dBFS (negative).
 .TP
-.B AURAL_DEVICE
+.B HARK_DEVICE
 Default input device UID.
 .TP
-.B AURAL_DIRECTORY
+.B HARK_DIRECTORY
 Default working directory for relative artifact paths.
 .TP
-.B AURAL_CAPTURE
+.B HARK_CAPTURE
 Default system/app capture backend
 .RB ( auto / sckit / coreaudio ).
 .TP
-.B AURAL_REMOTE_TOKEN
+.B HARK_REMOTE_TOKEN
 Bearer token required by
 .B \-\-remote\-control
 when binding to a non\-loopback interface (and enforced on every request when
 set).
 .TP
-.B AURAL_WHISPER_BIN ", " AURAL_WHISPER_SERVER_BIN
+.B HARK_WHISPER_BIN ", " HARK_WHISPER_SERVER_BIN
 Override the whisper.cpp CLI / server binary path.
 .TP
-.B AURAL_WHISPER_SERVER
+.B HARK_WHISPER_SERVER
 Set to
 .B 0
 to disable the resident whisper\-server backend.
 .TP
-.B AURAL_VAD
+.B HARK_VAD
 Set to
 .B 0
 to disable the on\-device VAD used for live segmentation (falls back to the
@@ -404,17 +404,17 @@ amplitude
 .B \-\-silence\-threshold
 method).
 .TP
-.B AURAL_GAIN
+.B HARK_GAIN
 Set to
 .B off
 to disable per\-segment peak normalization of the transcription audio (the
 recording is never affected).
 .SH FILES
 .TP
-.I ~/.aural/config.json
+.I ~/.hark/config.json
 Persisted defaults (JSON).
 .TP
-.I ~/.aural/models/ggml\-*.bin
+.I ~/.hark/models/ggml\-*.bin
 Downloaded whisper ggml models.
 .SH EXIT STATUS
 .TP
@@ -448,7 +448,7 @@ Live microphone to a transcript on stdout:
 .PP
 .RS
 .nf
-aural
+hark
 .fi
 .RE
 .PP
@@ -456,7 +456,7 @@ Capture a meeting (system + mic), keeping audio and subtitles:
 .PP
 .RS
 .nf
-aural \-\-system \-\-mix \-a meeting.m4a \-t meeting.srt
+hark \-\-system \-\-mix \-a meeting.m4a \-t meeting.srt
 .fi
 .RE
 .PP
@@ -464,7 +464,7 @@ Label a meeting by speaker (You + Speaker 1..N), live:
 .PP
 .RS
 .nf
-aural \-\-system \-\-mix \-\-speakers \-t meeting.srt
+hark \-\-system \-\-mix \-\-speakers \-t meeting.srt
 .fi
 .RE
 .PP
@@ -472,7 +472,7 @@ Diarize a recording, tuning sensitivity:
 .PP
 .RS
 .nf
-aural \-i meeting.wav \-\-speakers \-\-speaker\-threshold 0.55 \-t out.json
+hark \-i meeting.wav \-\-speakers \-\-speaker\-threshold 0.55 \-t out.json
 .fi
 .RE
 .PP
@@ -480,7 +480,7 @@ Transcribe a file, detecting the language:
 .PP
 .RS
 .nf
-aural \-i talk.mp3 \-\-language auto \-t talk.srt
+hark \-i talk.mp3 \-\-language auto \-t talk.srt
 .fi
 .RE
 .PP
@@ -488,7 +488,7 @@ Transcode between formats:
 .PP
 .RS
 .nf
-aural \-i in.wav \-a out.flac
+hark \-i in.wav \-a out.flac
 .fi
 .RE
 .PP
@@ -496,7 +496,7 @@ Stream live WAV into another tool:
 .PP
 .RS
 .nf
-aural \-a \- \-\-duration 10 | ffmpeg \-i \- out.mp3
+hark \-a \- \-\-duration 10 | ffmpeg \-i \- out.mp3
 .fi
 .RE
 .PP
@@ -504,7 +504,7 @@ Interactive meeting capture (space pauses, Enter finishes):
 .PP
 .RS
 .nf
-aural \-\-interactive \-\-system \-\-mix \-a meeting.m4a
+hark \-\-interactive \-\-system \-\-mix \-a meeting.m4a
 .fi
 .RE
 .PP
@@ -512,13 +512,13 @@ Run a loopback control agent for scripts to drive:
 .PP
 .RS
 .nf
-aural \-\-remote\-control 8473 \-C ~/Recordings
+hark \-\-remote\-control 8473 \-C ~/Recordings
 .fi
 .RE
 .SH PERMISSIONS
 Microphone, system\-audio, and speech recognition are gated by macOS TCC. For
 an unsigned build, prompts are attributed to the terminal that runs
-.BR aural .
+.BR hark .
 See
 .I docs/permissions.md
 in the project for setup details.

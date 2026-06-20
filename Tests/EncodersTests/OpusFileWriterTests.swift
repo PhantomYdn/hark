@@ -14,7 +14,7 @@ struct OggMuxerTests {
 
     @Test func writesAParseablePage() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-ogg-\(UUID().uuidString)")
+            .appendingPathComponent("hark-ogg-\(UUID().uuidString)")
         FileManager.default.createFile(atPath: url.path, contents: nil)
         guard let handle = FileHandle(forWritingAtPath: url.path) else {
             Issue.record("cannot open temp file")
@@ -78,7 +78,7 @@ struct OpusFileWriterTests {
 
     @Test func encodesFullLengthOggOpus() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-opus-\(UUID().uuidString).opus")
+            .appendingPathComponent("hark-opus-\(UUID().uuidString).opus")
         defer { try? FileManager.default.removeItem(at: url) }
 
         let format = PCMFormat(sampleRate: 48000, bitsPerSample: 16, channels: 1)

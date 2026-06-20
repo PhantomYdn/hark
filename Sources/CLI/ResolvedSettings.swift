@@ -1,9 +1,9 @@
 import Foundation
 
 /// The effective capture/transcription/speaker defaults for one invocation,
-/// after layering **flag › env (`$AURAL_*`) › config › built-in default** for
-/// each setting (the same precedence shown by `aural config show`, with flags
-/// added). Computed once in `Aural.run()` and threaded into the file/live paths.
+/// after layering **flag › env (`$HARK_*`) › config › built-in default** for
+/// each setting (the same precedence shown by `hark config show`, with flags
+/// added). Computed once in `Hark.run()` and threaded into the file/live paths.
 ///
 /// Model resolution stays in `WhisperEngine.resolveModel` (same chain); the
 /// model is passed through as a flag.
@@ -36,7 +36,7 @@ struct ResolvedSettings: Equatable {
     /// Resolves every setting from the parsed command, environment, and config.
     /// Throws a usage error for malformed environment values.
     static func resolve(
-        from a: Aural,
+        from a: Hark,
         environment env: [String: String] = ProcessInfo.processInfo.environment,
         config: Configuration = .load()
     ) throws -> ResolvedSettings {
@@ -122,36 +122,36 @@ struct ResolvedSettings: Equatable {
             speakerThreshold: speakerThreshold)
     }
 
-    /// Validates merged values that flag-only `Aural.validate()` cannot see
+    /// Validates merged values that flag-only `Hark.validate()` cannot see
     /// (e.g. a configured engine that can't translate, paired with `--translate`).
     func validate() throws {
         guard let spec = EngineSpec.named(engine) else {
-            throw AuralError.usage("unknown engine '\(engine)' (known: \(EngineSpec.knownNames)).")
+            throw HarkError.usage("unknown engine '\(engine)' (known: \(EngineSpec.knownNames)).")
         }
         if translate && !spec.capabilities.translate {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "the '\(engine)' engine cannot translate to English; drop --translate or "
                     + "choose an engine that supports it (whisper, whisperkit).")
         }
         guard silenceThreshold < 0 else {
-            throw AuralError.usage("silence threshold must be negative (dBFS).")
+            throw HarkError.usage("silence threshold must be negative (dBFS).")
         }
     }
 
     /// Changes the process working directory so the root verb's **relative**
     /// artifact paths (`-i`, `-a`, `-t`, `--split` outputs) resolve against it.
-    /// Absolute paths, `-` (stdin/stdout), and home-anchored state (`~/.aural`)
+    /// Absolute paths, `-` (stdin/stdout), and home-anchored state (`~/.hark`)
     /// are unaffected. No-op when unset (stays at the process CWD). A missing
-    /// directory is a usage error; Aural never creates it.
+    /// directory is a usage error; Hark never creates it.
     func applyWorkingDirectory(fileManager: FileManager = .default) throws {
         guard let directory else { return }
         let path = (directory as NSString).expandingTildeInPath
         var isDir: ObjCBool = false
         guard fileManager.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
-            throw AuralError.usage("--directory must be an existing directory (got '\(directory)').")
+            throw HarkError.usage("--directory must be an existing directory (got '\(directory)').")
         }
         guard fileManager.changeCurrentDirectoryPath(path) else {
-            throw AuralError.ioError("could not switch to directory '\(directory)'.")
+            throw HarkError.ioError("could not switch to directory '\(directory)'.")
         }
         Log.verbose("working directory: \(path)")
     }

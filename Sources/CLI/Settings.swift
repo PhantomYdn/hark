@@ -10,7 +10,7 @@ enum SettingKind {
     case choice([String])
 }
 
-/// Where an effective value came from, for `aural config show`.
+/// Where an effective value came from, for `hark config show`.
 enum SettingSource: String {
     case `default`
     case config
@@ -111,19 +111,19 @@ enum ConfigKey: String, CaseIterable {
     static var knownNames: String { allCases.map(\.rawValue).joined(separator: ", ") }
 
     /// Environment variable backing this key. Model and capture-backend keep
-    /// their historical names; the rest follow `AURAL_<KEY>`.
+    /// their historical names; the rest follow `HARK_<KEY>`.
     var environmentName: String {
         switch self {
-        case .model: return "AURAL_WHISPER_MODEL"
-        case .captureBackend: return "AURAL_CAPTURE"
-        default: return "AURAL_" + rawValue.uppercased().replacingOccurrences(of: "-", with: "_")
+        case .model: return "HARK_WHISPER_MODEL"
+        case .captureBackend: return "HARK_CAPTURE"
+        default: return "HARK_" + rawValue.uppercased().replacingOccurrences(of: "-", with: "_")
         }
     }
 
     // MARK: Shared value parsing (used by `config set`, env resolution, registry)
 
     static func requireNonEmpty(_ value: String, _ key: ConfigKey) throws -> String {
-        guard !value.isEmpty else { throw AuralError.usage("\(key.rawValue) must not be empty.") }
+        guard !value.isEmpty else { throw HarkError.usage("\(key.rawValue) must not be empty.") }
         return value
     }
 
@@ -134,14 +134,14 @@ enum ConfigKey: String, CaseIterable {
         var isDir: ObjCBool = false
         let path = (trimmed as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
-            throw AuralError.usage("\(key.rawValue) must be an existing directory (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be an existing directory (got '\(value)').")
         }
         return trimmed
     }
 
     static func parseEngine(_ value: String) throws -> String {
         guard EngineSpec.named(value) != nil else {
-            throw AuralError.usage("unknown engine '\(value)' (known: \(EngineSpec.knownNames)).")
+            throw HarkError.usage("unknown engine '\(value)' (known: \(EngineSpec.knownNames)).")
         }
         return value
     }
@@ -151,22 +151,22 @@ enum ConfigKey: String, CaseIterable {
         case "true", "1", "yes", "on": return true
         case "false", "0", "no", "off": return false
         default:
-            throw AuralError.usage("\(key.rawValue) must be true or false (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be true or false (got '\(value)').")
         }
     }
 
     static func parseThreshold(_ value: String, _ key: ConfigKey) throws -> Double {
         guard let number = Double(value) else {
-            throw AuralError.usage("\(key.rawValue) must be a number in dBFS (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be a number in dBFS (got '\(value)').")
         }
-        guard number < 0 else { throw AuralError.usage("\(key.rawValue) must be negative (dBFS).") }
+        guard number < 0 else { throw HarkError.usage("\(key.rawValue) must be negative (dBFS).") }
         return number
     }
 
     static func parseChoice(_ value: String, _ key: ConfigKey, _ allowed: [String]) throws -> String {
         let lowered = value.lowercased()
         guard allowed.contains(lowered) else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "\(key.rawValue) must be one of \(allowed.joined(separator: ", ")) (got '\(value)').")
         }
         return lowered
@@ -174,10 +174,10 @@ enum ConfigKey: String, CaseIterable {
 
     static func parseInt(_ value: String, _ key: ConfigKey, in range: ClosedRange<Int>) throws -> Int {
         guard let n = Int(value) else {
-            throw AuralError.usage("\(key.rawValue) must be an integer (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be an integer (got '\(value)').")
         }
         guard range.contains(n) else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "\(key.rawValue) must be between \(range.lowerBound) and \(range.upperBound).")
         }
         return n
@@ -185,10 +185,10 @@ enum ConfigKey: String, CaseIterable {
 
     static func parseInt(_ value: String, _ key: ConfigKey, oneOf allowed: [Int]) throws -> Int {
         guard let n = Int(value) else {
-            throw AuralError.usage("\(key.rawValue) must be an integer (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be an integer (got '\(value)').")
         }
         guard allowed.contains(n) else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "\(key.rawValue) must be one of \(allowed.map(String.init).joined(separator: ", ")).")
         }
         return n
@@ -196,17 +196,17 @@ enum ConfigKey: String, CaseIterable {
 
     static func parsePositiveInt(_ value: String, _ key: ConfigKey) throws -> Int {
         guard let n = Int(value), n >= 1 else {
-            throw AuralError.usage("\(key.rawValue) must be a positive integer (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be a positive integer (got '\(value)').")
         }
         return n
     }
 
     static func parseUnit(_ value: String, _ key: ConfigKey) throws -> Double {
         guard let n = Double(value) else {
-            throw AuralError.usage("\(key.rawValue) must be a number (got '\(value)').")
+            throw HarkError.usage("\(key.rawValue) must be a number (got '\(value)').")
         }
         guard n > 0 && n <= 1 else {
-            throw AuralError.usage("\(key.rawValue) must be between 0 and 1.")
+            throw HarkError.usage("\(key.rawValue) must be between 0 and 1.")
         }
         return n
     }
@@ -215,7 +215,7 @@ enum ConfigKey: String, CaseIterable {
         let parts = value.split(separator: ",", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
-            throw AuralError.usage("\(key.rawValue) needs two comma-separated names, e.g. 'You,Others'.")
+            throw HarkError.usage("\(key.rawValue) needs two comma-separated names, e.g. 'You,Others'.")
         }
         return "\(parts[0]),\(parts[1])"
     }

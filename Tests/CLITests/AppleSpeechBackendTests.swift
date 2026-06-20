@@ -53,7 +53,7 @@ struct AppleSpeechBackendTests {
         guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-apple-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-apple-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 

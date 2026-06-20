@@ -7,7 +7,7 @@ import Testing
 struct ModelRegistryTests {
     private func tempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-models-\(UUID().uuidString)")
+            .appendingPathComponent("hark-models-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -102,19 +102,19 @@ struct ModelRegistryTests {
         // Env as an absolute path.
         #expect(
             ModelRegistry.currentModelPath(
-                directory: dir, environment: ["AURAL_WHISPER_MODEL": model.path], config: empty)
+                directory: dir, environment: ["HARK_WHISPER_MODEL": model.path], config: empty)
                 == model.path)
         // Env as a short name resolved under the directory.
         #expect(
             ModelRegistry.currentModelPath(
-                directory: dir, environment: ["AURAL_WHISPER_MODEL": "small"], config: empty)
+                directory: dir, environment: ["HARK_WHISPER_MODEL": "small"], config: empty)
                 == model.path)
         // Unset / unresolvable.
         #expect(
             ModelRegistry.currentModelPath(directory: dir, environment: [:], config: empty) == nil)
         #expect(
             ModelRegistry.currentModelPath(
-                directory: dir, environment: ["AURAL_WHISPER_MODEL": "nope"], config: empty) == nil)
+                directory: dir, environment: ["HARK_WHISPER_MODEL": "nope"], config: empty) == nil)
         // Config falls back when env is unset.
         #expect(
             ModelRegistry.currentModelPath(
@@ -129,7 +129,7 @@ struct ModelRegistryTests {
         try touch(dir.appendingPathComponent("ggml-base.en.bin"))
 
         let models = ModelRegistry.localModels(
-            directory: dir, environment: ["AURAL_WHISPER_MODEL": "small"], config: Configuration())
+            directory: dir, environment: ["HARK_WHISPER_MODEL": "small"], config: Configuration())
         #expect(models.first { $0.name == "small" }?.current == true)
         #expect(models.first { $0.name == "base.en" }?.current == false)
 

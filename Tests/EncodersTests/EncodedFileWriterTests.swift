@@ -18,7 +18,7 @@ struct EncodedFileWriterTests {
 
     private func temporaryFile(_ ext: String) -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-enc-\(UUID().uuidString).\(ext)")
+            .appendingPathComponent("hark-enc-\(UUID().uuidString).\(ext)")
     }
 
     private func decode(_ url: URL) throws -> (frames: Int, rate: Double, channels: Int, rms: Double) {

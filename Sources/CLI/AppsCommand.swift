@@ -7,7 +7,7 @@ struct Apps: ParsableCommand {
         abstract: "List running applications whose audio can be captured.",
         discussion: """
             Lists processes registered with the audio HAL. These are valid \
-            targets for per-application capture (aural --app). The \
+            targets for per-application capture (hark --app). The \
             ACTIVE column shows which processes are currently playing or \
             recording audio.
             """
@@ -24,7 +24,7 @@ struct Apps: ParsableCommand {
             do {
                 apps = try DeviceManager.listCapturableApps()
             } catch {
-                throw AuralError.software("failed to enumerate audio processes: \(error)")
+                throw HarkError.software("failed to enumerate audio processes: \(error)")
             }
             Log.verbose("found \(apps.count) audio process(es)")
 

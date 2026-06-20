@@ -33,7 +33,7 @@ final class ProcessTap {
         // Unmuted: tapped audio keeps playing on the user's output device.
         description.isPrivate = true
         description.muteBehavior = .unmuted
-        description.name = "aural-tap-\(UUID().uuidString)"
+        description.name = "hark-tap-\(UUID().uuidString)"
 
         var newTapID = AudioObjectID(kAudioObjectUnknown)
         let status = AudioHardwareCreateProcessTap(description, &newTapID)

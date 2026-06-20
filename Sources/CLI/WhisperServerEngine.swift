@@ -103,7 +103,7 @@ final class WhisperServerEngine: TranscriptionBackend {
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat
     ) throws -> String {
         let wav = try Data(contentsOf: wavFile)
-        let boundary = "aural-\(UUID().uuidString)"
+        let boundary = "hark-\(UUID().uuidString)"
         var request = URLRequest(url: inferenceURL)
         request.httpMethod = "POST"
         request.setValue(
@@ -136,7 +136,7 @@ final class WhisperServerEngine: TranscriptionBackend {
         do {
             return try outcome.get()
         } catch {
-            throw AuralError.software((error as? WhisperServerError)?.description ?? "\(error)")
+            throw HarkError.software((error as? WhisperServerError)?.description ?? "\(error)")
         }
     }
 
@@ -148,7 +148,7 @@ final class WhisperServerEngine: TranscriptionBackend {
 
     var label: String { "whisper-server (model-resident, port \(port))" }
 
-    /// Maps an aural transcript format to a whisper.cpp server `response_format`.
+    /// Maps an hark transcript format to a whisper.cpp server `response_format`.
     static func responseFormat(for format: TranscriptOutputFormat) -> String {
         switch format {
         case .txt: return "text"

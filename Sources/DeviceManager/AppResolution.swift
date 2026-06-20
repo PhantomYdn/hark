@@ -11,7 +11,7 @@ public enum AppResolutionError: Error, CustomStringConvertible {
             return """
                 no capturable process matches '\(specifier)'. The application \
                 must be running and registered with the audio system; see \
-                'aural apps' for valid bundle IDs and PIDs.
+                'hark apps' for valid bundle IDs and PIDs.
                 """
         }
     }

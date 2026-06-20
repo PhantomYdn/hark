@@ -29,8 +29,8 @@ struct RemoteAddressTests {
 
 @Suite("Remote-control start request → command")
 struct StartRequestTests {
-    private func defaults(_ args: [String]) throws -> Aural {
-        try Aural.parse(["--remote-control", "8473"] + args)
+    private func defaults(_ args: [String]) throws -> Hark {
+        try Hark.parse(["--remote-control", "8473"] + args)
     }
 
     @Test func appliesOverridesAndClearsModalFlags() throws {
@@ -59,7 +59,7 @@ struct StartRequestTests {
 
     @Test func requiresAFileOutput() throws {
         // No output named, launch had none → 400-worthy usage error.
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try StartRequest().makeCommand(defaults: defaults([]))
         }
     }
@@ -67,7 +67,7 @@ struct StartRequestTests {
     @Test func rejectsStdoutOutput() throws {
         var body = StartRequest()
         body.transcript = "-"
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try body.makeCommand(defaults: defaults([]))
         }
     }
@@ -76,17 +76,17 @@ struct StartRequestTests {
         var body = StartRequest()
         body.transcript = "n.txt"
         body.speakerMode = "bogus"
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try body.makeCommand(defaults: defaults([]))
         }
     }
 
     @Test func runsCLIValidation() throws {
-        // --mix without a tap source is rejected by Aural.validate().
+        // --mix without a tap source is rejected by Hark.validate().
         var body = StartRequest()
         body.transcript = "n.txt"
         body.mix = true
-        #expect(throws: AuralError.self) {
+        #expect(throws: HarkError.self) {
             _ = try body.makeCommand(defaults: defaults([]))
         }
     }

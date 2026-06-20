@@ -1,4 +1,4 @@
-# Aural - Implementation Plan
+# Hark - Implementation Plan
 
 > Source: [PRD.md](PRD.md) (v1.0 MVP, 2026-06-12). Phases map to PRD §9 milestones.
 
@@ -7,15 +7,15 @@
 > Unscheduled items. Add new work here; `/plan` will triage on next run.
 
 - [ ] Interactive: always render the live transcript on screen (stdout) **and** concurrently persist it when `-t FILE` is named (bug fix to match PRD §6.9 line 396, which already specifies this). Today `-t FILE` routes the transcript only to the file, leaving the interactive UI without captions. Add an injectable screen-echo to `LiveTranscriber` (plain text per finalised segment, with speaker label when set), enabled from the live paths when `interactive && transcript→file`. Covers the plain, source-attributed (`--speakers`), and single-diarized live paths. Tests inject a pipe and assert file-writer + screen both receive segments.
-- [ ] `examples/` adoptable zsh recipes wrapping `aural` (copy-and-adapt, not installed): `aural-meeting "name"` (interactive `--system --mix --speakers` → `<date>-name.{mp3,txt}`, then `fabric-ai -p summarize_meeting` → `.md`), `aural-note` (quick mic memo → audio + transcript), `aural-dictate` (mic → clipboard via `pbcopy`). `examples/README.md` indexes them with prerequisites (aural, fabric-ai, system-audio TCC → docs/permissions.md); add a pointer from README.md.
+- [ ] `examples/` adoptable zsh recipes wrapping `hark` (copy-and-adapt, not installed): `hark-meeting "name"` (interactive `--system --mix --speakers` → `<date>-name.{mp3,txt}`, then `fabric-ai -p summarize_meeting` → `.md`), `hark-note` (quick mic memo → audio + transcript), `hark-dictate` (mic → clipboard via `pbcopy`). `examples/README.md` indexes them with prerequisites (hark, fabric-ai, system-audio TCC → docs/permissions.md); add a pointer from README.md.
 
 ## Phase 1: Project Foundation & Core Capture (PRD M1)
 
 - [x] Initialize git repository with `.gitignore` for Swift/SwiftPM
 - [x] Create SwiftPM package with modular targets: `DeviceManager`, `TapEngine`, `Encoders`, `CLI` (PRD §7 Maintainability)
 - [x] Add `swift-argument-parser` dependency and scaffold subcommand structure: `devices`, `apps`, `record`, `transcribe`, `convert`, `info` with `-h/--help` and `-v/--verbose`
-- [x] Implement `aural devices`: enumerate AudioDeviceIDs via CoreAudio (UID, name, channels, sample rates), exclude inactive devices, `--list-inputs`/`--list-outputs`
-- [x] Implement `aural apps`: list running applications capturable via process taps (name, bundle ID, PID)
+- [x] Implement `hark devices`: enumerate AudioDeviceIDs via CoreAudio (UID, name, channels, sample rates), exclude inactive devices, `--list-inputs`/`--list-outputs`
+- [x] Implement `hark apps`: list running applications capturable via process taps (name, bundle ID, PID)
 - [x] Add `--json` output mode to `devices` and `apps`; exit 0 with empty array when nothing found (US06)
 - [x] Implement mic recording to WAV: default input device fallback, `-d/--device`, `-r/--rate`, `-b/--bits`, `-c/--channels`, `-t/--duration` (US01)
 - [x] Implement SIGINT/SIGTERM handling: finalise WAV header so file remains playable (PRD §7 Reliability)
@@ -45,8 +45,8 @@
 - [x] Implement Ogg/Opus output (P1): native `kAudioFormatOpus` AudioConverter + hand-written `Encoders.OggMuxer` (page framing + Ogg CRC) and `OpusFileWriter` (zero external deps). Key fix: the input proc only reports 0 frames at finalize (a mid-stream 0 permanently flushes the encoder). Verified: aiff→opus mono/stereo (48 kHz and resampled) round-trips the full sentence; valid BOS/EOS Ogg/Opus pages
 - [x] Implement `--split duration=SEC`: sequential files (`name_001`, `name_002`, …) with correctly flushed headers (P1)
 - [x] Implement `--split silence=SEC` with configurable dBFS threshold (`--silence-threshold`, default −50); each chunk independently playable, no audio dropped (P2, US04)
-- [x] Implement `aural convert`: format conversion reusing CoreAudio codecs (PRD §6.1) — verified by lossless tone roundtrips (wav→m4a→wav, wav→flac→wav)
-- [x] Implement `aural info`: print duration, sample rate, channels, metadata; read support for WAV, AIFF, CAF, M4A, FLAC
+- [x] Implement `hark convert`: format conversion reusing CoreAudio codecs (PRD §6.1) — verified by lossless tone roundtrips (wav→m4a→wav, wav→flac→wav)
+- [x] Implement `hark info`: print duration, sample rate, channels, metadata; read support for WAV, AIFF, CAF, M4A, FLAC
 - [x] Implement metadata embedding: WAV INFO chunk (ICRD/ISFT/INAM) — MP4 atoms and ID3v2 deferred with their formats (P2)
 - [ ] Verify all output formats are accepted as-is by `whisper.cpp`, Fabric AI, and at least one cloud transcription API (PRD §6.4) — whisper.cpp ✓ (e2e-transcribe.sh: wav/m4a/flac all transcribed); Fabric AI + cloud API checks still need network/API keys
 
@@ -57,28 +57,28 @@
 > terminal, then run it; it PASS/FAILs each item below.
 
 - [ ] Re-grant TCC: Microphone for the terminal (System Settings → Privacy & Security → Microphone) and System Audio Recording (Screen & System Audio Recording → "+" → terminal, restart terminal)
-- [ ] `aural --duration 2 -a x.m4a` and `x.flac` — live encoded capture (afinfo check)
-- [ ] `aural --duration 5 --split duration=2 -a x.wav` — 3 chunks, each playable
+- [ ] `hark --duration 2 -a x.m4a` and `x.flac` — live encoded capture (afinfo check)
+- [ ] `hark --duration 5 --split duration=2 -a x.wav` — 3 chunks, each playable
 - [ ] Live `--split silence` smoke with real audio
 - [ ] Re-run `Scripts/e2e-app-isolation.sh` (should still pass)
-- [ ] `aural -a - --duration 10 | aural -i -` — the literal US03 mic pipeline
-- [ ] `aural -d <mic-UID> --duration 5 -t -` while speaking — live mic → transcript on stdout
-- [ ] `aural --duration 5 -a x.m4a -t x.srt` while speaking — combined record + transcribe in one pass
+- [ ] `hark -a - --duration 10 | hark -i -` — the literal US03 mic pipeline
+- [ ] `hark -d <mic-UID> --duration 5 -t -` while speaking — live mic → transcript on stdout
+- [ ] `hark --duration 5 -a x.m4a -t x.srt` while speaking — combined record + transcribe in one pass
 
 ## Phase 4: Transcription Pipeline (PRD M4)
 
-- [x] Implement `aural transcribe -i <file>`: batch transcription of an audio file (any readable format, normalized to 16 kHz mono internally)
+- [x] Implement `hark transcribe -i <file>`: batch transcription of an audio file (any readable format, normalized to 16 kHz mono internally)
 - [x] Implement `-i -` stdin mode: read raw audio from stdin (WAV-stream sniffing + raw PCM flags); staged via temp file internally (US03)
 - [x] Implement source input mode: record from device UID in memory, pipe to engine, output text to stdout — live mic check pending TCC re-grant
-- [x] Implement `--engine whisper` (default): invoke system-installed whisper binary (`whisper-cli`/`whisper-cpp` on PATH, `AURAL_WHISPER_BIN` override)
-- [x] Implement `--model`, `--language`, `--output-format txt|srt|json` flags (model fallback: `$AURAL_WHISPER_MODEL`) — note: `--output-format` renamed `--transcript-format` in the Phase 4.5 redesign
+- [x] Implement `--engine whisper` (default): invoke system-installed whisper binary (`whisper-cli`/`whisper-cpp` on PATH, `HARK_WHISPER_BIN` override)
+- [x] Implement `--model`, `--language`, `--output-format txt|srt|json` flags (model fallback: `$HARK_WHISPER_MODEL`) — note: `--output-format` renamed `--transcript-format` in the Phase 4.5 redesign
 - [x] Missing-engine UX: clear error with installation instructions (`brew install whisper-cpp`) (PRD §6.6); missing model gets a HuggingFace download line
 - [x] Pass engine STDERR through for debugging; propagate non-zero exit codes through pipelines (US03) — verified: whisper exit 3 propagated
 - [x] End-to-end test: pipe-to-transcript verified permission-free via Scripts/e2e-transcribe.sh (say-synthesized speech; WAV + raw-PCM pipes); the literal mic variant `record --stdout | transcribe -i -` is on the pending-live list
 
 ## Phase 4.5: Unified Root Verb — CLI Redesign (PRD §6.1, §6.6)
 
-> `aural` itself becomes the verb ("listen and transcribe"). One input (live by
+> `hark` itself becomes the verb ("listen and transcribe"). One input (live by
 > default, or `-i FILE/-`), outputs you name (`-a` audio, `-t` transcript, `-` =
 > stdout); naming none transcribes to stdout. The `record`, `transcribe`, and
 > `convert` subcommands are removed; `devices`/`apps`/`info` remain.
@@ -103,7 +103,7 @@
 - [x] `LiveTranscriber` (AudioSink): tee live PCM → segmenter → serial per-segment whisper worker → live append; engine/model resolved up front (fail fast); engine errors surfaced post-capture with exit-code mapping; broken-pipe = graceful
 - [x] `WhisperEngine.transcribe(quietStderr:)` so per-segment calls don't flood stderr (verbose keeps passthrough)
 - [x] Wire `LiveTranscriber` into `runLiveInput` (replaces batch-at-end; file-input transcription keeps whisper's native srt/json)
-- [x] **Persistent engine (model-resident):** `WhisperServerEngine` launches `whisper-server` once (model loaded a single time) and transcribes each segment over a loopback (127.0.0.1) HTTP POST to `/inference`; `SegmentTranscriber` protocol abstracts CLI vs server. Auto-selected when `whisper-server` is on PATH (override `AURAL_WHISPER_SERVER_BIN`); disable with `AURAL_WHISPER_SERVER=0`. Falls back to per-segment `whisper-cli` if the server is absent or fails to start — transcription is never blocked by the optimization. Free-port via bind-to-0; readiness via TCP-connect (model loaded once listening); server stdout/stderr suppressed unless verbose; terminated on finalize.
+- [x] **Persistent engine (model-resident):** `WhisperServerEngine` launches `whisper-server` once (model loaded a single time) and transcribes each segment over a loopback (127.0.0.1) HTTP POST to `/inference`; `SegmentTranscriber` protocol abstracts CLI vs server. Auto-selected when `whisper-server` is on PATH (override `HARK_WHISPER_SERVER_BIN`); disable with `HARK_WHISPER_SERVER=0`. Falls back to per-segment `whisper-cli` if the server is absent or fails to start — transcription is never blocked by the optimization. Free-port via bind-to-0; readiness via TCP-connect (model loaded once listening); server stdout/stderr suppressed unless verbose; terminated on finalize.
 - [x] Tests: `StreamSegmenter` boundaries/clock (5), `LiveTranscriptWriter` srt/json/txt (4), server discovery + free-port + multipart body (5), whisper-gated live integration (segmenter→whisper→writer) and server-loopback integration (both skip without engine/model). `make test` green — 97 tests, 27 suites
 - [ ] Live-capture e2e of the segmenter (real mic/system) — on the pending-live list; the live PATH can't be exercised permission-free through the binary (covered offline by the integration tests feeding PCM directly)
 
@@ -114,17 +114,17 @@
 
 ### Phase 6.0 — PRD & plan (docs first)
 
-- [x] PRD: FR rows 13–14, §6.1 flags + `aural models`, §6.6 engine matrix, §7 NFR, §9 M6, §4.2
+- [x] PRD: FR rows 13–14, §6.1 flags + `hark models`, §6.6 engine matrix, §7 NFR, §9 M6, §4.2
 - [x] docs/permissions.md: Speech Recognition section
 
 ### Phase 6.1 — Engine abstraction + multilingual `whisper` (no new deps)
 
 - [x] `TranscriptionBackend` protocol + `EngineCapabilities`/`EngineSpec` descriptor; batch (`TranscribeEngine`) and live (`LiveTranscriber`) both drive `WhisperCLIBackend`/`WhisperServerEngine` through it; live server-vs-CLI selection moved to `TranscriptionEngine.makeLive`
 - [x] `--language auto` default + `--language CODE`; `--translate` (whisper-cli `-tr`; server form field `translate=true` — note: whisper.cpp server uses `translate`, not `task`, verified against server.cpp); capability validation rejects unsupported combos (e.g. `--translate` on `apple`); `apple`/`whisperkit` are known-but-not-implemented (run-time exit 69), `cloud` post-MVP
-- [x] Named-model resolution via `ModelRegistry` (`base.en`/`large-v3-turbo` → `~/.aural/models/ggml-*.bin`, full paths pass through); warns when a `.en` model gets a non-English `--language`/`--translate`
-- [x] `aural models list` (+`--json`, current default marked `*`) / `aural models list --available` (downloadable catalog + installed/current) / `aural models download <name>` (ggml from HF `ggerganov/whisper.cpp`; only network path, opt-in; `--force` re-download; `--default` sets the config default, first download auto-adopts)
-- [x] Config file `~/.aural/config.json` (`Configuration` Codable, kebab-case keys) + `aural config show/set/unset/path` (typed validation; `set` captures `-`-prefixed values verbatim); `current`/`*` marker reflects env›config
-- [x] Config defaults for `model`/`engine`/`language`/`translate`/`silence-threshold`/`device`, each resolved flag › env (`$AURAL_*`) › config › built-in via `ResolvedSettings`; merged-value validation catches env/config-driven conflicts; `--no-translate` overrides a configured default; malformed env values are usage errors
+- [x] Named-model resolution via `ModelRegistry` (`base.en`/`large-v3-turbo` → `~/.hark/models/ggml-*.bin`, full paths pass through); warns when a `.en` model gets a non-English `--language`/`--translate`
+- [x] `hark models list` (+`--json`, current default marked `*`) / `hark models list --available` (downloadable catalog + installed/current) / `hark models download <name>` (ggml from HF `ggerganov/whisper.cpp`; only network path, opt-in; `--force` re-download; `--default` sets the config default, first download auto-adopts)
+- [x] Config file `~/.hark/config.json` (`Configuration` Codable, kebab-case keys) + `hark config show/set/unset/path` (typed validation; `set` captures `-`-prefixed values verbatim); `current`/`*` marker reflects env›config
+- [x] Config defaults for `model`/`engine`/`language`/`translate`/`silence-threshold`/`device`, each resolved flag › env (`$HARK_*`) › config › built-in via `ResolvedSettings`; merged-value validation catches env/config-driven conflicts; `--no-translate` overrides a configured default; malformed env values are usage errors
 - [x] Tests: arg building (auto/translate ordering), server multipart `translate`/`response_format`, capability/EngineSpec + resolve rejection, model name/path resolution + `.en` warning + `models list`; whisper-gated chain still green (118 tests, 29 suites)
 - [x] Help strings refreshed (`--engine`/`--language`/`--translate`/`--model`); PRD §6.1/§6.6 already specced in Phase 6.0; PLAN ticked. README usage examples deferred to Phase 5 (README is a Phase 5 deliverable)
 - [x] True multilingual e2e — gated Swift test: German `say` clip transcribed (de) and run through `--translate` via a local multilingual model; skips without a non-`.en` model / German voice. Verified with `large-v3-turbo` (note: turbo transcribes but does not translate, so the English-content assertion is gated to non-turbo models)
@@ -133,24 +133,24 @@
 
 - [x] `AppleSpeechBackend` via `SFSpeechURLRecognitionRequest` (`requiresOnDeviceRecognition`, no network); whole-file batch + per-segment live (resident recognizer). Backend resolution generalized: `TranscriptionEngine.preflight/makeBatch/makeLive` dispatch whisper vs apple; the `.en` warning moved into the whisper branch
 - [x] Speech authorization (prompt-if-undetermined via run-loop-pumped wait; denied → exit 77) + `NSSpeechRecognitionUsageDescription` in Info.plist; `Speech.framework` autolinks. docs/permissions.md already covers terminal-attributed TCC
-- [x] Locale mapping (`de`→`de-DE`, `auto`→current via `supportedLocales()`); `--translate` rejected (capability); batch srt/json rejected (plain-text only), live srt/json still works via Aural's segment timestamps; on-device-unavailable → actionable error
-- [x] Tests: locale mapping + capability/format guards (pure); gated on-device integration (skips unless Speech authorized + `say`). `make test` green — 155 tests, 34 suites. Verified live: `aural -i clip --engine apple` transcribes on-device, srt batch rejected, `$AURAL_ENGINE=apple` selects it
+- [x] Locale mapping (`de`→`de-DE`, `auto`→current via `supportedLocales()`); `--translate` rejected (capability); batch srt/json rejected (plain-text only), live srt/json still works via Hark's segment timestamps; on-device-unavailable → actionable error
+- [x] Tests: locale mapping + capability/format guards (pure); gated on-device integration (skips unless Speech authorized + `say`). `make test` green — 155 tests, 34 suites. Verified live: `hark -i clip --engine apple` transcribes on-device, srt batch rejected, `$HARK_ENGINE=apple` selects it
 - [x] `EngineSpec` apple → implemented; `--engine` help updated; PRD §6.6 apple notes; PLAN ticked
 
 ### Phase 6.3 — `whisperkit` engine (SwiftPM dep)
 
-- [x] Add `argmaxinc/argmax-oss-swift` (product `WhisperKit`, always-on dep); `WhisperKitBackend` loads the model once (resident) into `~/.aural/models/whisperkit`; shared async→sync bridge (`RunLoopBridge`) + `UncheckedSendableBox`
-- [x] `DecodingOptions(task:language:detectLanguage:skipSpecialTokens:)`; srt/json from `TranscriptionResult.segments`; residual special tokens stripped; `aural models list` shows the WhisperKit cache
+- [x] Add `argmaxinc/argmax-oss-swift` (product `WhisperKit`, always-on dep); `WhisperKitBackend` loads the model once (resident) into `~/.hark/models/whisperkit`; shared async→sync bridge (`RunLoopBridge`) + `UncheckedSendableBox`
+- [x] `DecodingOptions(task:language:detectLanguage:skipSpecialTokens:)`; srt/json from `TranscriptionResult.segments`; residual special tokens stripped; `hark models list` shows the WhisperKit cache
 - [x] Arch gate: clear error on Intel (`Platform.requireAppleSilicon`); whisper/apple unaffected; dispatch generalized in `preflight/makeBatch/makeLive`
-- [x] Tests: languageCode/clean + TranscriptFormatting + coreMLModels (pure); env-gated integration (`AURAL_TEST_WHISPERKIT=1`). Verified live: `aural -i clip --engine whisperkit --model tiny` transcribes on-device, srt/json clean
+- [x] Tests: languageCode/clean + TranscriptFormatting + coreMLModels (pure); env-gated integration (`HARK_TEST_WHISPERKIT=1`). Verified live: `hark -i clip --engine whisperkit --model tiny` transcribes on-device, srt/json clean
 
 ### Phase 6.4 — `parakeet` engine (FluidAudio CoreML)
 
 - [x] NVIDIA Parakeet via `FluidInference/FluidAudio` (CoreML/ANE); `ParakeetBackend` loads models once (resident actor), `AsrManager.transcribe(url, decoderState:)`
 - [x] European-multilingual (v3, 25 languages) + English-only (v2 via `--model v2`); autoDetect, no `--language` selection (warned/ignored), `--translate` rejected (capability)
-- [x] srt/json built from `ASRResult.tokenTimings` (grouped into cues); arch gate (Apple-Silicon-only); FluidAudio manages its own cache (`~/Library/Application Support/FluidAudio/Models` — it ignores a custom dir when models already exist), which `aural models list` reads and shows
-- [x] Tests: version mapping + language notice + token-timing→cues (pure); EngineSpec; env-gated integration (`AURAL_TEST_PARAKEET=1`). `make test` green — 171 tests, 41 suites. Verified live: `aural -i clip --engine parakeet` transcribes on-device, srt cues, --translate rejected, models list shows the cache
-- [x] Engine-tagged model management for the CoreML engines: `ModelCatalog` parses `whisperkit:<variant>` / `parakeet:v2|v3` (bare = whisper ggml); `aural models list --available` gains an ENGINE column covering all engines; `aural models download <name>` dispatches per engine (whisper ggml / `WhisperKit.download` / `AsrModels.download`), with `--default` also setting `config.engine` for whisperkit/parakeet. Verified live: `download whisperkit:base`, `download parakeet:v3 --default`. 177 tests, 42 suites
+- [x] srt/json built from `ASRResult.tokenTimings` (grouped into cues); arch gate (Apple-Silicon-only); FluidAudio manages its own cache (`~/Library/Application Support/FluidAudio/Models` — it ignores a custom dir when models already exist), which `hark models list` reads and shows
+- [x] Tests: version mapping + language notice + token-timing→cues (pure); EngineSpec; env-gated integration (`HARK_TEST_PARAKEET=1`). `make test` green — 171 tests, 41 suites. Verified live: `hark -i clip --engine parakeet` transcribes on-device, srt cues, --translate rejected, models list shows the cache
+- [x] Engine-tagged model management for the CoreML engines: `ModelCatalog` parses `whisperkit:<variant>` / `parakeet:v2|v3` (bare = whisper ggml); `hark models list --available` gains an ENGINE column covering all engines; `hark models download <name>` dispatches per engine (whisper ggml / `WhisperKit.download` / `AsrModels.download`), with `--default` also setting `config.engine` for whisperkit/parakeet. Verified live: `download whisperkit:base`, `download parakeet:v3 --default`. 177 tests, 42 suites
 
 ## Phase 5: Release Engineering & Public Beta (PRD M5)
 
@@ -159,12 +159,12 @@
 > dependencies (binary size / arch).
 
 - [x] Set up GitHub Actions CI: build + test on a macOS 14 (Apple-Silicon) runner with the Swift 6 toolchain (`.github/workflows/ci.yml`); gated integration tests skip without their tools so the suite stays green
-- [x] Write man page following POSIX utility conventions (`man/aural.1`; renders clean under mandoc)
+- [x] Write man page following POSIX utility conventions (`man/hark.1`; renders clean under mandoc)
 - [x] Write README: install, TCC permission setup, usage examples, engines, config/env precedence, exit codes (`README.md`)
 - [x] Add `LICENSE` (MIT) and expand `NOTICES` with the statically-linked SwiftPM deps (Apache-2.0/MIT) alongside the vendored LGPL LAME; `CHANGELOG.md` for v0.1.0
-- [x] Provide example scripts: `examples/aural-meeting` (interactive system+mic → audio + transcript → fabric-ai summary), `aural-note`, `aural-dictate` (cron/launchd recipe deferred to the daemon work — see Future)
-- [x] Release automation: tag-triggered `.github/workflows/release.yml` builds `swift build -c release`, packages the arm64 binary + man/LICENSE/NOTICES, publishes a GitHub Release, and auto-bumps `Formula/aural.rb` (url+sha256)
-- [x] Homebrew (one-repo tap): `Formula/aural.rb` binary formula (`depends_on whisper-cpp`, arm64); `brew tap PhantomYdn/aural <url> && brew install aural`. Bare `brew install aural` (homebrew-core) deferred — needs notability + a stable release
+- [x] Provide example scripts: `examples/hark-meeting` (interactive system+mic → audio + transcript → fabric-ai summary), `hark-note`, `hark-dictate` (cron/launchd recipe deferred to the daemon work — see Future)
+- [x] Release automation: tag-triggered `.github/workflows/release.yml` builds `swift build -c release`, packages the arm64 binary + man/LICENSE/NOTICES, publishes a GitHub Release, and auto-bumps `Formula/hark.rb` (url+sha256)
+- [x] Homebrew (one-repo tap): `Formula/hark.rb` binary formula (`depends_on whisper-cpp`, arm64); `brew tap PhantomYdn/hark <url> && brew install hark`. Bare `brew install hark` (homebrew-core) deferred — needs notability + a stable release
 - [x] Fill PRD Author field (Ilya Naryzhnyy); acceptance criteria US01–US07 reviewed against the implementation (capture/transcode/engines/diarization/interactive/remote-control all shipped; live-capture e2e steps remain TCC/GUI-gated on the pending-live list)
 
 ### Post-beta (deferred from v0.1.0)
@@ -173,14 +173,14 @@
 > that CI can't provide. Tracked here so the beta isn't blocked on them.
 
 - [ ] Code signing and notarization so direct-download (non-Homebrew) TCC flows work cleanly without `xattr` (PRD §7 Installability) — needs a Developer ID + notary key as CI secrets
-- [ ] Submit to homebrew-core for bare `brew install aural` (after notability + a stable, non-beta release)
+- [ ] Submit to homebrew-core for bare `brew install hark` (after notability + a stable, non-beta release)
 - [ ] Validate unattended operation from cron/launchd after TCC grant (US05)
 - [ ] Reliability test: 24-hour continuous recording produces valid file on SIGINT/SIGTERM (PRD §7)
 - [ ] Performance validation: < 3% CPU on Apple Silicon at 16 kHz mono; buffering < 100 ms (PRD §7)
 
 ## Phase 7: Hybrid system capture (ScreenCaptureKit + Core Audio)
 
-> Bug: `aural --system --mix` only captured the mic while system audio was
+> Bug: `hark --system --mix` only captured the mic while system audio was
 > playing — the Core Audio aggregate is clocked by the process tap, which idles
 > when nothing plays, so the IOProc (and the mic sub-device) stop. Fix +
 > modernize with a dual-backend design. Default engine/capture behavior is
@@ -190,9 +190,9 @@
 - [x] Step 1 — Core Audio tap fix (Option A): make the **microphone the aggregate's clock master** for `--mix` (was the tap), pin nominal rate to max(tap, mic); continuous mic capture regardless of system activity, headless-safe. This alone fixes the reported bug (commit `d42aba5`)
 - [x] Step 2 — `ScreenCaptureSession` (`@available(macOS 15)`): `SCStream` system/app audio via `SCContentFilter` (system/`--app`/`--exclude-app`), `.audio` → `CMSampleBuffer` → `PCMStreamConverter`; Screen Recording permission helper; reachable via `--capture-backend sckit` (commit `f9d5c37`)
 - [x] Step 3 — SCKit integrated mic + `--mix`: `captureMicrophone`/`microphoneCaptureDeviceID` + `.microphone` output; app-level mixer (`StreamMixing.sum`) summing synchronized system+mic (commit `f9d5c37`)
-- [x] Step 4 — `--capture-backend auto|sckit|coreaudio` (+ `$AURAL_CAPTURE`); auto prefers SCKit when (macOS 15 ∧ Screen Recording ∧ display present, via `ScreenCaptureSession.isAvailable()` — preflight, never prompts) else notify + fall back to Core Audio (commit `f9d5c37`). Note: selection is preflight-based; a runtime SCKit start failure after auto-selecting it surfaces an error rather than retrying Core Audio (rare grant-but-no-GUI case) — deferred
-- [~] Step 5 — docs/tests: [x] README/man (`--capture-backend`, both permissions, `$AURAL_CAPTURE`, headless note); [x] unit tests (`StreamMixingTests`, CLI backend resolution/validation); [x] `Scripts/verify-live.sh` step [6] covers both backends (sckit perm/headless → SKIP). Pending (needs Screen Recording grant + GUI): [ ] sckit end-to-end audio live test; [ ] re-run the 60-min mic/system drift validation for both `--mix` paths
-- [x] `aural apps` stays HAL-based (headless-friendly); the SCKit backend maps bundle id/PID → `SCRunningApplication` internally (`ScreenCaptureSession.match`)
+- [x] Step 4 — `--capture-backend auto|sckit|coreaudio` (+ `$HARK_CAPTURE`); auto prefers SCKit when (macOS 15 ∧ Screen Recording ∧ display present, via `ScreenCaptureSession.isAvailable()` — preflight, never prompts) else notify + fall back to Core Audio (commit `f9d5c37`). Note: selection is preflight-based; a runtime SCKit start failure after auto-selecting it surfaces an error rather than retrying Core Audio (rare grant-but-no-GUI case) — deferred
+- [~] Step 5 — docs/tests: [x] README/man (`--capture-backend`, both permissions, `$HARK_CAPTURE`, headless note); [x] unit tests (`StreamMixingTests`, CLI backend resolution/validation); [x] `Scripts/verify-live.sh` step [6] covers both backends (sckit perm/headless → SKIP). Pending (needs Screen Recording grant + GUI): [ ] sckit end-to-end audio live test; [ ] re-run the 60-min mic/system drift validation for both `--mix` paths
+- [x] `hark apps` stays HAL-based (headless-friendly); the SCKit backend maps bundle id/PID → `SCRunningApplication` internally (`ScreenCaptureSession.match`)
 
 ## Phase 8: Speaker Recognition & Runtime Segmentation (PRD M7, §6.7)
 
@@ -208,7 +208,7 @@
 ### Phase 8.0 — Spec & docs (in progress; scope still being refined)
 
 - [ ] PRD §6.7 + supporting edits drafted (FR rows 15–19, §4.2, US08, §6.1 flags, §6.6 VAD note, §7, §8, §9 M7, §10 Open Qs) — **under active review, not finalized**
-- [x] PRD §6.7/§7 reconciled to the implemented VAD behavior (default-on on Apple Silicon, Silero model fetched on first live run, opt-out `AURAL_VAD=0`, amplitude fallback)
+- [x] PRD §6.7/§7 reconciled to the implemented VAD behavior (default-on on Apple Silicon, Silero model fetched on first live run, opt-out `HARK_VAD=0`, amplitude fallback)
 - [ ] PRD §6.1 reconciliation: `--speakers` flag + `--speaker-mode` (vs the drafted `--speakers[=mode]`)
 - [ ] docs/permissions.md: diarization/VAD need **no new TCC** (operate on already-captured audio) but fetch FluidAudio CoreML models from Hugging Face on first use
 - [ ] README/man deferred to 8.7 (kept with the feature's other user-facing docs)
@@ -218,17 +218,17 @@
 - [x] `SpeechSegmenter` protocol so the amplitude boundary can be swapped; `StreamSegmenter` conforms (`SpeechSegmenter`/`VadSegmenter` in `VadSegmenter.swift`)
 - [x] `VadSegmenter`: single consumer `Task` over an unbounded `AsyncStream`; unpack→mono→resample(16k)→4096-sample windows→full streaming state machine (`speechStart`/`speechEnd`), maxWindow/minSegment/leading-trim; sample-accurate byte-clock timestamps
 - [x] `VoiceActivityStream` abstraction + `FluidVadClassifier` (FluidAudio `VadManager.processStreamingChunk`, model loaded once)
-- [x] `SpeechSegmenterFactory`: VAD by default on Apple Silicon (first-run download), graceful fallback to the amplitude method on Intel / load failure; `AURAL_VAD=0` to force-disable; `--silence-threshold` stays the fallback knob
+- [x] `SpeechSegmenterFactory`: VAD by default on Apple Silicon (first-run download), graceful fallback to the amplitude method on Intel / load failure; `HARK_VAD=0` to force-disable; `--silence-threshold` stays the fallback knob
 - [x] Wired into `LiveTranscriber` behind the abstraction (`LiveTranscriber.swift:51`)
-- [x] Tests: `VadSegmenterTests` (synthetic `ScriptedVAD` — boundary/clock/max/min/trailing-flush) + gated `AURAL_TEST_VAD=1` real-model integration; existing live e2e pinned to `AURAL_VAD=0`
+- [x] Tests: `VadSegmenterTests` (synthetic `ScriptedVAD` — boundary/clock/max/min/trailing-flush) + gated `HARK_TEST_VAD=1` real-model integration; existing live e2e pinned to `HARK_VAD=0`
 - [ ] Live-capture e2e of the VAD segmenter (real mic/system) — on the pending-live list (covered offline by the synthetic + gated tests)
-- [x] **Quiet-audio hardening** (diagnosed from `Tests/ManualTests/test3.mp3`, where a quiet phrase peaking ~−45 dBFS was dropped at the VAD gate): lowered the default VAD threshold 0.85→0.5, added `--vad-threshold 0..1`, and per-segment peak normalization (`GainNormalizer`, +20 dB cap, target −3 dBFS) before the engine — recording untouched, `AURAL_GAIN=off` to disable. Gated test replays the recording and confirms the quiet region now segments at 0.5
+- [x] **Quiet-audio hardening** (diagnosed from `Tests/ManualTests/test3.mp3`, where a quiet phrase peaking ~−45 dBFS was dropped at the VAD gate): lowered the default VAD threshold 0.85→0.5, added `--vad-threshold 0..1`, and per-segment peak normalization (`GainNormalizer`, +20 dB cap, target −3 dBFS) before the engine — recording untouched, `HARK_GAIN=off` to disable. Gated test replays the recording and confirms the quiet region now segments at 0.5
 
 ### Phase 8.2 — Speaker label data model + output formats
 
 - [x] Added optional `speaker` to `TranscriptCue` (`EngineSupport.swift`) and the live/batch JSON `Segment` structs (`LiveTranscriptWriter.jsonLine`, `TranscriptFormatting.render`) — nil omits the key (encodeIfPresent), so default output is byte-identical
 - [x] Render labels: txt `You: …`/`Speaker 1: …`; srt `[Speaker 1] text` (valid SRT); json `"speaker"` field — in both `TranscriptFormatting.render` and `LiveTranscriptWriter.append`
-- [x] Added `--speakers` (alias `--diarize`) + `--speaker-mode auto|source|acoustic` + `--speaker-labels "You,Others"` to `Aural.swift`; validation (mode/labels require `--speakers`; `source` needs two sources; labels must be a pair). Note: implemented as a `--flag` + `--speaker-mode` rather than `--speakers[=mode]` (ArgumentParser has no optional-value options); PRD §6.1 to be reconciled in 8.0
+- [x] Added `--speakers` (alias `--diarize`) + `--speaker-mode auto|source|acoustic` + `--speaker-labels "You,Others"` to `Hark.swift`; validation (mode/labels require `--speakers`; `source` needs two sources; labels must be a pair). Note: implemented as a `--flag` + `--speaker-mode` rather than `--speakers[=mode]` (ArgumentParser has no optional-value options); PRD §6.1 to be reconciled in 8.0
 - [x] No output change unless `--speakers` is set; with the label backends pending, `--speakers` surfaces a clear "planned — Phase 8.3/8.4" runtime error (exit 69)
 - [x] Tests: label rendering for all three formats incl. missing speaker (default unchanged) + flag accept/reject combos
 
@@ -250,7 +250,7 @@
 - [x] First-use model download into FluidAudio's cache (RunLoopBridge pattern, like `ParakeetBackend`)
 - [x] `--speaker-threshold 0..1` clustering-sensitivity knob (→ `DiarizerConfig.clusteringThreshold`); verified it splits a hard pair that merges at the default
 - [x] **Streaming (live) diarization** — implemented via per-segment **embedding clustering** (`extractSpeakerEmbedding` + `SpeakerManager.assignSpeaker`), not LS-EEND: simpler, reuses the VAD segmentation. `StreamingDiarizer` + `ClusteringSpeakerResolver` assign `Speaker N` per live segment; `LiveTranscriber` gained an optional per-segment resolver
-- [x] Tests: `SpeakerLabeling.normalize` + `SpeakerNumbering` (pure), `BatchDiarization.merge` ordering, resolver-overrides-fixed-label, catalog parse, env-gated integration (`AURAL_TEST_DIARIZE=1`)
+- [x] Tests: `SpeakerLabeling.normalize` + `SpeakerNumbering` (pure), `BatchDiarization.merge` ordering, resolver-overrides-fixed-label, catalog parse, env-gated integration (`HARK_TEST_DIARIZE=1`)
 
 ### Phase 8.5 — Combined source-split + per-source diarization
 
@@ -265,19 +265,19 @@
 
 ### Phase 8.6 — Model management & config
 
-- [x] `ModelCatalog` parses/lists `fluidaudio:diarizer` / `fluidaudio:vad`; `aural models download` dispatches to FluidAudio loaders (`SpeakerDiarizer.download` / `FluidVadClassifier.downloadModel`); never adopted as the transcription default; `list --available` shows them ("speaker pipeline")
-- [x] `aural models list` (local) shows the FluidAudio cache correctly: `FluidAudioCache.engine(forBundle:)` classifies each bundle (`*parakeet*` → parakeet; `silero-vad`/`speaker-diarization` → fluidaudio), and `coreMLModels` flags the configured CoreML default as `current` (so `parakeet-tdt-0.6b-v3` gets `*`); a no-default hint prints when nothing resolves
+- [x] `ModelCatalog` parses/lists `fluidaudio:diarizer` / `fluidaudio:vad`; `hark models download` dispatches to FluidAudio loaders (`SpeakerDiarizer.download` / `FluidVadClassifier.downloadModel`); never adopted as the transcription default; `list --available` shows them ("speaker pipeline")
+- [x] `hark models list` (local) shows the FluidAudio cache correctly: `FluidAudioCache.engine(forBundle:)` classifies each bundle (`*parakeet*` → parakeet; `silero-vad`/`speaker-diarization` → fluidaudio), and `coreMLModels` flags the configured CoreML default as `current` (so `parakeet-tdt-0.6b-v3` gets `*`); a no-default hint prints when nothing resolves
 - [x] **Model-load UX fix:** VAD loads once per process (shared static `VadManager`, shared across the two source-attribution streams; per-stream state); cached loads are silent (`Log.verbose`), with a one-time `downloading … (first use)` notice only on a real fetch — replacing the misleading per-run "preparing … (first run may download)" notice. (FluidAudio's own INFO logging is DEBUG-only; release stderr is clean.)
-- [x] **Config parity + `config show` redesign** (declarative settings registry): every meaningful parameter is now flag↔`$AURAL_*`↔config with `ResolvedSettings` precedence (flag › env › config › default). New config keys: `capture-backend`, `rate`/`bits`/`channels`, `vad`, `vad-threshold`, `gain`, `speakers`, `speaker-mode`, `speaker-labels`, `diarize-engine`, `max-speakers`, `speaker-threshold`. Bool flags are now three-state (`--vad/--no-vad`, `--gain/--no-gain`, `--speakers/--no-speakers`) so config can supply a default. `aural config show` lists **all** settings with VALUE + SOURCE (`default`/`config`/`env`); `--json` → `{key:{value,source}}`. `Setting`/`TypedSetting` registry (`Settings.swift`) drives show/set/unset/resolve from one descriptor per key
+- [x] **Config parity + `config show` redesign** (declarative settings registry): every meaningful parameter is now flag↔`$HARK_*`↔config with `ResolvedSettings` precedence (flag › env › config › default). New config keys: `capture-backend`, `rate`/`bits`/`channels`, `vad`, `vad-threshold`, `gain`, `speakers`, `speaker-mode`, `speaker-labels`, `diarize-engine`, `max-speakers`, `speaker-threshold`. Bool flags are now three-state (`--vad/--no-vad`, `--gain/--no-gain`, `--speakers/--no-speakers`) so config can supply a default. `hark config show` lists **all** settings with VALUE + SOURCE (`default`/`config`/`env`); `--json` → `{key:{value,source}}`. `Setting`/`TypedSetting` registry (`Settings.swift`) drives show/set/unset/resolve from one descriptor per key
 - [x] **`config show` DESCRIPTION column**: each setting carries a one-sentence `summary` in the registry; `config show` renders it as a fourth column and `--json` gains a `description` field per key
 - [x] Tests: catalog parse (`fluidaudio:` tags + `available()` coverage)
-- [x] Leaf-subcommand `--help`: the broad symptom was a zsh test artifact (an unquoted `$var` holding `"models list"` is passed as one argument, so aural shows root help) — `aural models list --help` etc. work directly (also helped by the argument-parser 1.8.2 bump). The one real case, `aural config set --help`, was swallowed by `.captureForPassthrough` (used for `-40` values); fixed via `ConfigSet.isHelpRequest` → `CleanExit.helpRequest`. Stale man BUGS note removed.
+- [x] Leaf-subcommand `--help`: the broad symptom was a zsh test artifact (an unquoted `$var` holding `"models list"` is passed as one argument, so hark shows root help) — `hark models list --help` etc. work directly (also helped by the argument-parser 1.8.2 bump). The one real case, `hark config set --help`, was swallowed by `.captureForPassthrough` (used for `-40` values); fixed via `ConfigSet.isHelpRequest` → `CleanExit.helpRequest`. Stale man BUGS note removed.
 
 ### Phase 8.7 — Validation & user-facing docs
 
 - [ ] NFR: live label latency (tentative ≤1s, final ≤2s), streaming RTF<1 on Apple Silicon (PRD §7)
 - [ ] Diarization DER on a reference clip set; segmentation-stability check (fewer spurious cuts than the amplitude method) — PRD §8
-- [x] Docs: README "Speaker labels" section (flags table + examples + caveats) + `fluidaudio:` model rows + `AURAL_VAD`; man `SPEAKER LABELING` section + `AURAL_VAD` + examples (mandoc clean); docs/permissions.md diarization/VAD note (no new TCC, first-use model fetch); corrected the stale `--speakers`/`--diarize-engine` `--help` strings (no longer say "planned")
+- [x] Docs: README "Speaker labels" section (flags table + examples + caveats) + `fluidaudio:` model rows + `HARK_VAD`; man `SPEAKER LABELING` section + `HARK_VAD` + examples (mandoc clean); docs/permissions.md diarization/VAD note (no new TCC, first-use model fetch); corrected the stale `--speakers`/`--diarize-engine` `--help` strings (no longer say "planned")
 - [ ] `Scripts/verify-live.sh`: add a gated `--system --mix --speakers` smoke step (perms/arch → SKIP)
 
 ### Phase 8.8 — Streaming diarization upgrade (LS-EEND, replacing per-segment clustering)
@@ -297,8 +297,8 @@
 - [x] Retire the legacy live `StreamingDiarizer` + `ClusteringSpeakerResolver` (clustering stays for offline/batch); `--speaker-threshold`/`--max-speakers` are now offline/batch-only (no clustering knob in EEND)
 - [x] Model plumbing: LS-EEND bundle in `FluidAudioCache`, `fluidaudio:streaming-diarizer` in `ModelCatalog`, download branch in `ModelDownloader`
 - [x] **Variant selection** (`callhome` default): ranked LS-EEND variants on real recordings + `say`-synthesized ground truth. `callhome` (2-party single-channel telephone corpus — closest to a call mixed into one system stream) was the only variant correct on both a real 2-party conversation (2) and a real multi-party meeting (3), and perfect on synthetic 1- and 2-speaker cases; `ami` collapsed the 2-party case, `dihard3` under-split the meeting
-- [x] Fixed broken-pipe on exit: `LiveTranscriptWriter.append` wrapped EPIPE in `AuralError`, defeating `isBrokenPipe`; now propagated raw so transcript-to-stdout `Ctrl+C` is graceful (no spurious "transcript write failed")
-- [x] Gated `say` ground-truth test (`SayDiarizationTests`, `AURAL_TEST_DIARIZE=1`): single speaker stays one, two distinct voices separate with a stable 1:1 mapping — validates the zero-config default end-to-end (minus TCC capture)
+- [x] Fixed broken-pipe on exit: `LiveTranscriptWriter.append` wrapped EPIPE in `HarkError`, defeating `isBrokenPipe`; now propagated raw so transcript-to-stdout `Ctrl+C` is graceful (no spurious "transcript write failed")
+- [x] Gated `say` ground-truth test (`SayDiarizationTests`, `HARK_TEST_DIARIZE=1`): single speaker stays one, two distinct voices separate with a stable 1:1 mapping — validates the zero-config default end-to-end (minus TCC capture)
 - [ ] Real-call e2e (TCC capture front-end) remains on the pending-live list; streaming RTF measured ≪ 1 (≈0.01) via the harness
 
 ## Phase 9: Working directory for artifacts (PRD Feature 20 / §6.1)
@@ -306,12 +306,12 @@
 > A git-`-C`-style base directory for resolving **relative** artifact paths,
 > defaulting to the process CWD. Foundation for headless/remote operation.
 
-- [x] Add the `directory` config setting: registry entry (`Configuration`/`Settings`) with a `config show` summary/DESCRIPTION; env var `$AURAL_DIRECTORY`; `ResolvedSettings` precedence flag › env › config › CWD
+- [x] Add the `directory` config setting: registry entry (`Configuration`/`Settings`) with a `config show` summary/DESCRIPTION; env var `$HARK_DIRECTORY`; `ResolvedSettings` precedence flag › env › config › CWD
 - [x] Add the `--directory`/`-C PATH` root option (ArgumentParser); validate the path is an existing directory (usage error otherwise; never auto-create) — `ResolvedSettings.applyWorkingDirectory`
-- [x] Resolve **relative** root-verb artifact paths against the working directory — `-i`, `-a`, `-t`, and `--split` outputs — leaving absolute paths, `-` (stdin/stdout), and Aural's own state (`~/.aural/…` config + models) untouched. Subcommand positionals (e.g. `info <file>`) keep using the process CWD for now
-- [x] Add the precedence-table row to `config show` + PRD §6.1 precedence table (working directory → `--directory`/`-C` › `$AURAL_DIRECTORY` › `directory` › CWD)
+- [x] Resolve **relative** root-verb artifact paths against the working directory — `-i`, `-a`, `-t`, and `--split` outputs — leaving absolute paths, `-` (stdin/stdout), and Hark's own state (`~/.hark/…` config + models) untouched. Subcommand positionals (e.g. `info <file>`) keep using the process CWD for now
+- [x] Add the precedence-table row to `config show` + PRD §6.1 precedence table (working directory → `--directory`/`-C` › `$HARK_DIRECTORY` › `directory` › CWD)
 - [x] Tests: precedence resolution (flag/env/config/default); missing-directory usage error (`ResolvedSettingsTests.directoryResolves…`/`applyWorkingDirectoryValidatesExistence`)
-- [x] Docs: README (`-C/--directory`, `$AURAL_DIRECTORY`, config key `directory`) + man (`--directory`, `AURAL_DIRECTORY`); noted as the remote-control foundation (done alongside Phase 10.4)
+- [x] Docs: README (`-C/--directory`, `$HARK_DIRECTORY`, config key `directory`) + man (`--directory`, `HARK_DIRECTORY`); noted as the remote-control foundation (done alongside Phase 10.4)
 
 ## Phase 10: Status, Interactive & Remote Control (PRD M8, §6.8–§6.10)
 
@@ -334,7 +334,7 @@
 
 ### Phase 10.1 — Startup status summary (§6.8)
 
-- [x] `StartupStatus` renderer (`StartupStatus.swift`): concise block from `ResolvedSettings` + resolved source/outputs (engine, model, language/translate, source + capture backend, format rate/bits/channels, output destinations, speaker mode, VAD, duration/split) via `Aural.liveStatusText`
+- [x] `StartupStatus` renderer (`StartupStatus.swift`): concise block from `ResolvedSettings` + resolved source/outputs (engine, model, language/translate, source + capture backend, format rate/bits/channels, output destinations, speaker mode, VAD, duration/split) via `Hark.liveStatusText`
 - [x] Visibility gating: `StartupStatus.shouldShow` shows on stderr when `isatty(STDERR_FILENO)`, always with `-v`, suppressed when stderr is redirected; written via stderr only (never stdout)
 - [x] Wire into `runLiveInput` before capture starts (after `makeCapture`); existing `Log.verbose("source: …")` lines kept
 - [x] Tests: field rendering (present/omitted) + gating decision (`StartupStatusTests`)
@@ -352,10 +352,10 @@
 ### Phase 10.3 — Remote-control agent (§6.10)
 
 - [x] `--remote-control [host:]port` flag (`RemoteControlAgent`): parse `[host:]port`, loopback default (conventional port 8473); modal (starts agent, no immediate capture); launch capture flags become per-session defaults; mutually exclusive with `--interactive`/`-i`
-- [x] FlyingFox HTTP server bound to the resolved IPv4 address; loopback default; refuse non-loopback bind without `$AURAL_REMOTE_TOKEN`; bearer-token check per request when a token is configured; prints bound address to stderr; graceful SIGINT/SIGTERM shutdown
-- [x] `RemoteSessionManager` (single active session): `POST /start` while one is active → `409 Conflict`; control verbs act on the current session; capture driven via the 10.2 `CaptureControl`; outputs resolved under the working directory; full parity (`StartRequest.makeCommand` = launch defaults + overrides → same `Aural.executeLive` pipeline, incl. `--speakers`)
+- [x] FlyingFox HTTP server bound to the resolved IPv4 address; loopback default; refuse non-loopback bind without `$HARK_REMOTE_TOKEN`; bearer-token check per request when a token is configured; prints bound address to stderr; graceful SIGINT/SIGTERM shutdown
+- [x] `RemoteSessionManager` (single active session): `POST /start` while one is active → `409 Conflict`; control verbs act on the current session; capture driven via the 10.2 `CaptureControl`; outputs resolved under the working directory; full parity (`StartRequest.makeCommand` = launch defaults + overrides → same `Hark.executeLive` pipeline, incl. `--speakers`)
 - [x] Endpoints (flat, control + status only — never serve file content): `GET /status` (state/elapsed/output paths); `POST /start` (JSON body mirrors CLI flags/outputs over launch defaults, e.g. `{"transcript":"notes.txt","audio":"rec.m4a","system":true}`) → `{id,state,audio,transcript}`; `POST /stop`; `POST /pause`; `POST /resume`
-- [x] Error mapping: AuralError/exit codes → HTTP status (permission→403, bad params→400, engine/model missing→404/422, busy→409, transcription→422) with JSON `{error}`
+- [x] Error mapping: HarkError/exit codes → HTTP status (permission→403, bad params→400, engine/model missing→404/422, busy→409, transcription→422) with JSON `{error}`
 - [x] Tests: address+token parsing, `StartRequest.makeCommand` overrides/validation, single-session 409 + lifecycle (`RemoteSessionManager`), exit-code→HTTP mapping (`RemoteControlTests`); verified live via curl (status/start/pause/resume/stop, 401/403/409/400/404, real mic capture)
 - [ ] Live-capture e2e of agent-driven start/stop with system audio + speakers (real meeting) — on the pending-live list
 
@@ -363,7 +363,7 @@
 
 - [x] `docs/remote-control.md`: HTTP API reference (endpoints, JSON shapes, status codes, token/auth, loopback default, single-session rule, control-only scope)
 - [x] Tampermonkey Google-Meet reference userscript (in `docs/remote-control.md`): detects call join/leave on `meet.google.com`, `GM_xmlhttpRequest` to the loopback agent (`POST /start` on join with a filename from meeting title + date, `POST /stop` on leave/unload)
-- [x] README "Interactive mode" + "Remote control" sections + `-C/--directory` + `directory` config row; man page `--interactive`/`--remote-control`/`--directory` + `AURAL_DIRECTORY`/`AURAL_REMOTE_TOKEN` + examples (mandoc lint clean)
+- [x] README "Interactive mode" + "Remote control" sections + `-C/--directory` + `directory` config row; man page `--interactive`/`--remote-control`/`--directory` + `HARK_DIRECTORY`/`HARK_REMOTE_TOKEN` + examples (mandoc lint clean)
 - [x] docs/permissions.md: agent needs no new TCC (same capture permissions); listener is loopback-only by default
 
 ### Phase 10.5 — Validation
@@ -378,7 +378,7 @@
 > Nice-to-have items outside current scope.
 
 - [ ] Scheduled/unattended launchd daemon: background service that *schedules* recordings and survives logout, building on the Phase 10 remote-control agent (PRD §4.2)
-- [ ] Crash resilience for hard kills: periodic header flush vs `aural repair` subcommand (parked — PRD Open Q1)
+- [ ] Crash resilience for hard kills: periodic header flush vs `hark repair` subcommand (parked — PRD Open Q1)
 - [ ] Opt-in telemetry mechanism for crash-free-rate KPI (PRD Open Q3)
 - [ ] Real-time streaming to network socket or HTTP endpoint
 - [ ] Multi-channel mapping: separate tracks for mic and system audio

@@ -12,10 +12,10 @@
 set -euo pipefail
 
 DURATION="${1:-3720}"
-OUT="${2:-/tmp/aural-drift.wav}"
+OUT="${2:-/tmp/hark-drift.wav}"
 MIC="${3:-BuiltInMicrophoneDevice}"
-AURAL="${AURAL:-.build/debug/aural}"
-CLICK="/tmp/aural-click.wav"
+HARK="${HARK:-.build/debug/hark}"
+CLICK="/tmp/hark-click.wav"
 
 # 30 ms 1.5 kHz burst with sharp attack; narrowband so analysis can
 # filter out unrelated audio.
@@ -32,7 +32,7 @@ with wave.open(sys.argv[1], 'w') as w:
 EOF
 
 echo "recording $DURATION s to $OUT (mic: $MIC)"
-"$AURAL" record --system --mix -d "$MIC" -r 48000 -t "$DURATION" -o "$OUT" &
+"$HARK" record --system --mix -d "$MIC" -r 48000 -t "$DURATION" -o "$OUT" &
 RECORD_PID=$!
 trap 'kill $RECORD_PID 2>/dev/null || true' EXIT
 

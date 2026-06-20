@@ -11,21 +11,21 @@ import Testing
 /// stable 1:1 voice→label mapping.
 ///
 /// Gated: it runs `say` and downloads/loads the LS-EEND CoreML model, so it is
-/// off in the normal suite. Enable with `AURAL_TEST_DIARIZE=1` on Apple Silicon.
+/// off in the normal suite. Enable with `HARK_TEST_DIARIZE=1` on Apple Silicon.
 /// SKIPs cleanly if a requested `say` voice is unavailable.
 @Suite("Speaker detection (say, integration)")
 struct SayDiarizationTests {
     private struct Turn { let voice: String; let text: String }
 
     private var enabled: Bool {
-        ProcessInfo.processInfo.environment["AURAL_TEST_DIARIZE"] == "1" && Platform.isAppleSilicon
+        ProcessInfo.processInfo.environment["HARK_TEST_DIARIZE"] == "1" && Platform.isAppleSilicon
     }
 
     /// Synthesizes one line to 16 kHz mono Float via `say`. Returns [] if the
     /// voice/synthesis is unavailable (→ test SKIPs).
     private func synth(voice: String, text: String) -> [Float] {
         let aiff = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-say-\(UUID().uuidString).aiff")
+            .appendingPathComponent("hark-say-\(UUID().uuidString).aiff")
         defer { try? FileManager.default.removeItem(at: aiff) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/say")

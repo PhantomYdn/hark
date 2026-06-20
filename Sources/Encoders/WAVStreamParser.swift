@@ -32,7 +32,7 @@ public enum WAVParseError: Error, CustomStringConvertible {
 
 /// Sequentially parses a WAV header from a stream, stopping right at the
 /// start of the PCM payload — suitable for piped input where seeking is
-/// impossible (PRD §6.3: `aural -i -`).
+/// impossible (PRD §6.3: `hark -i -`).
 public enum WAVStreamParser {
     /// `read(n)` must return up to `n` bytes (fewer only at EOF).
     /// On success the stream is positioned at the first payload byte.

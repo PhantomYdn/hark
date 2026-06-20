@@ -8,37 +8,37 @@ import Testing
 @Suite("Root argument parsing")
 struct RootParsingTests {
     @Test func defaults() throws {
-        let aural = try Aural.parse([])
-        #expect(aural.input == nil)
-        #expect(aural.device == nil)
-        #expect(aural.audio == nil)
-        #expect(aural.transcript == nil)
-        #expect(aural.rate == nil)
-        #expect(aural.bits == nil)
-        #expect(aural.channels == nil)
-        #expect(aural.duration == nil)
-        #expect(!aural.raw)
-        #expect(!aural.noOutput)
+        let hark = try Hark.parse([])
+        #expect(hark.input == nil)
+        #expect(hark.device == nil)
+        #expect(hark.audio == nil)
+        #expect(hark.transcript == nil)
+        #expect(hark.rate == nil)
+        #expect(hark.bits == nil)
+        #expect(hark.channels == nil)
+        #expect(hark.duration == nil)
+        #expect(!hark.raw)
+        #expect(!hark.noOutput)
         // Defaults are now unset (nil) so config/env can supply them; the
         // effective defaults are applied in ResolvedSettings.
-        #expect(aural.engine == nil)
-        #expect(aural.language == nil)
-        #expect(aural.translate == nil)
-        #expect(aural.silenceThreshold == nil)
+        #expect(hark.engine == nil)
+        #expect(hark.language == nil)
+        #expect(hark.translate == nil)
+        #expect(hark.silenceThreshold == nil)
     }
 
     @Test func parsesAllOptions() throws {
-        let aural = try Aural.parse([
+        let hark = try Hark.parse([
             "-d", "SomeUID", "-a", "x.wav", "-t", "x.srt",
             "-r", "48000", "-b", "24", "-c", "2", "--duration", "30.5",
         ])
-        #expect(aural.device == "SomeUID")
-        #expect(aural.audio == "x.wav")
-        #expect(aural.transcript == "x.srt")
-        #expect(aural.rate == 48000)
-        #expect(aural.bits == 24)
-        #expect(aural.channels == 2)
-        #expect(aural.duration == 30.5)
+        #expect(hark.device == "SomeUID")
+        #expect(hark.audio == "x.wav")
+        #expect(hark.transcript == "x.srt")
+        #expect(hark.rate == 48000)
+        #expect(hark.bits == 24)
+        #expect(hark.channels == 2)
+        #expect(hark.duration == 30.5)
     }
 
     @Test(arguments: [
@@ -72,7 +72,7 @@ struct RootParsingTests {
     ])
     func rejectsInvalidCombinations(_ arguments: [String]) {
         #expect(throws: (any Error).self) {
-            _ = try Aural.parse(arguments)
+            _ = try Hark.parse(arguments)
         }
     }
 
@@ -113,25 +113,25 @@ struct RootParsingTests {
         ["--interactive", "--system", "--mix"],                 // interactive meeting capture
     ])
     func acceptsValidCombinations(_ arguments: [String]) throws {
-        _ = try Aural.parse(arguments)
+        _ = try Hark.parse(arguments)
     }
 
     @Test func repeatableAppFlagAccumulates() throws {
-        let aural = try Aural.parse(
+        let hark = try Hark.parse(
             ["--app", "com.a", "--app", "com.b", "--app", "42"])
-        #expect(aural.apps == ["com.a", "com.b", "42"])
+        #expect(hark.apps == ["com.a", "com.b", "42"])
     }
 
     @Test func captureBackendFlagWins() throws {
-        let aural = try Aural.parse(["--system", "--capture-backend", "SCKit", "-a", "x.wav"])
-        #expect(aural.resolvedCaptureBackend() == "sckit")  // lowercased
+        let hark = try Hark.parse(["--system", "--capture-backend", "SCKit", "-a", "x.wav"])
+        #expect(hark.resolvedCaptureBackend() == "sckit")  // lowercased
     }
 
     @Test func captureBackendDefaultsToAutoWithoutEnv() throws {
-        let aural = try Aural.parse(["--system", "-a", "x.wav"])
-        // Only meaningful when AURAL_CAPTURE is unset in the test environment.
-        if ProcessInfo.processInfo.environment["AURAL_CAPTURE"] == nil {
-            #expect(aural.resolvedCaptureBackend() == "auto")
+        let hark = try Hark.parse(["--system", "-a", "x.wav"])
+        // Only meaningful when HARK_CAPTURE is unset in the test environment.
+        if ProcessInfo.processInfo.environment["HARK_CAPTURE"] == nil {
+            #expect(hark.resolvedCaptureBackend() == "auto")
         }
     }
 }
@@ -140,7 +140,7 @@ struct RootParsingTests {
 struct OutputResolutionTests {
     /// Naming no output transcribes to stdout (the default verb).
     @Test func defaultIsTranscriptToStdout() throws {
-        let outputs = try Aural.parse([]).resolveOutputs()
+        let outputs = try Hark.parse([]).resolveOutputs()
         #expect(outputs.audio == nil)
         guard case .stdout = outputs.transcript else {
             Issue.record("expected transcript -> stdout")
@@ -149,7 +149,7 @@ struct OutputResolutionTests {
     }
 
     @Test func audioOnlyHasNoTranscript() throws {
-        let outputs = try Aural.parse(["-a", "rec.m4a"]).resolveOutputs()
+        let outputs = try Hark.parse(["-a", "rec.m4a"]).resolveOutputs()
         #expect(outputs.transcript == nil)
         guard case .file(let path)? = outputs.audio, path == "rec.m4a" else {
             Issue.record("expected audio file rec.m4a")
@@ -158,7 +158,7 @@ struct OutputResolutionTests {
     }
 
     @Test func dashAudioIsWavStream() throws {
-        let outputs = try Aural.parse(["-a", "-"]).resolveOutputs()
+        let outputs = try Hark.parse(["-a", "-"]).resolveOutputs()
         guard case .stdoutWav? = outputs.audio else {
             Issue.record("expected WAV stream to stdout")
             return
@@ -167,7 +167,7 @@ struct OutputResolutionTests {
     }
 
     @Test func rawDashAudioIsRawStream() throws {
-        let outputs = try Aural.parse(["--raw", "-a", "-"]).resolveOutputs()
+        let outputs = try Hark.parse(["--raw", "-a", "-"]).resolveOutputs()
         guard case .stdoutRaw? = outputs.audio else {
             Issue.record("expected raw PCM to stdout")
             return
@@ -175,7 +175,7 @@ struct OutputResolutionTests {
     }
 
     @Test func explicitTranscriptToStdoutWithAudioFile() throws {
-        let outputs = try Aural.parse(["-a", "rec.m4a", "-t", "-"]).resolveOutputs()
+        let outputs = try Hark.parse(["-a", "rec.m4a", "-t", "-"]).resolveOutputs()
         guard case .file? = outputs.audio else {
             Issue.record("expected audio file")
             return
@@ -187,7 +187,7 @@ struct OutputResolutionTests {
     }
 
     @Test func noOutputDiscardsEverything() throws {
-        let outputs = try Aural.parse(["--no-output"]).resolveOutputs()
+        let outputs = try Hark.parse(["--no-output"]).resolveOutputs()
         #expect(outputs.audio == nil)
         #expect(outputs.transcript == nil)
     }
@@ -212,20 +212,20 @@ struct DevicesParsingTests {
 @Suite("Exit codes")
 struct ExitCodeTests {
     @Test func sysexitsValues() {
-        #expect(AuralExitCode.ok.rawValue == 0)
-        #expect(AuralExitCode.usage.rawValue == 64)
-        #expect(AuralExitCode.noInput.rawValue == 66)
-        #expect(AuralExitCode.unavailable.rawValue == 69)
-        #expect(AuralExitCode.software.rawValue == 70)
-        #expect(AuralExitCode.ioError.rawValue == 74)
-        #expect(AuralExitCode.noPermission.rawValue == 77)
+        #expect(HarkExitCode.ok.rawValue == 0)
+        #expect(HarkExitCode.usage.rawValue == 64)
+        #expect(HarkExitCode.noInput.rawValue == 66)
+        #expect(HarkExitCode.unavailable.rawValue == 69)
+        #expect(HarkExitCode.software.rawValue == 70)
+        #expect(HarkExitCode.ioError.rawValue == 74)
+        #expect(HarkExitCode.noPermission.rawValue == 77)
     }
 
     @Test func errorFactoriesCarryCodes() {
-        #expect(AuralError.noInput("x").code == .noInput)
-        #expect(AuralError.unavailable("x").code == .unavailable)
-        #expect(AuralError.ioError("x").code == .ioError)
-        #expect(AuralError.noPermission("x").code == .noPermission)
+        #expect(HarkError.noInput("x").code == .noInput)
+        #expect(HarkError.unavailable("x").code == .unavailable)
+        #expect(HarkError.ioError("x").code == .ioError)
+        #expect(HarkError.noPermission("x").code == .noPermission)
     }
 }
 
@@ -264,7 +264,7 @@ struct SplitSpecTests {
     @Test(arguments: ["duration", "duration=", "duration=0", "duration=-5",
                       "gap=3", "=5", "duration=abc"])
     func rejectsMalformedSpecs(_ raw: String) {
-        #expect(throws: AuralError.self) { _ = try SplitSpec.parse(raw) }
+        #expect(throws: HarkError.self) { _ = try SplitSpec.parse(raw) }
     }
 
     @Test func chunkPathNumbering() {
@@ -276,7 +276,7 @@ struct SplitSpecTests {
 
     @Test func splitRequiresAudioFile() {
         #expect(throws: (any Error).self) {
-            _ = try Aural.parse(["--split", "duration=10", "--no-output"])
+            _ = try Hark.parse(["--split", "duration=10", "--no-output"])
         }
     }
 }
@@ -528,7 +528,7 @@ struct LiveTranscriptWriterTests {
 
     @Test func srtFileAppendsNumberedCues() throws {
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-test-\(UUID().uuidString).srt").path
+            .appendingPathComponent("hark-test-\(UUID().uuidString).srt").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let writer = try LiveTranscriptWriter(destination: .file(path), format: .srt)
         try writer.append(text: "first", start: 0, end: 1)
@@ -542,7 +542,7 @@ struct LiveTranscriptWriterTests {
 
     @Test func txtFileAppendsLines() throws {
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-test-\(UUID().uuidString).txt").path
+            .appendingPathComponent("hark-test-\(UUID().uuidString).txt").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let writer = try LiveTranscriptWriter(destination: .file(path), format: .txt)
         try writer.append(text: "hello", start: 0, end: 1)
@@ -561,13 +561,13 @@ struct LiveTranscriptionIntegrationTests {
     @Test func liveSegmentTranscribesSpeechToFile() throws {
         // Exercise the amplitude segmenter deterministically (no VAD model
         // download); VAD has its own gated test below.
-        setenv("AURAL_VAD", "0", 1)
+        setenv("HARK_VAD", "0", 1)
         guard WhisperEngine.discover() != nil,
             (try? WhisperEngine.resolveModel(flag: nil)) != nil
         else { return }  // no engine/model -> skip
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-live-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-live-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 
@@ -790,7 +790,7 @@ struct SpeakerLabelTests {
 
     @Test func liveSrtPrefixesSpeaker() throws {
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-spk-\(UUID().uuidString).srt").path
+            .appendingPathComponent("hark-spk-\(UUID().uuidString).srt").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let writer = try LiveTranscriptWriter(destination: .file(path), format: .srt)
         try writer.append(text: "hello", start: 0, end: 1, speaker: "You")
@@ -830,9 +830,9 @@ struct SourceAttributionTests {
     private func quiet(_ seconds: Double) -> Data { Data(count: Int(seconds * 16000) * 2) }
 
     @Test func twoSourcesShareWriterAndTagSpeakers() throws {
-        setenv("AURAL_VAD", "0", 1)  // amplitude segmenter (deterministic, offline)
+        setenv("HARK_VAD", "0", 1)  // amplitude segmenter (deterministic, offline)
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-srcattr-\(UUID().uuidString).txt").path
+            .appendingPathComponent("hark-srcattr-\(UUID().uuidString).txt").path
         defer { try? FileManager.default.removeItem(atPath: path) }
 
         let writer = try LiveTranscriptWriter(destination: .file(path), format: .txt)
@@ -899,11 +899,11 @@ struct DiarizerCatalogTests {
 }
 
 /// Gated: loads the real diarizer model and runs it. Only when
-/// AURAL_TEST_DIARIZE=1 and on Apple Silicon (downloads CoreML on first use).
+/// HARK_TEST_DIARIZE=1 and on Apple Silicon (downloads CoreML on first use).
 @Suite("Diarization (integration)")
 struct DiarizationIntegrationTests {
     @Test func loadsAndRunsOffline() throws {
-        guard ProcessInfo.processInfo.environment["AURAL_TEST_DIARIZE"] == "1",
+        guard ProcessInfo.processInfo.environment["HARK_TEST_DIARIZE"] == "1",
             Platform.isAppleSilicon
         else { return }
         let diarizer = try SpeakerDiarizer.makeOffline(maxSpeakers: nil, threshold: nil)
@@ -959,9 +959,9 @@ struct StreamingDiarizationTests {
     }
 
     @Test func resolverOverridesFixedLabel() throws {
-        setenv("AURAL_VAD", "0", 1)
+        setenv("HARK_VAD", "0", 1)
         let path = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-resolve-\(UUID().uuidString).txt").path
+            .appendingPathComponent("hark-resolve-\(UUID().uuidString).txt").path
         defer { try? FileManager.default.removeItem(atPath: path) }
         let writer = try LiveTranscriptWriter(destination: .file(path), format: .txt)
         let backend = SerializedBackend(FakeBackend("hi"))
@@ -1003,7 +1003,7 @@ struct InteractiveCaptionTests {
     private func run(
         screenEcho: Bool, speaker: String?, transcriptPath: String, screenURL: URL
     ) throws -> (screen: String, file: String) {
-        setenv("AURAL_VAD", "0", 1)  // deterministic amplitude segmenter (offline)
+        setenv("HARK_VAD", "0", 1)  // deterministic amplitude segmenter (offline)
         FileManager.default.createFile(atPath: screenURL.path, contents: nil)
         let screen = try FileHandle(forWritingTo: screenURL)
 
@@ -1032,7 +1032,7 @@ struct InteractiveCaptionTests {
     /// transcript writer still persists to the file (the labeled variant).
     @Test func echoesLabeledCaptionToScreenWhileWritingFile() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-caption-\(UUID().uuidString)")
+            .appendingPathComponent("hark-caption-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -1047,7 +1047,7 @@ struct InteractiveCaptionTests {
     /// Without a speaker the caption is plain text (no label prefix).
     @Test func echoesPlainCaptionWhenNoSpeaker() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-caption-\(UUID().uuidString)")
+            .appendingPathComponent("hark-caption-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -1063,7 +1063,7 @@ struct InteractiveCaptionTests {
     /// With echo disabled the screen stays empty while the file is still written.
     @Test func noScreenEchoWhenDisabled() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-caption-\(UUID().uuidString)")
+            .appendingPathComponent("hark-caption-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -1112,19 +1112,19 @@ struct GainNormalizerTests {
     }
 
     @Test func envOptOut() {
-        #expect(GainNormalizer.isEnabled(environment: ["AURAL_GAIN": "off"]) == false)
-        #expect(GainNormalizer.isEnabled(environment: ["AURAL_GAIN": "OFF"]) == false)
+        #expect(GainNormalizer.isEnabled(environment: ["HARK_GAIN": "off"]) == false)
+        #expect(GainNormalizer.isEnabled(environment: ["HARK_GAIN": "OFF"]) == false)
         #expect(GainNormalizer.isEnabled(environment: [:]) == true)
     }
 }
 
 /// Gated: replays the committed quiet recording through the real VAD at the
 /// (lowered) default threshold and asserts the previously-dropped quiet phrase
-/// now opens a segment. Runs only with AURAL_TEST_VAD=1 on Apple Silicon.
+/// now opens a segment. Runs only with HARK_TEST_VAD=1 on Apple Silicon.
 @Suite("VAD threshold recovery (integration)")
 struct VadThresholdRecoveryTests {
     @Test func lowThresholdSegmentsQuietRegion() throws {
-        guard ProcessInfo.processInfo.environment["AURAL_TEST_VAD"] == "1",
+        guard ProcessInfo.processInfo.environment["HARK_TEST_VAD"] == "1",
             Platform.isAppleSilicon
         else { return }
         let mp3 = "Tests/ManualTests/test3.mp3"
@@ -1177,11 +1177,11 @@ struct SpeakerLabelsParseTests {
 }
 
 /// Gated check that the real Silero VAD model loads and runs. Runs only when
-/// AURAL_TEST_VAD=1 and on Apple Silicon (downloads CoreML on first use).
+/// HARK_TEST_VAD=1 and on Apple Silicon (downloads CoreML on first use).
 @Suite("VAD (integration)")
 struct VadIntegrationTests {
     @Test func loadsAndProcessesARealWindow() throws {
-        guard ProcessInfo.processInfo.environment["AURAL_TEST_VAD"] == "1",
+        guard ProcessInfo.processInfo.environment["HARK_TEST_VAD"] == "1",
             Platform.isAppleSilicon
         else { return }
         let classifier = try FluidVadClassifier.makeLoading(

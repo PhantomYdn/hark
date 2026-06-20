@@ -223,7 +223,7 @@ public final class OpusFileWriter: @unchecked Sendable {
 
     static func opusTags() -> Data {
         var tags = Data("OpusTags".utf8)
-        let vendor = Data("aural".utf8)
+        let vendor = Data("hark".utf8)
         appendLE(&tags, UInt32(vendor.count))
         tags.append(vendor)
         appendLE(&tags, UInt32(0))  // user comment count

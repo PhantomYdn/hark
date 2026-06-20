@@ -1,4 +1,4 @@
-# Aural build helpers.
+# Hark build helpers.
 #
 # Workaround: on machines with Command Line Tools only (no full Xcode),
 # Testing.framework and lib_TestingInterop.dylib are not on the default

@@ -31,7 +31,7 @@ struct Devices: ParsableCommand {
             do {
                 devices = try DeviceManager.listDevices(scope: scope)
             } catch {
-                throw AuralError.software("failed to enumerate devices: \(error)")
+                throw HarkError.software("failed to enumerate devices: \(error)")
             }
             Log.verbose("found \(devices.count) device(s)")
 

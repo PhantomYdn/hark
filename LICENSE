@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-Aural bundles and links third-party components under their own licenses; see
+Hark bundles and links third-party components under their own licenses; see
 NOTICES for details. Note in particular that MP3 output uses libmp3lame
 (LGPL-2.1); the corresponding source is included in this repository so the
 component can be modified and the binary relinked.

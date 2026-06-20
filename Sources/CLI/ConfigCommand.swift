@@ -1,14 +1,14 @@
 import ArgumentParser
 import Foundation
 
-/// `aural config` — view and edit persisted defaults (`~/.aural/config.json`).
+/// `hark config` — view and edit persisted defaults (`~/.hark/config.json`).
 struct Config: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "config",
-        abstract: "View and edit persisted defaults (~/.aural/config.json).",
+        abstract: "View and edit persisted defaults (~/.hark/config.json).",
         discussion: """
             Stores defaults that apply when not overridden. Model precedence is \
-            --model flag › $AURAL_WHISPER_MODEL › config 'model'. Known keys: \
+            --model flag › $HARK_WHISPER_MODEL › config 'model'. Known keys: \
             \(ConfigKey.knownNames).
             """,
         subcommands: [ConfigShow.self, ConfigSet.self, ConfigUnset.self, ConfigPath.self],
@@ -22,8 +22,8 @@ struct ConfigShow: ParsableCommand {
         abstract: "Print every setting, its effective value, and its source.",
         discussion: """
             Shows all settings — including ones at their built-in default. SOURCE \
-            is 'default' (built-in), 'config' (set in ~/.aural/config.json), or \
-            'env' ($AURAL_* override, which outranks config). Invocation flags are \
+            is 'default' (built-in), 'config' (set in ~/.hark/config.json), or \
+            'env' ($HARK_* override, which outranks config). Invocation flags are \
             not shown here (they apply per run and outrank both).
             """)
 
@@ -68,7 +68,7 @@ struct ConfigSet: ParsableCommand {
         discussion: """
             Keys: \(ConfigKey.knownNames). Values that begin with '-' (e.g. a \
             negative silence threshold) are taken verbatim:
-              aural config set silence-threshold -40
+              hark config set silence-threshold -40
             """)
 
     // Captured together so a value beginning with '-' (e.g. -40) isn't mistaken
@@ -93,13 +93,13 @@ struct ConfigSet: ParsableCommand {
         }
         try runMapped(verbose: options.verbose) {
             guard arguments.count == 2 else {
-                throw AuralError.usage(
-                    "usage: aural config set <key> <value> (keys: \(ConfigKey.knownNames)).")
+                throw HarkError.usage(
+                    "usage: hark config set <key> <value> (keys: \(ConfigKey.knownNames)).")
             }
             let key = arguments[0]
             let value = arguments[1]
             guard let configKey = ConfigKey(rawValue: key) else {
-                throw AuralError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
+                throw HarkError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
             }
             var config = Configuration.load()
             // A non-fatal, engine-aware hint for the model key (the value is set
@@ -131,11 +131,11 @@ struct ConfigSet: ParsableCommand {
         if let owner, owner != effective {
             let versionHint = owner == "parakeet" ? " (parakeet selects a version, e.g. v2 or v3)" : ""
             return "note: '\(value)' is a \(owner) model; also set the engine — "
-                + "aural config set engine \(owner)\(versionHint)"
+                + "hark config set engine \(owner)\(versionHint)"
         }
         if owner == nil, effective == "whisper" {
             return "note: model '\(value)' is not present yet; "
-                + "download it with 'aural models download \(value)'."
+                + "download it with 'hark models download \(value)'."
         }
         return nil
     }
@@ -174,7 +174,7 @@ struct ConfigUnset: ParsableCommand {
     func run() throws {
         try runMapped(verbose: options.verbose) {
             guard let configKey = ConfigKey(rawValue: key) else {
-                throw AuralError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
+                throw HarkError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
             }
             var config = Configuration.load()
             config.unset(configKey)

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Persisted, user-editable defaults (`~/.aural/config.json`). Every field is
+/// Persisted, user-editable defaults (`~/.hark/config.json`). Every field is
 /// optional, so an empty/missing file is valid. Each maps to a flag and an
 /// environment variable; the effective value follows
-/// flag › env (`$AURAL_*`) › config › built-in default (see `ResolvedSettings`).
+/// flag › env (`$HARK_*`) › config › built-in default (see `ResolvedSettings`).
 ///
 /// Storage is plain typed fields (for clean Codable round-trip); all behavior
 /// (display, set, unset, defaults, env, validation) is driven by the declarative
@@ -59,10 +59,10 @@ struct Configuration: Codable, Equatable {
         case speakerThreshold = "speaker-threshold"
     }
 
-    /// `~/.aural/config.json`.
+    /// `~/.hark/config.json`.
     static var fileURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aural/config.json", isDirectory: false)
+            .appendingPathComponent(".hark/config.json", isDirectory: false)
     }
 
     /// Loads the configuration, returning an empty one when the file is absent.
@@ -80,7 +80,7 @@ struct Configuration: Codable, Equatable {
         }
     }
 
-    /// Writes the configuration, creating `~/.aural` if needed.
+    /// Writes the configuration, creating `~/.hark` if needed.
     func save(to url: URL = fileURL) throws {
         do {
             try FileManager.default.createDirectory(
@@ -89,11 +89,11 @@ struct Configuration: Codable, Equatable {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             try encoder.encode(self).write(to: url, options: .atomic)
         } catch {
-            throw AuralError.ioError("cannot write config to \(url.path): \(error)")
+            throw HarkError.ioError("cannot write config to \(url.path): \(error)")
         }
     }
 
-    // MARK: Registry-driven access (for `aural config set/unset/show`)
+    // MARK: Registry-driven access (for `hark config set/unset/show`)
 
     /// The declarative registry of every configurable setting. Order is the
     /// display order for `config show`.

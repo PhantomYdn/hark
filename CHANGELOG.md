@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Aural are documented here. The format is loosely based on
+All notable changes to Hark are documented here. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
@@ -21,7 +21,7 @@ transcribes them, and composes into Unix pipelines.
 ### Formats
 - Audio output to WAV, M4A, FLAC, MP3 (vendored LAME), and Opus; `--format` override.
 - WAV streaming on stdout (`-a -`) and raw PCM (`--raw`) for pipelines.
-- `aural -i IN -a OUT` transcodes between formats; `aural info <file>` inspects them.
+- `hark -i IN -a OUT` transcodes between formats; `hark info <file>` inspects them.
 
 ### Transcription
 - Engines via `--engine`: `whisper` (whisper.cpp, default), `apple`
@@ -42,13 +42,13 @@ transcribes them, and composes into Unix pipelines.
   userscript. See docs/remote-control.md.
 
 ### Configuration & UX
-- Settings resolve flag › `$AURAL_*` › `~/.aural/config.json` › built-in default;
-  `aural config show/set/unset/path`. `aural models list/download` manages models.
+- Settings resolve flag › `$HARK_*` › `~/.hark/config.json` › built-in default;
+  `hark config show/set/unset/path`. `hark models list/download` manages models.
 - `-C/--directory` base directory for relative artifact paths; startup status on
   stderr; POSIX exit codes.
 
 ### Examples
-- `examples/` recipe scripts: `aural-meeting`, `aural-note`, `aural-dictate`.
+- `examples/` recipe scripts: `hark-meeting`, `hark-note`, `hark-dictate`.
 
 ### Notes
 - Requires macOS 14.4+. The prebuilt binary is Apple Silicon (arm64); Intel users
@@ -56,4 +56,4 @@ transcribes them, and composes into Unix pipelines.
 - This beta binary is not yet notarized; install via Homebrew (no Gatekeeper
   prompt) or remove the quarantine attribute on a direct download.
 
-[0.1.0]: https://github.com/PhantomYdn/Aural/releases/tag/v0.1.0
+[0.1.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.1.0

@@ -19,7 +19,7 @@ struct MP3FileWriterTests {
 
     private func temporaryFile() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-mp3-\(UUID().uuidString).mp3")
+            .appendingPathComponent("hark-mp3-\(UUID().uuidString).mp3")
     }
 
     private func decode(_ url: URL) throws -> (rate: Double, channels: Int, frames: Int, rms: Double) {

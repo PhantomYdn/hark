@@ -6,7 +6,7 @@ import Foundation
 /// across 25 European languages (v3) or English-only (v2); it auto-handles the
 /// language (no selection) and cannot translate. The models are loaded once
 /// (resident) and CoreML bundles are downloaded from Hugging Face on first use
-/// into `~/.aural/models/parakeet`.
+/// into `~/.hark/models/parakeet`.
 final class ParakeetBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: true, translate: false, usesModelFile: false)
 
@@ -23,8 +23,8 @@ final class ParakeetBackend: TranscriptionBackend {
     /// FluidAudio's managed CoreML cache (`~/Library/Application
     /// Support/FluidAudio/Models`). FluidAudio owns this location and does not
     /// honor a custom download directory when models already exist there, so —
-    /// unlike whisperkit — parakeet models are not relocated under `~/.aural`;
-    /// `aural models list` reads from here instead.
+    /// unlike whisperkit — parakeet models are not relocated under `~/.hark`;
+    /// `hark models list` reads from here instead.
     static var downloadBase: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first!
@@ -55,7 +55,7 @@ final class ParakeetBackend: TranscriptionBackend {
     ) throws -> String {
         // translate is already rejected by capability validation; guard anyway.
         if translate {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "the parakeet engine cannot translate; use --engine whisper or whisperkit.")
         }
         let manager = self.manager
@@ -71,7 +71,7 @@ final class ParakeetBackend: TranscriptionBackend {
 
     func shutdown() {}
 
-    /// Versions offered by `aural models list --available` / `download`.
+    /// Versions offered by `hark models list --available` / `download`.
     static let downloadableVersions = ["v3", "v2"]
 
     /// Selects the model version: `v2`/`en` → English-only; default → v3.

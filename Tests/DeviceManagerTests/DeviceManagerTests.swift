@@ -40,7 +40,7 @@ struct DeviceEnumerationTests {
     }
 
     @Test func unknownUIDResolvesToNil() throws {
-        let id = try DeviceManager.deviceID(forUID: "aural-test-no-such-uid")
+        let id = try DeviceManager.deviceID(forUID: "hark-test-no-such-uid")
         #expect(id == nil)
     }
 }
@@ -69,7 +69,7 @@ struct AppEnumerationTests {
 struct AppResolutionTests {
     @Test func unknownBundleIDThrows() {
         #expect(throws: AppResolutionError.self) {
-            _ = try DeviceManager.resolveApps(specifiers: ["com.aural.test.no-such-app"])
+            _ = try DeviceManager.resolveApps(specifiers: ["com.hark.test.no-such-app"])
         }
     }
 

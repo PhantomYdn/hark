@@ -1,6 +1,6 @@
-# Remote control (`aural --remote-control`)
+# Remote control (`hark --remote-control`)
 
-`aural --remote-control [host:]port` runs Aural as a long-lived **control
+`hark --remote-control [host:]port` runs Hark as a long-lived **control
 agent** instead of capturing on launch. It serves a small HTTP/1.1 + JSON API
 over TCP so other programs — shell scripts, automations, or a browser userscript
 — can start, pause, resume, stop, and query **one** recording at a time.
@@ -13,11 +13,11 @@ retrieved from the filesystem.
 
 ```sh
 # Loopback (conventional port 8473); writes recordings under ~/Recordings
-aural --remote-control 8473 -C ~/Recordings
+hark --remote-control 8473 -C ~/Recordings
 
 # Inherit any capture/engine defaults — they apply to every session unless a
 # POST /start body overrides them:
-aural --remote-control 8473 -C ~/Recordings --system --mix --engine whisper --model base.en
+hark --remote-control 8473 -C ~/Recordings --system --mix --engine whisper --model base.en
 ```
 
 The value is `[host:]port`. A bare port or empty host binds **loopback**
@@ -28,16 +28,16 @@ any active recording first.
 ### Security
 
 - **Loopback by default** — the listener accepts only local connections and
-  makes no outbound calls (consistent with Aural's "no network by default").
+  makes no outbound calls (consistent with Hark's "no network by default").
 - **Non-loopback requires a token.** Binding to `0.0.0.0` or a LAN IP is refused
-  unless `$AURAL_REMOTE_TOKEN` is set; when a token is configured, every request
+  unless `$HARK_REMOTE_TOKEN` is set; when a token is configured, every request
   must send `Authorization: Bearer <token>` (otherwise `401`).
 - No new TCC permission is required — the agent uses the same microphone /
   system-audio permissions as a normal capture (see
   [permissions.md](permissions.md)).
 
 ```sh
-AURAL_REMOTE_TOKEN=$(openssl rand -hex 16) aural --remote-control 0.0.0.0:8473
+HARK_REMOTE_TOKEN=$(openssl rand -hex 16) hark --remote-control 0.0.0.0:8473
 ```
 
 ## Endpoints
@@ -158,13 +158,13 @@ and stops it when you leave, naming the file from the meeting title and date.
 
 Install [Tampermonkey](https://www.tampermonkey.net/), create a new script, and
 paste the following. Start the agent first, e.g.
-`aural --remote-control 8473 -C ~/Recordings` (with a working engine/model if you
+`hark --remote-control 8473 -C ~/Recordings` (with a working engine/model if you
 want transcripts — see the Configuration section of the README).
 
 ```javascript
 // ==UserScript==
-// @name         Aural — auto-record Google Meet
-// @namespace    aural
+// @name         Hark — auto-record Google Meet
+// @namespace    hark
 // @match        https://meet.google.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      127.0.0.1
@@ -175,7 +175,7 @@ want transcripts — see the Configuration section of the README).
   "use strict";
 
   const AGENT = "http://127.0.0.1:8473";
-  const TOKEN = ""; // set if the agent uses $AURAL_REMOTE_TOKEN
+  const TOKEN = ""; // set if the agent uses $HARK_REMOTE_TOKEN
 
   let recording = false;
 
@@ -187,8 +187,8 @@ want transcripts — see the Configuration section of the README).
       url: AGENT + path,
       headers,
       data: body ? JSON.stringify(body) : "",
-      onload: (r) => console.log("[aural]", path, r.status, r.responseText),
-      onerror: (e) => console.warn("[aural] agent unreachable", e),
+      onload: (r) => console.log("[hark]", path, r.status, r.responseText),
+      onerror: (e) => console.warn("[hark] agent unreachable", e),
     });
   }
 

@@ -5,19 +5,19 @@ import Encoders
 import Foundation
 import TapEngine
 
-/// Root command. `aural` itself is the verb — "listen and transcribe."
+/// Root command. `hark` itself is the verb — "listen and transcribe."
 ///
 /// It takes one input (live capture by default, or `-i FILE/-`) and writes
 /// the outputs you name: `-a/--audio` and/or `-t/--transcript`, where `-`
 /// means stdout. Name no output and it transcribes to stdout. The utility
 /// subcommands (`devices`, `apps`, `info`) are unchanged.
 @main
-struct Aural: ParsableCommand {
+struct Hark: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "aural",
+        commandName: "hark",
         abstract: "Listen and transcribe: capture audio and produce transcripts on macOS.",
         discussion: """
-            By default 'aural' captures the system default microphone and \
+            By default 'hark' captures the system default microphone and \
             prints a transcript to stdout. Choose a source with --system, \
             --app, --exclude-app, -d/--device, or read an existing file with \
             -i. Choose what to keep with -a/--audio (an audio file, or '-' \
@@ -26,17 +26,17 @@ struct Aural: ParsableCommand {
             transcript goes to stdout.
 
             Examples:
-              aural                                  listen, transcript -> stdout
-              aural -i recording.m4a                 transcribe a file -> stdout
-              aural -a rec.m4a                        record only (no transcript)
-              aural -a rec.m4a -t notes.txt           record + transcribe to files
-              aural --system --mix -a m.m4a -t m.srt  capture a meeting, keep both
-              aural -i in.wav -a out.m4a              convert between formats
-              aural -a - | ffmpeg -i - ...            stream WAV into a pipe
+              hark                                  listen, transcript -> stdout
+              hark -i recording.m4a                 transcribe a file -> stdout
+              hark -a rec.m4a                        record only (no transcript)
+              hark -a rec.m4a -t notes.txt           record + transcribe to files
+              hark --system --mix -a m.m4a -t m.srt  capture a meeting, keep both
+              hark -i in.wav -a out.m4a              convert between formats
+              hark -a - | ffmpeg -i - ...            stream WAV into a pipe
 
             The default 'whisper' engine needs a local whisper.cpp + ggml \
             model; apple/whisperkit/parakeet are alternatives (see --engine, \
-            'aural models').
+            'hark models').
             """,
         version: "0.1.0",
         subcommands: [
@@ -56,15 +56,15 @@ struct Aural: ParsableCommand {
     var input: String?
 
     @Option(name: [.short, .long], help: ArgumentHelp(
-        "Live: input device UID (see 'aural devices'). Defaults to the system default input "
-            + "(or $AURAL_DEVICE / aural config).",
+        "Live: input device UID (see 'hark devices'). Defaults to the system default input "
+            + "(or $HARK_DEVICE / hark config).",
         valueName: "uid"))
     var device: String?
 
     @Option(name: [.customShort("C"), .customLong("directory")], help: ArgumentHelp(
         "Base directory for resolving relative artifact paths (-i/-a/-t and --split outputs); "
             + "absolute paths and '-' are unaffected. Defaults to the current directory "
-            + "(or $AURAL_DIRECTORY / aural config). Must exist.",
+            + "(or $HARK_DIRECTORY / hark config). Must exist.",
         valueName: "path"))
     var directory: String?
 
@@ -93,7 +93,7 @@ struct Aural: ParsableCommand {
     @Option(name: .customLong("capture-backend"), help: ArgumentHelp(
         "System/app capture backend: auto (default), sckit (ScreenCaptureKit, "
             + "macOS 15+, Screen Recording), or coreaudio (process tap, headless). "
-            + "Or $AURAL_CAPTURE.",
+            + "Or $HARK_CAPTURE.",
         valueName: "auto|sckit|coreaudio"))
     var captureBackend: String?
 
@@ -138,7 +138,7 @@ struct Aural: ParsableCommand {
 
     @Option(name: .customLong("silence-threshold"), help: ArgumentHelp(
         "Peak dBFS (negative) below which audio is silence — for --split silence and "
-            + "live-transcription segmentation (default -50; or $AURAL_SILENCE_THRESHOLD / config).",
+            + "live-transcription segmentation (default -50; or $HARK_SILENCE_THRESHOLD / config).",
         valueName: "dbfs"))
     var silenceThreshold: Double?
 
@@ -165,25 +165,25 @@ struct Aural: ParsableCommand {
     @Option(name: [.short, .long], help: ArgumentHelp(
         "Transcription engine: whisper (local), apple (on-device), whisperkit or parakeet "
             + "(CoreML, Apple Silicon). cloud is post-MVP. Default whisper; "
-            + "or $AURAL_ENGINE / aural config.",
+            + "or $HARK_ENGINE / hark config.",
         valueName: "engine"))
     var engine: String?
 
     @Option(help: ArgumentHelp(
-        "Model for the chosen engine; form varies. Default: $AURAL_WHISPER_MODEL "
-            + "or config. See 'aural models list --available'.",
+        "Model for the chosen engine; form varies. Default: $HARK_WHISPER_MODEL "
+            + "or config. See 'hark models list --available'.",
         valueName: "name|path"))
     var model: String?
 
     @Option(help: ArgumentHelp(
         "Spoken language code or 'auto' (default). Varies by engine — apple uses a "
-            + "locale, parakeet always auto-detects. Or $AURAL_LANGUAGE / config.",
+            + "locale, parakeet always auto-detects. Or $HARK_LANGUAGE / config.",
         valueName: "code"))
     var language: String?
 
     @Flag(name: .customLong("translate"), inversion: .prefixedNo, help: """
         Translate speech to English regardless of the spoken language \
-        (whisper/whisperkit only; or $AURAL_TRANSLATE / aural config). Use \
+        (whisper/whisperkit only; or $HARK_TRANSLATE / hark config). Use \
         --no-translate to override a configured default.
         """)
     var translate: Bool?
@@ -194,13 +194,13 @@ struct Aural: ParsableCommand {
         Label transcript segments by speaker: by capture source ("You" = mic, \
         "Others" = system) and/or acoustic diarization ("Speaker N"). Acoustic \
         diarization needs Apple Silicon; source attribution works anywhere. \
-        Or $AURAL_SPEAKERS / aural config.
+        Or $HARK_SPEAKERS / hark config.
         """)
     var speakers: Bool?
 
     @Option(name: .customLong("speaker-mode"), help: ArgumentHelp(
         "With --speakers: auto (source + diarization), source (mic vs system), "
-            + "or acoustic (diarize one stream). Or $AURAL_SPEAKER_MODE / config.",
+            + "or acoustic (diarize one stream). Or $HARK_SPEAKER_MODE / config.",
         valueName: "auto|source|acoustic"))
     var speakerMode: SpeakerMode?
 
@@ -234,14 +234,14 @@ struct Aural: ParsableCommand {
     @Flag(name: .customLong("vad"), inversion: .prefixedNo, help: """
         Use the on-device VAD for live segmentation (default on, Apple Silicon); \
         --no-vad falls back to the amplitude --silence-threshold method. Or \
-        $AURAL_VAD / aural config.
+        $HARK_VAD / hark config.
         """)
     var useVad: Bool?
 
     @Flag(name: .customLong("gain"), inversion: .prefixedNo, help: """
         Peak-normalize each segment before the engine to recognize quiet captures \
         (default on; the recording is unaffected). --no-gain disables. Or \
-        $AURAL_GAIN / aural config.
+        $HARK_GAIN / hark config.
         """)
     var useGain: Bool?
 
@@ -263,7 +263,7 @@ struct Aural: ParsableCommand {
         "Run as a control agent (no immediate capture): serve a small HTTP/JSON "
             + "API on [host:]port so scripts can start/stop/pause/resume/query a "
             + "recording (default host 127.0.0.1, e.g. 8473 or 0.0.0.0:8473). "
-            + "Non-loopback binds require $AURAL_REMOTE_TOKEN. See docs/remote-control.md.",
+            + "Non-loopback binds require $HARK_REMOTE_TOKEN. See docs/remote-control.md.",
         valueName: "[host:]port"))
     var remoteControl: String?
 
@@ -423,7 +423,7 @@ struct Aural: ParsableCommand {
             }
             do {
                 _ = try SplitSpec.parse(split)
-            } catch let error as AuralError {
+            } catch let error as HarkError {
                 throw ValidationError(error.message)
             }
         }
@@ -453,12 +453,12 @@ struct Aural: ParsableCommand {
         }
     }
 
-    /// Capture backend from --capture-backend, else $AURAL_CAPTURE, else "auto".
+    /// Capture backend from --capture-backend, else $HARK_CAPTURE, else "auto".
     func resolvedCaptureBackend() -> String {
         if let backend = captureBackend?.lowercased(), !backend.isEmpty {
             return backend
         }
-        if let env = ProcessInfo.processInfo.environment["AURAL_CAPTURE"]?.lowercased(),
+        if let env = ProcessInfo.processInfo.environment["HARK_CAPTURE"]?.lowercased(),
             !env.isEmpty
         {
             return env
@@ -487,28 +487,28 @@ struct Aural: ParsableCommand {
             } else {
                 try runLiveInput(outputs: outputs, settings: settings)
             }
-        } catch let error as AuralError {
+        } catch let error as HarkError {
             Log.error(error.message)
             throw error.code.exitCode
         } catch let error as TranscriptionError {
             Log.error(error.description)
             switch error {
             case .engineNotFound:
-                throw AuralExitCode.unavailable.exitCode
+                throw HarkExitCode.unavailable.exitCode
             case .modelMissing, .modelNotFound:
-                throw AuralExitCode.noInput.exitCode
+                throw HarkExitCode.noInput.exitCode
             case .engineFailed(let code):
                 // Propagate the engine's exit code through the pipeline (US03).
                 throw ExitCode(code)
             case .outputMissing:
-                throw AuralExitCode.software.exitCode
+                throw HarkExitCode.software.exitCode
             }
         }
     }
 
     /// Programmatic live-capture entry for the remote-control agent (PRD §6.10):
     /// resolves settings and runs the live pipeline with an injected control,
-    /// throwing `AuralError`/`TranscriptionError` for the agent to map to HTTP.
+    /// throwing `HarkError`/`TranscriptionError` for the agent to map to HTTP.
     /// The working directory is already applied by the agent at launch.
     func executeLive(control: CaptureControl) throws {
         let settings = try ResolvedSettings.resolve(from: self)
@@ -571,7 +571,7 @@ struct Aural: ParsableCommand {
         // engine preflight so the terminal requirement fails fast.
         if interactive {
             guard isatty(STDIN_FILENO) != 0, isatty(STDOUT_FILENO) != 0 else {
-                throw AuralError.usage(
+                throw HarkError.usage(
                     "--interactive needs an interactive terminal (stdin and stdout must be a TTY).")
             }
         }
@@ -580,7 +580,7 @@ struct Aural: ParsableCommand {
         if case .file(let path)? = outputs.audio {
             let fileFormat = try resolveAudioFileFormat(path: path)
             guard fileFormat.isWritable else {
-                throw AuralError.unavailable(
+                throw HarkError.unavailable(
                     "\(fileFormat.rawValue) output is not implemented yet (planned; see PLAN.md). Use wav, m4a, or flac.")
             }
         }
@@ -626,7 +626,7 @@ struct Aural: ParsableCommand {
         defer { interactiveSession?.stop() }
 
         let metadata = WAVMetadata(
-            creationDate: Date(), software: "aural 0.1.0", title: sourceLabel)
+            creationDate: Date(), software: "hark 0.1.0", title: sourceLabel)
 
         var sinks: [AudioSink] = []
         if let audioDest = outputs.audio {
@@ -715,7 +715,7 @@ struct Aural: ParsableCommand {
 
         if settings.speakerMode == .source {
             guard twoSources else {
-                throw AuralError.usage("""
+                throw HarkError.usage("""
                     speaker-mode 'source' attributes the mic vs the call, so it needs two \
                     sources: combine --mix with --system/--app/--exclude-app.
                     """)
@@ -740,7 +740,7 @@ struct Aural: ParsableCommand {
     private func makeStreamingDiarizer(settings: ResolvedSettings) throws -> EENDStreamingDiarizer? {
         do {
             return try EENDStreamingDiarizer.make()
-        } catch let error as AuralError {
+        } catch let error as HarkError {
             Log.notice("acoustic diarization unavailable (\(error.message)); falling back to a single label.")
             return nil
         }
@@ -756,7 +756,7 @@ struct Aural: ParsableCommand {
         systemDiarizer: EENDStreamingDiarizer?
     ) throws {
         guard let transcriptDest = outputs.transcript else {
-            throw AuralError.usage("""
+            throw HarkError.usage("""
                 --speakers labels a transcript; name one with -t FILE (or omit -a to \
                 transcribe to stdout).
                 """)
@@ -819,7 +819,7 @@ struct Aural: ParsableCommand {
         diarizer: EENDStreamingDiarizer?
     ) throws {
         guard let transcriptDest = outputs.transcript else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "--speakers labels a transcript; name one with -t FILE (or omit -a).")
         }
         let writer = try LiveTranscriptWriter(
@@ -866,11 +866,11 @@ struct Aural: ParsableCommand {
         session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink], labels: SpeakerLabels?
     ) throws {
         guard let transcriptDest = outputs.transcript else {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "--speakers labels a transcript; name one with -t FILE (or omit -a).")
         }
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-offline-\(UUID().uuidString)")
+            .appendingPathComponent("hark-offline-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 
@@ -963,7 +963,7 @@ struct Aural: ParsableCommand {
             sourcePath = staged.path
         } else {
             guard FileManager.default.fileExists(atPath: inputPath) else {
-                throw AuralError.noInput(
+                throw HarkError.noInput(
                     "input '\(inputPath)' is neither a file nor '-' (stdin). For live capture, omit -i.")
             }
         }
@@ -983,7 +983,7 @@ struct Aural: ParsableCommand {
                     audioPath: sourcePath, to: transcriptDest, settings: settings)
             }
         } else if settings.speakers {
-            throw AuralError.usage(
+            throw HarkError.usage(
                 "--speakers labels a transcript; name one with -t FILE (or omit -a).")
         }
     }
@@ -1064,7 +1064,7 @@ struct Aural: ParsableCommand {
             do {
                 writer = try WAVFileWriter(destination: .stream(.standardOutput), format: format)
             } catch {
-                throw AuralError.ioError("cannot write WAV header to stdout: \(error)")
+                throw HarkError.ioError("cannot write WAV header to stdout: \(error)")
             }
             return WAVSink(writer: writer, label: "stdout (wav stream)")
         case .file(let path):
@@ -1106,7 +1106,7 @@ struct Aural: ParsableCommand {
         if let forcedFormat { return AudioFileFormat(rawValue: forcedFormat.lowercased())! }
         if let detected = AudioFileFormat.detect(fromPath: path) { return detected }
         let known = AudioFileFormat.allCases.map(\.rawValue).joined(separator: ", ")
-        throw AuralError.usage(
+        throw HarkError.usage(
             "cannot infer format from '\(path)'; use a known extension (\(known)) or --format.")
     }
 

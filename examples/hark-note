@@ -1,0 +1,52 @@
+#!/usr/bin/env zsh
+#
+# hark-note — quick spoken voice memo from the microphone.
+#
+# Records the default input device to a timestamped M4A and writes a transcript
+# alongside it. Runs until you press Ctrl-C, or for a fixed number of seconds
+# when HARK_NOTE_SECONDS is set.
+#
+# Usage:
+#   hark-note "idea about the parser"
+#   HARK_NOTE_SECONDS=60 hark-note shopping
+#
+# Output (in $HARK_NOTES_DIR, default current directory):
+#   2026-06-20T14-30-05-idea-about-the-parser.m4a
+#   2026-06-20T14-30-05-idea-about-the-parser.txt
+#
+# Environment:
+#   HARK_NOTES_DIR      where to write artifacts   (default: .)
+#   HARK_NOTE_SECONDS   stop after N seconds       (default: until Ctrl-C)
+#
+# Requirements: `hark` and microphone permission for your terminal.
+
+set -euo pipefail
+
+die() { print -u2 -- "hark-note: $*"; exit 1 }
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { sed -n '2,22p' "$0"; exit 0 }
+
+command -v hark >/dev/null 2>&1 || die "missing dependency: hark"
+
+title="${1:-note}"
+dir="${HARK_NOTES_DIR:-.}"
+[[ -d "$dir" ]] || die "HARK_NOTES_DIR does not exist: $dir"
+
+slug=$(print -r -- "${title:l}" | tr -cs 'a-z0-9' '-')
+slug="${slug#-}"; slug="${slug%-}"
+[[ -n "$slug" ]] || slug="note"
+base="$dir/$(date +%Y-%m-%dT%H-%M-%S)-$slug"
+
+typeset -a dur_args; dur_args=()
+if [[ -n "${HARK_NOTE_SECONDS:-}" ]]; then
+  dur_args=(--duration "$HARK_NOTE_SECONDS")
+  print -u2 -- "hark-note: recording ${HARK_NOTE_SECONDS}s → $base.m4a"
+else
+  print -u2 -- "hark-note: recording → $base.m4a (Ctrl-C to stop)"
+fi
+
+hark "${dur_args[@]}" -a "$base.m4a" -t "$base.txt"
+
+print -- "Saved:"
+print -- "  audio:      $base.m4a"
+print -- "  transcript: $base.txt"

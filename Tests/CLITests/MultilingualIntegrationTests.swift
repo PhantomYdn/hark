@@ -21,7 +21,7 @@ struct MultilingualIntegrationTests {
         else { return }  // prerequisites absent -> skip
 
         let work = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aural-ml-it-\(UUID().uuidString)")
+            .appendingPathComponent("hark-ml-it-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
 
