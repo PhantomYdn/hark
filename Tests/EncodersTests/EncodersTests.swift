@@ -147,11 +147,14 @@ struct WAVMetadataTests {
         let chunk = WAVFileWriter.infoListChunk(
             WAVMetadata(creationDate: nil, software: "hark", title: nil))
         // LIST + size + INFO + ISFT + size(6) + "hark\0\0" (4 chars + null, padded even)
-        let expected: [UInt8] =
-            Array("LIST".utf8) + [0x12, 0, 0, 0]
-            + Array("INFO".utf8)
-            + Array("ISFT".utf8) + [0x06, 0, 0, 0]
-            + Array("hark".utf8) + [0x00, 0x00]
+        var expected: [UInt8] = []
+        expected += Array("LIST".utf8)
+        expected += [0x12, 0, 0, 0]
+        expected += Array("INFO".utf8)
+        expected += Array("ISFT".utf8)
+        expected += [0x06, 0, 0, 0]
+        expected += Array("hark".utf8)
+        expected += [0x00, 0x00]
         #expect([UInt8](chunk) == expected)
     }
 
