@@ -21,6 +21,13 @@ All notable changes to Hark are documented here. The format is loosely based on
   [docs/remote-control.md](docs/remote-control.md#running-as-a-service-brew-services).
 - `--remote-control` now takes an **optional** value: omit it to bind loopback on
   the configured `remote-control-port` (an explicit `[host:]port` still wins).
+- The reference Google Meet userscript now ships as a standalone file,
+  [`examples/hark-meet.user.js`](examples/hark-meet.user.js) (Tampermonkey
+  one-click install + self-update), and **mirrors your Meet mic mute to the
+  recording** one-way (Meet → hark): it starts with `muted` matching Meet's
+  state at join, then `POST /mute`/`/unmute` as you toggle — near-instant via a
+  DOM observer with a 2s poll fallback. `docs/remote-control.md` now links the
+  file instead of embedding it.
 
 ## [0.3.0] - 2026-06-26
 

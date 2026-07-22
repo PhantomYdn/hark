@@ -427,7 +427,9 @@
 - [x] `StartRequest.muted: Bool?` (agent-handled, not a CLI flag); agent computes `hasMic = command.capturesMicrophone`, registers `POST /mute|/unmute`, threads `muted` into `StartedResponse`/`ActionResponse`/`StatusResponse.Session`, maps `noMicrophone → 422`
 - [x] Tests: `CaptureControl.mute/unmute` idempotency; session-manager mute/unmute lifecycle + idempotency, 404 with no session, 422 no-mic, `/start {muted:true}` (and 422 no-mic); `capturesMicrophone` source combos. `make test` green — 292 tests, 76 suites. Live curl: `/mute`/`/unmute` routed, no-session → 404 JSON
 - [x] Docs: `docs/remote-control.md` endpoints + status codes (422 no-mic) + status/`start` JSON `muted`; README curl note; CHANGELOG Unreleased; PRD §6.10 endpoints + §4.2 deferred bullet retired + US12 criterion
+- [x] Reference Meet userscript extracted to `examples/hark-meet.user.js` (Tampermonkey header + `@version`/`@downloadURL`/`@updateURL` for one-click install + self-update) and mirrors the Meet mic toggle to the agent **one-way** (Meet → hark): `MutationObserver` on the mic button (`data-is-muted`/aria-label heuristic) + 2s poll fallback, initial state via `POST /start {muted}`, guarded by `hasMic` (skips `/mute` when the capture has no mic → avoids `422`). `docs/remote-control.md` now links the file instead of inlining it; `examples/README.md` row + Tampermonkey install note; PRD US11/US12/§6.10 + CHANGELOG updated
 - [ ] Live-capture e2e of agent-driven `/mute`/`/unmute` with a real `--mix` recording (mic toggles audibly absent/present) — on the pending-live list (needs mic TCC + model)
+- [ ] Live e2e of the Meet userscript in a real call: verify the `data-is-muted`/aria-label selector reads the mic state and that toggling in Meet mirrors to the recording (gated/manual — needs a browser + Meet)
 
 ## Phase 11: Legal & Export-Compliance Docs (PRD §7 Legal & Compliance)
 

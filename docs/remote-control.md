@@ -217,95 +217,32 @@ Errors carry a JSON body `{ "error": "…" }`.
 
 ## Reference: Google Meet userscript (Tampermonkey)
 
-Records every Google Meet call automatically: it starts a capture when you join
-and stops it when you leave, naming the file from the meeting title and date.
+A ready-to-install userscript ships at
+[`examples/hark-meet.user.js`](../examples/hark-meet.user.js). It records every
+Google Meet call automatically — starting a capture when you join and stopping
+it when you leave, naming the file from the meeting title and date — and while
+recording it **mirrors your Meet mic mute to the recording**: muting yourself in
+Meet silences only the mic in the capture (the call audio keeps recording and
+the timeline is preserved), and unmuting restores it.
 
-Install [Tampermonkey](https://www.tampermonkey.net/), create a new script, and
-paste the following. Start the agent first, e.g.
-`hark --remote-control 8473 -C ~/Recordings` (with a working engine/model if you
-want transcripts — see the Configuration section of the README).
-
-```javascript
-// ==UserScript==
-// @name         Hark — auto-record Google Meet
-// @namespace    hark
-// @match        https://meet.google.com/*
-// @grant        GM_xmlhttpRequest
-// @connect      127.0.0.1
-// @run-at       document-idle
-// ==/UserScript==
-
-(function () {
-  "use strict";
-
-  const AGENT = "http://127.0.0.1:8473";
-  const TOKEN = ""; // set if the agent uses $HARK_REMOTE_TOKEN
-
-  let recording = false;
-
-  function post(path, body) {
-    const headers = { "Content-Type": "application/json" };
-    if (TOKEN) headers["Authorization"] = "Bearer " + TOKEN;
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: AGENT + path,
-      headers,
-      data: body ? JSON.stringify(body) : "",
-      onload: (r) => console.log("[hark]", path, r.status, r.responseText),
-      onerror: (e) => console.warn("[hark] agent unreachable", e),
-    });
-  }
-
-  function fileBase() {
-    const stamp = new Date()
-      .toISOString()
-      .slice(0, 16)
-      .replace("T", "-")
-      .replace(":", "");
-    const title = (document.title || "Meet")
-      .replace(/^Meet\s*[-–—]\s*/, "")
-      .replace(/[^\w.-]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 60) || "meeting";
-    return `Meet-${title}-${stamp}`;
-  }
-
-  // Heuristic: the in-call UI shows a "Leave call" control.
-  function inCall() {
-    return !!document.querySelector(
-      '[aria-label*="Leave call" i], [aria-label*="Leave meeting" i]'
-    );
-  }
-
-  function tick() {
-    const active = inCall();
-    if (active && !recording) {
-      recording = true;
-      const base = fileBase();
-      post("/start", {
-        system: true,
-        mix: true,
-        audio: base + ".m4a",
-        transcript: base + ".srt",
-        speakers: true,
-      });
-    } else if (!active && recording) {
-      recording = false;
-      post("/stop");
-    }
-  }
-
-  setInterval(tick, 2000);
-  window.addEventListener("beforeunload", () => {
-    if (recording) post("/stop");
-  });
-})();
-```
+Install [Tampermonkey](https://www.tampermonkey.net/), then open the raw file
+([`examples/hark-meet.user.js`](../examples/hark-meet.user.js)) — Tampermonkey
+offers a one-click install and self-updates from the same URL. Start the agent
+first, e.g. `hark --remote-control 8473 -C ~/Recordings` (or
+`brew services start hark`), with a working engine/model if you want transcripts
+— see the Configuration section of the README.
 
 Notes:
 
-- The `@connect 127.0.0.1` grant lets Tampermonkey reach the loopback agent.
-- Adjust the JSON body to taste — e.g. drop `transcript`/`speakers` to record
-  audio only, or set `engine`/`model` if you don't configure them at launch.
-- The "Leave call" selector is a heuristic; Google changes Meet's DOM over time,
-  so you may need to update it.
+- The `@connect 127.0.0.1` grant lets Tampermonkey reach the loopback agent; set
+  `TOKEN` at the top of the script if the agent uses `$HARK_REMOTE_TOKEN`.
+- Adjust the JSON `/start` body to taste — e.g. drop `transcript`/`speakers` to
+  record audio only, or set `engine`/`model` if you don't configure them at
+  launch.
+- Mic-mute mirroring is **one-way** (Meet → hark) and needs a microphone in the
+  capture (`mix`, as in the sample, or a mic-only session); on a system/app
+  capture with no mic the agent's `/mute` returns `422`, so the script leaves it
+  alone. hark never drives Meet's mic.
+- The "Leave call" and mic-state (`data-is-muted` / aria-label) selectors are
+  heuristics; Google changes Meet's DOM over time, so you may need to update
+  them.

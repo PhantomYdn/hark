@@ -168,7 +168,7 @@ As a **power user**, I want Hark to tell me which engine, model, and source it's
 As a **knowledge worker**, I want my browser to start and stop Hark automatically around Google Meet calls, so that every meeting is recorded and named without my intervention.
 - Acceptance Criteria:
   - [ ] `hark --remote-control` starts an agent listening on loopback and prints its address; it does not begin capturing on its own
-  - [ ] A Tampermonkey userscript (shipped as a reference in the docs) calls `POST /start` when a Meet call is joined, with a filename derived from the meeting title and date, and `POST /stop` when the call ends
+  - [ ] A Tampermonkey userscript (shipped as a reference at `examples/hark-meet.user.js`) calls `POST /start` when a Meet call is joined, with a filename derived from the meeting title and date, and `POST /stop` when the call ends
   - [ ] The recording is written under the agent's working `directory`; `GET /status` reports the session's state, elapsed time, and output paths (the API never serves the transcript/audio content itself)
   - [ ] A second `POST /start` while a recording is active is rejected with `409 Conflict` (single active session)
   - [ ] With a non-loopback bind address, the agent refuses to start unless a token (`$HARK_REMOTE_TOKEN`) is configured, and rejects unauthenticated requests
@@ -183,6 +183,7 @@ As a **developer in a live meeting**, I want to mute my mic and copy the running
   - [ ] Pressing **y** copies the full transcript captured so far to the system clipboard (plain text, with speaker labels when `--speakers` is active) and prints a confirmation on stderr
   - [ ] Pressing **y** before anything is transcribed shows a brief "nothing to copy" notice and leaves the clipboard unchanged
   - [ ] Over the remote-control API (§6.10), `POST /mute`/`/unmute` toggle the active session's mic the same way (timeline preserved, idempotent), `GET /status` reports the `muted` flag, and a capture with no microphone returns `422`; transcript yank is interactive-only (the API never serves transcript content)
+  - [ ] The reference Google Meet userscript (§6.10) mirrors the Meet mic toggle to the agent **one-way** (Meet → hark): it starts the recording with `muted` matching Meet's state at join, then `POST /mute`/`/unmute` as you toggle in Meet (only when the capture has a mic); hark never drives Meet's mic
 
 ---
 
@@ -430,7 +431,7 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 - **Control + status only:** the API exposes **controls and status metadata only** — it **never serves transcript or audio content**. Produced artifacts are retrieved from the working `directory` over the filesystem, not the API.
 - **Errors** map Hark's exit-code semantics onto HTTP status codes (e.g. permission denied → `403`, bad parameters → `400`, engine/model missing → `404`/`422`, already recording → `409`) with a JSON `{ "error": … }` body.
 - **Security:** the listener is **loopback-only by default**, consistent with §7 "no external network calls by default" (it accepts local connections; it makes none). Binding to a **non-loopback** interface is explicit opt-in and **requires a bearer token** (`$HARK_REMOTE_TOKEN`, sent as `Authorization: Bearer …`); the agent **refuses to bind** to a non-loopback address without one. `--remote-control` is mutually exclusive with `--interactive` and with the immediate-capture/`-i` input modes.
-- **Clients:** no client is bundled — the wire protocol is documented so any language can drive it (`curl`, scripts, browser userscripts). A **Tampermonkey Google-Meet reference userscript** ships in the docs: it watches `meet.google.com`, calls `POST /start` on call-join with a filename derived from the meeting title + date, and `POST /stop` on call-end, using `GM_xmlhttpRequest` to the loopback agent.
+- **Clients:** no client is bundled — the wire protocol is documented so any language can drive it (`curl`, scripts, browser userscripts). A **Tampermonkey Google-Meet reference userscript** ships at `examples/hark-meet.user.js`: it watches `meet.google.com`, calls `POST /start` on call-join with a filename derived from the meeting title + date, and `POST /stop` on call-end, using `GM_xmlhttpRequest` to the loopback agent. It also **mirrors the Meet mic mute** to the recording one-way (Meet → hark): initial `muted` state on `/start`, then `POST /mute`/`/unmute` as you toggle in Meet.
 
 ---
 

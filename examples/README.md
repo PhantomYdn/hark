@@ -9,6 +9,7 @@ tweak it to taste, and drop it somewhere on your `PATH`.
 | [`hark-meeting`](hark-meeting) | Record a meeting (system + mic) interactively, then summarize the transcript with fabric-ai. |
 | [`hark-note`](hark-note) | Quick spoken voice memo → timestamped audio + transcript. |
 | [`hark-dictate`](hark-dictate) | Speak for a few seconds → text on your clipboard. |
+| [`hark-meet.user.js`](hark-meet.user.js) | Browser userscript (Tampermonkey): auto-record Google Meet calls and mirror your Meet mic mute to the recording. |
 
 ## Install
 
@@ -28,6 +29,16 @@ hark-meeting "Team Sync"
 hark-note "idea about the parser"
 hark-dictate 15
 ```
+
+### Browser userscript (Tampermonkey)
+
+`hark-meet.user.js` installs differently — it runs in your browser, not on your
+`PATH`. Install [Tampermonkey](https://www.tampermonkey.net/), then open the raw
+[`hark-meet.user.js`](hark-meet.user.js) for a one-click install (it also
+self-updates from that URL). It needs the remote-control agent running —
+`brew services start hark` or `hark --remote-control 8473 -C ~/Recordings` — and
+mirrors your Google Meet mic mute to the recording. See
+[`docs/remote-control.md`](../docs/remote-control.md#reference-google-meet-userscript-tampermonkey).
 
 ## Prerequisites
 
