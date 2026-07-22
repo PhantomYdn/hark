@@ -6,6 +6,8 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-22
+
 ### Added
 - Remote-control mic mute parity: the agent now exposes `POST /mute` and
   `POST /unmute` (idempotent; silence only the mic, timeline preserved — distinct
@@ -140,6 +142,7 @@ transcribes them, and composes into Unix pipelines.
 - The release binary is signed (Developer ID) and notarized, so it passes
   Gatekeeper; its stable code identity keeps privacy grants across upgrades.
 
+[0.4.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.0
 [0.3.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.3.0
 [0.2.1]: https://github.com/PhantomYdn/hark/releases/tag/v0.2.1
 [0.2.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.2.0
