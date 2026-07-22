@@ -6,6 +6,7 @@ import Foundation
 enum AgentError: Error {
     case busy            // a recording is already active (409)
     case noActiveSession // pause/resume/stop with nothing running (404)
+    case noMicrophone    // mute/unmute on a capture with no mic (422)
 }
 
 /// Tracks the agent's **single** active recording session (PRD §6.10). Thread-
@@ -23,6 +24,11 @@ final class RemoteSessionManager: @unchecked Sendable {
         let startedAt: Date
         let audio: String?
         let transcript: String?
+        /// Whether a microphone is in this capture (mic-only or `--mix`); gates
+        /// `/mute` and `/unmute`.
+        let hasMic: Bool
+        /// Whether the microphone is currently muted (orthogonal to `state`).
+        var muted: Bool
         var error: String?
     }
 
@@ -42,13 +48,21 @@ final class RemoteSessionManager: @unchecked Sendable {
         return snapshot
     }
 
-    /// Registers a new active session. Throws `.busy` if one is already running.
-    func begin(id: String, control: CaptureControl, audio: String?, transcript: String?) throws -> Snapshot {
+    /// Registers a new active session. Throws `.busy` if one is already running,
+    /// or `.noMicrophone` if `muted` is requested for a capture with no mic.
+    func begin(
+        id: String, control: CaptureControl, hasMic: Bool, muted: Bool,
+        audio: String?, transcript: String?
+    ) throws -> Snapshot {
         lock.lock(); defer { lock.unlock() }
         guard !isActive else { throw AgentError.busy }
+        if muted {
+            guard hasMic else { throw AgentError.noMicrophone }
+            control.mute()  // start muted; the capture reads isMuted from the off
+        }
         let snap = Snapshot(
             id: id, state: .recording, startedAt: Date(),
-            audio: audio, transcript: transcript, error: nil)
+            audio: audio, transcript: transcript, hasMic: hasMic, muted: muted, error: nil)
         self.control = control
         self.snapshot = snap
         return snap
@@ -56,6 +70,22 @@ final class RemoteSessionManager: @unchecked Sendable {
 
     func pause() throws -> Snapshot { try transition(to: .paused) { $0.pause() } }
     func resume() throws -> Snapshot { try transition(to: .recording) { $0.resume() } }
+
+    /// Mutes/unmutes the active session's microphone. Throws `.noActiveSession`
+    /// (404) when nothing is running, or `.noMicrophone` (422) when the capture
+    /// has no mic. Mute is orthogonal to `state` — it does not pause capture.
+    func mute() throws -> Snapshot { try setMuted(true) }
+    func unmute() throws -> Snapshot { try setMuted(false) }
+
+    private func setMuted(_ value: Bool) throws -> Snapshot {
+        lock.lock(); defer { lock.unlock() }
+        guard isActive, var snap = snapshot, let control else { throw AgentError.noActiveSession }
+        guard snap.hasMic else { throw AgentError.noMicrophone }
+        if value { control.mute() } else { control.unmute() }
+        snap.muted = value
+        snapshot = snap
+        return snap
+    }
 
     /// Requests a stop on the active session and marks it stopped optimistically;
     /// the worker's `finish` confirms the final state.
@@ -100,6 +130,9 @@ final class RemoteSessionManager: @unchecked Sendable {
 struct StartRequest: Decodable {
     var audio: String?
     var transcript: String?
+    /// Begin with the microphone muted (requires a mic in the capture, else 422).
+    /// Not a CLI flag — handled by the agent, not `makeCommand`.
+    var muted: Bool?
     var system: Bool?
     var apps: [String]?
     var excludeApps: [String]?

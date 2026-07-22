@@ -35,6 +35,10 @@ struct ResolvedSettings: Equatable {
     let maxSpeakers: Int?
     let speakerThreshold: Double?
 
+    /// Default TCP port the `--remote-control` agent binds when the flag is given
+    /// without an explicit `[host:]port` (an explicit value still wins).
+    let remoteControlPort: Int
+
     /// Resolves every setting from the parsed command, environment, and config.
     /// Throws a usage error for malformed environment values.
     static func resolve(
@@ -115,6 +119,13 @@ struct ResolvedSettings: Equatable {
             try ConfigKey.parseUnit($0, .speakerThreshold)
         }
 
+        // No standalone flag: an explicit `--remote-control [host:]port` is parsed
+        // by the agent and wins there; this resolves the default used when the
+        // flag is bare (env › config › 8473).
+        let remoteControlPort = try int(nil, .remoteControlPort, config.remoteControlPort) {
+            try ConfigKey.parseInt($0, .remoteControlPort, in: 1...65535)
+        } ?? 8473
+
         return ResolvedSettings(
             engine: engine, language: language, translate: translate, micDevice: micDevice,
             directory: directory,
@@ -123,7 +134,7 @@ struct ResolvedSettings: Equatable {
             silenceThreshold: silenceThreshold, useVad: useVad, vadThreshold: vadThreshold,
             useGain: useGain, speakers: speakers, speakerMode: speakerMode,
             speakerLabels: speakerLabels, diarizeEngine: diarizeEngine, maxSpeakers: maxSpeakers,
-            speakerThreshold: speakerThreshold)
+            speakerThreshold: speakerThreshold, remoteControlPort: remoteControlPort)
     }
 
     /// Validates merged values that flag-only `Hark.validate()` cannot see

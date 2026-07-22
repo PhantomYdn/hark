@@ -326,14 +326,26 @@ full API reference are in [docs/remote-control.md](docs/remote-control.md).
 
 ```sh
 hark --remote-control 8473 -C ~/Recordings   # loopback agent, recordings under ~/Recordings
+hark --remote-control                          # bind 127.0.0.1 on the configured port (default 8473)
 
 curl -s -X POST http://127.0.0.1:8473/start \
   -d '{"system":true,"mix":true,"audio":"call.m4a","transcript":"call.srt"}'
 curl -s http://127.0.0.1:8473/status
+curl -s -X POST http://127.0.0.1:8473/mute     # silence only the mic (mix capture)
+curl -s -X POST http://127.0.0.1:8473/unmute
 curl -s -X POST http://127.0.0.1:8473/stop
 ```
 
 Bound to loopback by default; a non-loopback bind requires `$HARK_REMOTE_TOKEN`.
+The address is optional: omit it to bind loopback on the `remote-control-port`
+config key (default `8473`; also `$HARK_REMOTE_CONTROL_PORT`).
+
+**Run it as a background service.** If you installed via Homebrew, `brew services
+start hark` runs the agent as a per-user LaunchAgent (auto-starts at login) so the
+userscript can reach it without keeping a terminal open. It binds the
+`remote-control-port` config key and writes recordings under the `directory`
+config key — set both with `hark config`. See
+[docs/remote-control.md](docs/remote-control.md#running-as-a-service-brew-services).
 
 ## Models
 

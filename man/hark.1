@@ -286,15 +286,21 @@ finishes (Ctrl\-C also stops). Needs a TTY; not combined with
 .B \-i
 or stdout output.
 .TP
-.BI \-\-remote\-control " [host:]port"
+.BI \-\-remote\-control " [[host:]port]"
 Run as a control agent (no immediate capture): serve an HTTP/JSON API on
 .RI [ host :] port
-so scripts can start/pause/resume/stop/query one recording. A bare port or
-empty host binds loopback (conventionally
+so scripts can start/pause/resume/stop/query one recording. The value is
+optional: omit it to bind loopback on the
+.B remote\-control\-port
+config key (default
 .BR 8473 );
-a non\-loopback bind requires
+a bare port or empty host binds loopback on that port; a non\-loopback bind
+requires
 .BR $HARK_REMOTE_TOKEN .
-Launch\-time capture flags become per\-session defaults. See
+Launch\-time capture flags become per\-session defaults. Run it as a background
+LaunchAgent with
+.BR "brew services start hark" .
+See
 .I docs/remote-control.md
 in the project.
 .TP
@@ -385,6 +391,14 @@ Default working directory for relative artifact paths.
 .B HARK_CAPTURE
 Default system/app capture backend
 .RB ( auto / sckit / coreaudio ).
+.TP
+.B HARK_REMOTE_CONTROL_PORT
+Default loopback port for
+.B \-\-remote\-control
+when no address is given (config key
+.BR remote\-control\-port ,
+default
+.BR 8473 ).
 .TP
 .B HARK_REMOTE_TOKEN
 Bearer token required by
@@ -517,6 +531,14 @@ Run a loopback control agent for scripts to drive:
 .RS
 .nf
 hark \-\-remote\-control 8473 \-C ~/Recordings
+.fi
+.RE
+.PP
+Keep the agent always\-on as a per\-user LaunchAgent (Homebrew):
+.PP
+.RS
+.nf
+brew services start hark
 .fi
 .RE
 .SH PERMISSIONS

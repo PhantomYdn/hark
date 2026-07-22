@@ -82,6 +82,7 @@ struct ConfigurationTests {
             case .speakerLabels: raw = "Me,Them"
             case .diarizeEngine: raw = "offline"
             case .maxSpeakers: raw = "5"
+            case .remoteControlPort: raw = "8473"
             }
             try config.set(key, rawValue: raw)
         }

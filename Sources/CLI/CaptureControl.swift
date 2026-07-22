@@ -67,6 +67,27 @@ final class CaptureControl: @unchecked Sendable {
         return muted
     }
 
+    /// Mutes the microphone if not already muted; returns true if the state
+    /// changed. A no-op once stopped. Independent of pause. Used by the
+    /// remote-control agent's `POST /mute` (idempotent, unlike `toggleMute`).
+    @discardableResult
+    func mute() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !muted, !stopped else { return false }
+        muted = true
+        return true
+    }
+
+    /// Unmutes the microphone if muted; returns true if the state changed. A
+    /// no-op once stopped. Used by the remote-control agent's `POST /unmute`.
+    @discardableResult
+    func unmute() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard muted, !stopped else { return false }
+        muted = false
+        return true
+    }
+
     /// Pauses if running; returns true if the state changed.
     @discardableResult
     func pause() -> Bool {

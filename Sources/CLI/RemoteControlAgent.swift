@@ -88,6 +88,12 @@ final class RemoteControlAgent: @unchecked Sendable {
         await server.appendRoute("POST /resume") { [self] request in
             handle(request) { actionResponse(try sessions.resume()) }
         }
+        await server.appendRoute("POST /mute") { [self] request in
+            handle(request) { actionResponse(try sessions.mute()) }
+        }
+        await server.appendRoute("POST /unmute") { [self] request in
+            handle(request) { actionResponse(try sessions.unmute()) }
+        }
         await server.appendRoute("POST /stop") { [self] request in
             handle(request) { actionResponse(try sessions.stop()) }
         }
@@ -124,9 +130,11 @@ final class RemoteControlAgent: @unchecked Sendable {
         let command = try req.makeCommand(defaults: defaults.value)
         let control = CaptureControl()
         let id = UUID().uuidString
-        // begin throws .busy (→409) if a recording is already active.
+        // begin throws .busy (→409) if a recording is already active, or
+        // .noMicrophone (→422) if `muted` is requested for a mic-less capture.
         let snap = try sessions.begin(
-            id: id, control: control, audio: command.audio, transcript: command.transcript)
+            id: id, control: control, hasMic: command.capturesMicrophone,
+            muted: req.muted ?? false, audio: command.audio, transcript: command.transcript)
 
         // Run the capture off the server's executor; report the terminal state.
         let box = UncheckedSendableBox(value: command)
@@ -181,6 +189,8 @@ final class RemoteControlAgent: @unchecked Sendable {
             return self.error("a recording is already active", .conflict)
         case AgentError.noActiveSession:
             return self.error("no active recording", .notFound)
+        case AgentError.noMicrophone:
+            return self.error("no microphone in this capture", .unprocessableContent)
         case let harkError as HarkError:
             return self.error(harkError.message, httpStatus(for: harkError.code))
         case let transcription as TranscriptionError:
@@ -274,12 +284,14 @@ private struct ErrorResponse: Encodable {
 private struct StartedResponse: Encodable {
     let id: String
     let state: String
+    let muted: Bool
     let audio: String?
     let transcript: String?
 
     init(snapshot: RemoteSessionManager.Snapshot) {
         id = snapshot.id
         state = snapshot.state.rawValue
+        muted = snapshot.muted
         audio = snapshot.audio
         transcript = snapshot.transcript
     }
@@ -288,10 +300,12 @@ private struct StartedResponse: Encodable {
 private struct ActionResponse: Encodable {
     let id: String
     let state: String
+    let muted: Bool
 
     init(snapshot: RemoteSessionManager.Snapshot) {
         id = snapshot.id
         state = snapshot.state.rawValue
+        muted = snapshot.muted
     }
 }
 
@@ -303,6 +317,7 @@ private struct StatusResponse: Encodable {
     struct Session: Encodable {
         let id: String
         let state: String
+        let muted: Bool
         let elapsed: Double
         let audio: String?
         let transcript: String?
@@ -315,7 +330,7 @@ private struct StatusResponse: Encodable {
         agent = Agent(version: version, address: address)
         self.session = session.map {
             Session(
-                id: $0.id, state: $0.state.rawValue,
+                id: $0.id, state: $0.state.rawValue, muted: $0.muted,
                 elapsed: Date().timeIntervalSince($0.startedAt),
                 audio: $0.audio, transcript: $0.transcript, error: $0.error)
         }

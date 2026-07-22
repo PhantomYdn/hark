@@ -392,6 +392,43 @@
 - [x] Tests: `CaptureControl` mute toggle (independent of pause; cleared on stop); `TranscriptLog` accumulation; `ClipboardWriter` fake copy + empty-buffer no-op; hint visibility / no-mic notice; `InteractiveSession.handleKey` dispatch for space/m/y/Enter. `make test` green — 281 tests, 74 suites
 - [ ] Live-capture e2e of interactive mute + yank (real mic) — pending-live list (keypress path can't run permission-free; mic-zeroing in the OS sessions can't run without TCC)
 
+### Phase 10.7 — Remote-control agent as a managed service (`brew services`)
+
+> Run the on-demand agent (10.3) under launchd via a Homebrew `service` block, so
+> `brew services start hark` keeps it always-on for the browser userscript (US11)
+> without an open terminal — a **per-user LaunchAgent** (login/GUI session;
+> supports mic + ScreenCaptureKit + Core Audio; auto-start at login, **no
+> auto-restart by default**). Adds a persisted `remote-control-port` config key
+> (default 8473) so the agent launches without an explicit address. The cron-style
+> scheduler + logout-survival LaunchDaemon stays in Future. PRD §4.2, §6.1, §6.10,
+> §7 Installability, US11.
+
+- [x] Add the `remote-control-port` config setting (default 8473) — synced across `ConfigKey` (`Settings.swift`), `Configuration.settings` registry + field + `CodingKeys` (`Configuration.swift`), `ResolvedSettings` (resolve `?? 8473` + memberwise init), and the exhaustive `switch ConfigKey` + `.with(...)` test helper; env `$HARK_REMOTE_CONTROL_PORT` auto-derived; integer validation 1–65535; `config show` description. Verified live: `config show/set/unset`, range error
+- [x] Make `--remote-control`'s value optional: ArgumentParser can't carry an optional option-value (and rejects `[String]?`), so `Hark.main()` normalizes argv — a value-less `--remote-control` (last token or followed by another option) gets an empty-string sentinel; dispatch binds loopback on the resolved `remote-control-port` for the sentinel, an explicit `[host:]port` still wins. Preserves `hark --remote-control 8473`/`:8473`/`0.0.0.0:8473` + `--interactive`/`-i` exclusivity. Verified live: bare → 8473, env → 7000, config → 9100, explicit → 9999
+- [x] Add a `service do … end` block to `Formula/hark.rb`: `run [opt_bin/"hark", "--remote-control", "--no-keep-awake"]`, `run_type :immediate`, **no `keep_alive`** (crash/bad-start stays visible, not relaunched in a hidden loop), `log_path`/`error_log_path` → `var/log/hark-remote.log`. `brew style` clean. Port/dir/engine come from `hark config`
+- [x] Tests: `ConfigurationTests.roundTripsAllKeys` covers the new key (count invariants auto-pass); `ResolvedSettingsTests.remoteControlPortFollowsEnvConfigDefault` (default › config › env, range error, env-name map); `RemoteControlFlagTests` (argv normalizer + bare/explicit parse). `make test` green — 286 tests, 75 suites
+- [x] Docs: `docs/remote-control.md` "Running as a service (`brew services`)" section (start/stop/restart, log path, config port/dir, per-user-vs-logout, no-KeepAlive rationale + opt-in, `--no-keep-awake`); README "Remote control" note; man page (`--remote-control` optional value, `HARK_REMOTE_CONTROL_PORT`, `brew services` example); CHANGELOG Unreleased
+- [ ] TCC-under-launchd validation (gated/manual — pending-live): the LaunchAgent-spawned signed `hark` can capture (consent attaches to the hark binary in the login session), auto-starts at login, and a userscript reaches it after login without a terminal (US11). Connects to PRD Open Q4 and the Post-beta cron/launchd item (line 176)
+
+### Phase 10.8 — Remote-control mute/unmute parity (§6.10, US12)
+
+> Expose the interactive mic mute (§6.9) over the agent as explicit, idempotent
+> `POST /mute` / `/unmute`, a `muted` field in `GET /status`, and an optional
+> `muted` in `POST /start`. The capture core already mutes correctly for
+> agent-driven sessions (Phase 10.6 `CaptureControl` + `MicMutableCaptureSession`),
+> so this is API-exposure only — no new TCC permission; the brew-services agent
+> (10.7) inherits it. Mute is orthogonal to pause (silences only the mic; timeline
+> preserved) and requires a mic in the capture (else `422`). Transcript yank stays
+> interactive-only (the API never serves transcript content). Builds on 10.3 + 10.6.
+
+- [x] Extract `Hark.capturesMicrophone` (mic-only or `--mix`) from the `hasMic` expression in `runLiveInput`; reuse it there and to gate the agent's mute verbs
+- [x] `CaptureControl.mute()`/`unmute()` — explicit idempotent setters beside `toggleMute()` (return whether changed; no-op once stopped)
+- [x] `RemoteSessionManager`: `Snapshot` gains `hasMic` + `muted`; `mute()`/`unmute()` guard active session (404) and reject no-mic via new `AgentError.noMicrophone` (422); `begin(hasMic:muted:)` starts muted when requested (422 if no mic)
+- [x] `StartRequest.muted: Bool?` (agent-handled, not a CLI flag); agent computes `hasMic = command.capturesMicrophone`, registers `POST /mute|/unmute`, threads `muted` into `StartedResponse`/`ActionResponse`/`StatusResponse.Session`, maps `noMicrophone → 422`
+- [x] Tests: `CaptureControl.mute/unmute` idempotency; session-manager mute/unmute lifecycle + idempotency, 404 with no session, 422 no-mic, `/start {muted:true}` (and 422 no-mic); `capturesMicrophone` source combos. `make test` green — 292 tests, 76 suites. Live curl: `/mute`/`/unmute` routed, no-session → 404 JSON
+- [x] Docs: `docs/remote-control.md` endpoints + status codes (422 no-mic) + status/`start` JSON `muted`; README curl note; CHANGELOG Unreleased; PRD §6.10 endpoints + §4.2 deferred bullet retired + US12 criterion
+- [ ] Live-capture e2e of agent-driven `/mute`/`/unmute` with a real `--mix` recording (mic toggles audibly absent/present) — on the pending-live list (needs mic TCC + model)
+
 ## Phase 11: Legal & Export-Compliance Docs (PRD §7 Legal & Compliance)
 
 > Docs-only hygiene prompted by an external "assess it from the legal
@@ -411,7 +448,7 @@
 
 > Nice-to-have items outside current scope.
 
-- [ ] Scheduled/unattended launchd daemon: background service that *schedules* recordings and survives logout, building on the Phase 10 remote-control agent (PRD §4.2)
+- [ ] Scheduled/unattended daemon: *schedule* recordings (cron-style) and survive logout via a system LaunchDaemon (Core Audio backend, headless), extending the Phase 10.7 brew-services LaunchAgent (PRD §4.2)
 - [ ] Crash resilience for hard kills: periodic header flush vs `hark repair` subcommand (parked — PRD Open Q1)
 - [ ] Opt-in telemetry mechanism for crash-free-rate KPI (PRD Open Q3)
 - [ ] Real-time streaming to network socket or HTTP endpoint
@@ -423,4 +460,3 @@
 - [ ] Named speaker identification: voiceprint enrollment + local speaker store (FluidAudio embeddings) (PRD §4.2 / Open Q5)
 - [ ] Overlapping-speech handling / per-word speaker assignment (PRD Open Q6)
 - [ ] Cross-host & authenticated remote control beyond the loopback default (token/TLS, allow-lists) (PRD §4.2 / Open Q9 — base agent is Phase 10)
-- [ ] Remote-control mute/unmute parity: expose the interactive mic-mute toggle (§6.9) as `POST /mute|/unmute` on the agent (interactive-only for the MVP) (PRD §4.2)

@@ -108,6 +108,7 @@ enum ConfigKey: String, CaseIterable {
     case diarizeEngine = "diarize-engine"
     case maxSpeakers = "max-speakers"
     case speakerThreshold = "speaker-threshold"
+    case remoteControlPort = "remote-control-port"
 
     static var knownNames: String { allCases.map(\.rawValue).joined(separator: ", ") }
 

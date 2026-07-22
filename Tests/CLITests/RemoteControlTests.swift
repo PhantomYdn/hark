@@ -27,6 +27,53 @@ struct RemoteAddressTests {
     }
 }
 
+@Suite("Remote-control flag (optional value)")
+struct RemoteControlFlagTests {
+    @Test func normalizeInsertsSentinelForBareFlag() {
+        // Last token → sentinel appended.
+        #expect(Hark.normalizeRemoteControl(["--remote-control"]) == ["--remote-control", ""])
+        // Followed by another option → sentinel inserted between.
+        #expect(
+            Hark.normalizeRemoteControl(["--remote-control", "--no-keep-awake"])
+                == ["--remote-control", "", "--no-keep-awake"])
+    }
+
+    @Test func normalizeLeavesExplicitValueUntouched() {
+        #expect(
+            Hark.normalizeRemoteControl(["--remote-control", "8473"]) == ["--remote-control", "8473"])
+        #expect(
+            Hark.normalizeRemoteControl(["--remote-control", "0.0.0.0:8473", "--system"])
+                == ["--remote-control", "0.0.0.0:8473", "--system"])
+        // No flag present → unchanged.
+        #expect(Hark.normalizeRemoteControl(["-a", "x.m4a"]) == ["-a", "x.m4a"])
+    }
+
+    @Test func bareFlagParsesToEmptySentinel() throws {
+        let cmd = try Hark.parse(Hark.normalizeRemoteControl(["--remote-control"]))
+        #expect(cmd.remoteControl == "")
+    }
+
+    @Test func explicitValueParsesThrough() throws {
+        let cmd = try Hark.parse(Hark.normalizeRemoteControl(["--remote-control", "0.0.0.0:8080"]))
+        #expect(cmd.remoteControl == "0.0.0.0:8080")
+    }
+}
+
+@Suite("Capture microphone presence")
+struct CapturesMicrophoneTests {
+    @Test func trueForMicAndMix() throws {
+        #expect(try Hark.parse([]).capturesMicrophone)                 // default mic-only
+        #expect(try Hark.parse(["--system", "--mix"]).capturesMicrophone)
+        #expect(try Hark.parse(["--app", "us.zoom.xos", "--mix"]).capturesMicrophone)
+    }
+
+    @Test func falseForSystemOrAppWithoutMix() throws {
+        #expect(try !Hark.parse(["--system"]).capturesMicrophone)
+        #expect(try !Hark.parse(["--app", "us.zoom.xos"]).capturesMicrophone)
+        #expect(try !Hark.parse(["--exclude-app", "us.zoom.xos"]).capturesMicrophone)
+    }
+}
+
 @Suite("Remote-control start request → command")
 struct StartRequestTests {
     private func defaults(_ args: [String]) throws -> Hark {
@@ -96,8 +143,11 @@ struct StartRequestTests {
 struct RemoteSessionManagerTests {
     @Test func lifecycleRecordingPauseResumeStop() throws {
         let manager = RemoteSessionManager()
-        let snap = try manager.begin(id: "a", control: CaptureControl(), audio: nil, transcript: "n.txt")
+        let snap = try manager.begin(
+            id: "a", control: CaptureControl(), hasMic: true, muted: false,
+            audio: nil, transcript: "n.txt")
         #expect(snap.state == .recording)
+        #expect(snap.muted == false)
         #expect(try manager.pause().state == .paused)
         #expect(try manager.resume().state == .recording)
         #expect(try manager.stop().state == .stopped)
@@ -105,9 +155,13 @@ struct RemoteSessionManagerTests {
 
     @Test func rejectsSecondConcurrentStart() throws {
         let manager = RemoteSessionManager()
-        _ = try manager.begin(id: "a", control: CaptureControl(), audio: nil, transcript: "n.txt")
+        _ = try manager.begin(
+            id: "a", control: CaptureControl(), hasMic: true, muted: false,
+            audio: nil, transcript: "n.txt")
         #expect(throws: AgentError.self) {
-            _ = try manager.begin(id: "b", control: CaptureControl(), audio: nil, transcript: "x.txt")
+            _ = try manager.begin(
+                id: "b", control: CaptureControl(), hasMic: true, muted: false,
+                audio: nil, transcript: "x.txt")
         }
     }
 
@@ -115,21 +169,74 @@ struct RemoteSessionManagerTests {
         let manager = RemoteSessionManager()
         #expect(throws: AgentError.self) { _ = try manager.pause() }
         #expect(throws: AgentError.self) { _ = try manager.stop() }
+        #expect(throws: AgentError.self) { _ = try manager.mute() }
+        #expect(throws: AgentError.self) { _ = try manager.unmute() }
+    }
+
+    @Test func muteUnmuteLifecycleAndIdempotency() throws {
+        let manager = RemoteSessionManager()
+        let control = CaptureControl()
+        _ = try manager.begin(
+            id: "a", control: control, hasMic: true, muted: false,
+            audio: "rec.m4a", transcript: nil)
+        // Mute is orthogonal to state: stays `recording`, flips `muted`.
+        let muted = try manager.mute()
+        #expect(muted.state == .recording)
+        #expect(muted.muted == true)
+        #expect(control.isMuted == true)
+        // Idempotent.
+        #expect(try manager.mute().muted == true)
+        // Unmute.
+        #expect(try manager.unmute().muted == false)
+        #expect(control.isMuted == false)
+        #expect(manager.current()?.muted == false)
+    }
+
+    @Test func muteRejectedWithoutMicrophone() throws {
+        let manager = RemoteSessionManager()
+        _ = try manager.begin(
+            id: "a", control: CaptureControl(), hasMic: false, muted: false,
+            audio: "sys.m4a", transcript: nil)
+        #expect(throws: AgentError.self) { _ = try manager.mute() }
+        #expect(throws: AgentError.self) { _ = try manager.unmute() }
+    }
+
+    @Test func beginMutedRequiresMicrophone() throws {
+        let manager = RemoteSessionManager()
+        // muted:true with no mic → rejected (→422).
+        #expect(throws: AgentError.self) {
+            _ = try manager.begin(
+                id: "a", control: CaptureControl(), hasMic: false, muted: true,
+                audio: "sys.m4a", transcript: nil)
+        }
+        // muted:true with a mic → starts muted.
+        let control = CaptureControl()
+        let snap = try manager.begin(
+            id: "b", control: control, hasMic: true, muted: true,
+            audio: "rec.m4a", transcript: nil)
+        #expect(snap.muted == true)
+        #expect(control.isMuted == true)
     }
 
     @Test func finishAllowsANewSession() throws {
         let manager = RemoteSessionManager()
-        _ = try manager.begin(id: "a", control: CaptureControl(), audio: nil, transcript: "n.txt")
+        _ = try manager.begin(
+            id: "a", control: CaptureControl(), hasMic: true, muted: false,
+            audio: nil, transcript: "n.txt")
         manager.finish(id: "a", error: nil)
         #expect(manager.current()?.state == .stopped)
         // A new session is now allowed.
-        let snap = try manager.begin(id: "b", control: CaptureControl(), audio: nil, transcript: "x.txt")
+        let snap = try manager.begin(
+            id: "b", control: CaptureControl(), hasMic: true, muted: false,
+            audio: nil, transcript: "x.txt")
         #expect(snap.state == .recording)
     }
 
     @Test func finishWithErrorMarksFailed() throws {
         let manager = RemoteSessionManager()
-        _ = try manager.begin(id: "a", control: CaptureControl(), audio: nil, transcript: "n.txt")
+        _ = try manager.begin(
+            id: "a", control: CaptureControl(), hasMic: true, muted: false,
+            audio: nil, transcript: "n.txt")
         manager.finish(id: "a", error: "boom")
         #expect(manager.current()?.state == .failed)
         #expect(manager.current()?.error == "boom")

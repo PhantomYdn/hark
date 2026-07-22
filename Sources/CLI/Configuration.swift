@@ -41,6 +41,9 @@ struct Configuration: Codable, Equatable {
     var maxSpeakers: Int?
     var speakerThreshold: Double?
 
+    // Remote control
+    var remoteControlPort: Int?
+
     /// JSON keys mirror the CLI flag/key names (kebab-case) so the file is
     /// hand-editable with familiar names.
     enum CodingKeys: String, CodingKey {
@@ -59,6 +62,7 @@ struct Configuration: Codable, Equatable {
         case diarizeEngine = "diarize-engine"
         case maxSpeakers = "max-speakers"
         case speakerThreshold = "speaker-threshold"
+        case remoteControlPort = "remote-control-port"
     }
 
     /// `~/.hark/config.json`.
@@ -171,6 +175,11 @@ struct Configuration: Codable, Equatable {
             \.speakerThreshold,
             parse: { try ConfigKey.parseUnit($0, .speakerThreshold) }, format: ConfigKey.formatNumber,
             summary: "Offline/batch clustering sensitivity (0–1; lower splits more)."),
+
+        TypedSetting(.remoteControlPort, .int, "8473", \.remoteControlPort,
+            parse: { try ConfigKey.parseInt($0, .remoteControlPort, in: 1...65535) },
+            format: { String($0) },
+            summary: "Default TCP port the --remote-control agent binds when none is given."),
     ]
 
     static let settingsByKey: [ConfigKey: Setting] = Dictionary(

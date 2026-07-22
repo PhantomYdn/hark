@@ -48,6 +48,34 @@ struct Hark: ParsableCommand {
         ]
     )
 
+    /// Entry point. ArgumentParser options can't carry an *optional* value, so a
+    /// bare `--remote-control` (no following `[host:]port`) would be a parse
+    /// error. Normalize argv first: when `--remote-control` is the last token or
+    /// is followed by another option, inject an empty-string sentinel so the
+    /// agent binds the configured `remote-control-port`. An explicit value
+    /// (`--remote-control 8473`) is left untouched.
+    static func main() {
+        Hark.main(normalizeRemoteControl(Array(CommandLine.arguments.dropFirst())))
+    }
+
+    /// Inserts an empty sentinel after a value-less `--remote-control`. Visible
+    /// for testing.
+    static func normalizeRemoteControl(_ args: [String]) -> [String] {
+        var out = args
+        var i = 0
+        while i < out.count {
+            if out[i] == "--remote-control" {
+                let isBare = i + 1 >= out.count || out[i + 1].hasPrefix("-")
+                if isBare {
+                    out.insert("", at: i + 1)
+                    i += 1  // skip the sentinel we just inserted
+                }
+            }
+            i += 1
+        }
+        return out
+    }
+
     // MARK: Input
 
     @Option(name: [.short, .long], help: ArgumentHelp(
@@ -268,10 +296,15 @@ struct Hark: ParsableCommand {
         """)
     var interactive = false
 
+    // Holds the `--remote-control` value. An empty string is the sentinel for
+    // "given without a value" (bare `--remote-control`), injected by `main()`
+    // below, since ArgumentParser options can't have an optional value. Bare =>
+    // bind loopback on the resolved remote-control-port; a value => [host:]port.
     @Option(name: .customLong("remote-control"), help: ArgumentHelp(
         "Run as a control agent (no immediate capture): serve a small HTTP/JSON "
-            + "API on [host:]port so scripts can start/stop/pause/resume/query a "
-            + "recording (default host 127.0.0.1, e.g. 8473 or 0.0.0.0:8473). "
+            + "API so scripts can start/stop/pause/resume/query a recording. Omit "
+            + "the value to bind 127.0.0.1 on the configured remote-control-port "
+            + "(default 8473); or pass [host:]port (e.g. 8473 or 0.0.0.0:8473). "
             + "Non-loopback binds require $HARK_REMOTE_TOKEN. See docs/remote-control.md.",
         valueName: "[host:]port"))
     var remoteControl: String?
@@ -295,6 +328,13 @@ struct Hark: ParsableCommand {
     var inputChannels: Int = 1
 
     @OptionGroup var options: GlobalOptions
+
+    /// Whether a microphone is part of this capture: a mic-only capture, or a
+    /// system/app capture with `--mix`. Drives the interactive `m` control
+    /// (§6.9) and the remote-control `/mute` verb (§6.10).
+    var capturesMicrophone: Bool {
+        mix || !(captureSystem || !apps.isEmpty || !excludeApps.isEmpty)
+    }
 
     // MARK: Validation
 
@@ -486,7 +526,11 @@ struct Hark: ParsableCommand {
             // Remote-control agent (PRD §6.10): serve the control API instead of
             // capturing on launch. Per-session output paths resolve under the
             // working directory just applied.
-            if let address = remoteControl {
+            if let remoteControl {
+                // Bare `--remote-control` (empty sentinel) binds loopback on the
+                // resolved remote-control-port; an explicit [host:]port wins.
+                let address = remoteControl.isEmpty
+                    ? String(settings.remoteControlPort) : remoteControl
                 try RemoteControlAgent(defaults: self, address: address).run()
                 return
             }
@@ -624,7 +668,7 @@ struct Hark: ParsableCommand {
 
         // Interactive controls (PRD §6.9): `m` mutes the mic only when one is in
         // the capture (mic-only, or `--mix`); `y` yanks the transcript so far.
-        let hasMic = mix || !(captureSystem || !apps.isEmpty || !excludeApps.isEmpty)
+        let hasMic = capturesMicrophone
         let transcriptLog: TranscriptLog? = interactive ? TranscriptLog() : nil
 
         // Controls: interactive (PRD §6.9) shares a CaptureControl between the

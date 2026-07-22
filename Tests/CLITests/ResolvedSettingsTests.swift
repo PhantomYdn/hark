@@ -31,6 +31,7 @@ struct ResolvedSettingsTests {
         #expect(s.speakerLabels == SpeakerLabels(you: "You", others: "Others"))
         #expect(s.maxSpeakers == nil)
         #expect(s.speakerThreshold == nil)
+        #expect(s.remoteControlPort == 8473)
     }
 
     @Test func configProvidesDefaults() throws {
@@ -112,6 +113,25 @@ struct ResolvedSettingsTests {
         #expect(try settings(["--no-keep-awake"], config: config).keepAwake == false)
     }
 
+    @Test func remoteControlPortFollowsEnvConfigDefault() throws {
+        // built-in default
+        #expect(try settings().remoteControlPort == 8473)
+        // config
+        var config = Configuration()
+        config.remoteControlPort = 9100
+        #expect(try settings(config: config).remoteControlPort == 9100)
+        // env overrides config
+        #expect(
+            try settings(env: ["HARK_REMOTE_CONTROL_PORT": "7000"], config: config)
+                .remoteControlPort == 7000)
+        // out-of-range env is a usage error
+        #expect(throws: (any Error).self) {
+            _ = try settings(env: ["HARK_REMOTE_CONTROL_PORT": "70000"])
+        }
+        // env var name maps correctly
+        #expect(ConfigKey.remoteControlPort.environmentName == "HARK_REMOTE_CONTROL_PORT")
+    }
+
     @Test func emptyEnvValuesAreIgnored() throws {
         var config = Configuration()
         config.engine = "whisperkit"
@@ -186,6 +206,7 @@ extension ResolvedSettings {
             channels: channels, keepAwake: keepAwake, silenceThreshold: silenceThreshold,
             useVad: useVad, vadThreshold: vadThreshold, useGain: useGain, speakers: speakers,
             speakerMode: speakerMode, speakerLabels: speakerLabels, diarizeEngine: diarizeEngine,
-            maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold)
+            maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold,
+            remoteControlPort: remoteControlPort)
     }
 }

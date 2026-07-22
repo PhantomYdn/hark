@@ -108,6 +108,19 @@ struct CaptureControlTests {
         #expect(!control.isMuted)            // stop clears mute
         #expect(!control.toggleMute())       // no-op after stop
     }
+
+    @Test func explicitMuteUnmuteAreIdempotent() {
+        let control = CaptureControl()
+        #expect(control.mute())     // changed -> muted
+        #expect(control.isMuted)
+        #expect(!control.mute())    // already muted -> no change
+        #expect(control.unmute())   // changed -> unmuted
+        #expect(!control.isMuted)
+        #expect(!control.unmute())  // already unmuted -> no change
+        // No-op after stop.
+        control.stop()
+        #expect(!control.mute())
+    }
 }
 
 /// Records the last text written, for testing the yank key without touching the

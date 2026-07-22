@@ -6,6 +6,22 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Added
+- Remote-control mic mute parity: the agent now exposes `POST /mute` and
+  `POST /unmute` (idempotent; silence only the mic, timeline preserved — distinct
+  from `/pause`), `GET /status` reports a `muted` field, and `POST /start` accepts
+  `{"muted": true}` to begin muted. Muting a capture with no microphone returns
+  `422`. The transcript yank stays interactive-only.
+- The remote-control agent can run as a background service via Homebrew:
+  `brew services start hark` runs it as a per-user LaunchAgent (auto-starts at
+  login). The service binds the new `remote-control-port` config key (default
+  `8473`, also `$HARK_REMOTE_CONTROL_PORT`) and runs with `--no-keep-awake`. No
+  launchd `KeepAlive` on purpose — a crash or bad start stays down and visible
+  rather than relaunching in a hidden loop. See
+  [docs/remote-control.md](docs/remote-control.md#running-as-a-service-brew-services).
+- `--remote-control` now takes an **optional** value: omit it to bind loopback on
+  the configured `remote-control-port` (an explicit `[host:]port` still wins).
+
 ## [0.3.0] - 2026-06-26
 
 ### Added

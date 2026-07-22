@@ -20,10 +20,18 @@ hark --remote-control 8473 -C ~/Recordings
 hark --remote-control 8473 -C ~/Recordings --system --mix --engine whisper --model base.en
 ```
 
-The value is `[host:]port`. A bare port or empty host binds **loopback**
-(`127.0.0.1`); `0.0.0.0:8473` or a specific IPv4 binds elsewhere. The agent
-prints its address on start and runs until Ctrl-C (SIGINT/SIGTERM), which stops
-any active recording first.
+The value is **optional**. Omit it to bind **loopback** (`127.0.0.1`) on the
+`remote-control-port` config key (default `8473`; also `$HARK_REMOTE_CONTROL_PORT`):
+
+```sh
+hark config set remote-control-port 8473   # optional; 8473 is the default
+hark --remote-control                        # binds 127.0.0.1:8473
+```
+
+Or pass `[host:]port` explicitly: a bare port or empty host binds loopback;
+`0.0.0.0:8473` or a specific IPv4 binds elsewhere. An explicit value always wins
+over the config key. The agent prints its address on start and runs until Ctrl-C
+(SIGINT/SIGTERM), which stops any active recording first.
 
 ### Security
 
@@ -40,6 +48,46 @@ any active recording first.
 HARK_REMOTE_TOKEN=$(openssl rand -hex 16) hark --remote-control 0.0.0.0:8473
 ```
 
+## Running as a service (`brew services`)
+
+If you installed hark via Homebrew, you can keep the agent always-on so the
+userscript can reach it without an open terminal:
+
+```sh
+brew services start hark      # start now + at every login
+brew services stop hark       # stop (sends SIGTERM; finalises any recording)
+brew services restart hark    # after changing config
+```
+
+This runs the agent as a **per-user LaunchAgent** in your login session, so it
+has the same microphone / system-audio permissions as a normal capture. It binds
+loopback on the `remote-control-port` config key and writes recordings under the
+`directory` config key — configure both first:
+
+```sh
+hark config set remote-control-port 8473
+hark config set directory ~/Recordings
+hark config set engine whisper      # + model, etc. for transcripts
+```
+
+Logs go to `$(brew --prefix)/var/log/hark-remote.log`.
+
+Notes:
+
+- **It does not survive logout** (a per-user agent). Headless / survives-logout /
+  scheduled operation is a future system-LaunchDaemon feature.
+- **No auto-restart by default.** The service deliberately omits launchd
+  `KeepAlive`: a crash or a bad start (e.g. the port already in use) stays down
+  and visible rather than launchd relaunching it in a throttled loop that hides
+  the problem. To opt in, add `<key>KeepAlive</key><true/>` to the generated
+  LaunchAgent plist (`~/Library/LaunchAgents/homebrew.mxcl.hark.plist`) and
+  `brew services restart hark`.
+- **No keep-awake.** The service runs with `--no-keep-awake`, so it never holds a
+  power assertion (an idle agent doesn't keep the Mac awake regardless). The Mac
+  can therefore idle-sleep during an active service recording and cut it short;
+  if you want a service recording to prevent that, change `--no-keep-awake` to
+  `--keep-awake` in the plist's program arguments.
+
 ## Endpoints
 
 | Method & path | Purpose |
@@ -48,10 +96,19 @@ HARK_REMOTE_TOKEN=$(openssl rand -hex 16) hark --remote-control 0.0.0.0:8473
 | `POST /start` | Begin a recording (JSON body, all fields optional) |
 | `POST /pause` | Pause the active recording (the paused interval is not recorded) |
 | `POST /resume` | Resume a paused recording |
+| `POST /mute` | Mute the microphone (only the mic is silenced; the timeline is preserved) |
+| `POST /unmute` | Unmute the microphone |
 | `POST /stop` | Stop and finalise the active recording |
 
 A second `POST /start` while a recording is active is rejected with `409`. Only
 one session runs at a time.
+
+`/mute` and `/unmute` are **orthogonal to `state`** (they don't pause capture):
+they silence only the microphone, so any system/call audio keeps recording and
+the timeline is preserved — distinct from `/pause`, which omits the interval.
+They require a microphone in the capture (mic-only or `--mix`); on a system/app
+capture with no mic they return `422`. They are idempotent. The transcript yank
+(`y`) stays interactive-only — the API never serves transcript content.
 
 ### `GET /status`
 
@@ -65,6 +122,7 @@ curl -s http://127.0.0.1:8473/status
   "session": {
     "id": "28D1DBD7-…",
     "state": "recording",
+    "muted": false,
     "elapsed": 12.4,
     "audio": "meeting.m4a",
     "transcript": "meeting.srt",
@@ -74,7 +132,8 @@ curl -s http://127.0.0.1:8473/status
 ```
 
 `session` is omitted before the first recording. `state` is one of `recording`,
-`paused`, `stopped`, `failed`.
+`paused`, `stopped`, `failed`. `muted` reflects the microphone mute toggle (see
+`/mute`).
 
 ### `POST /start`
 
@@ -88,7 +147,7 @@ curl -s -X POST http://127.0.0.1:8473/start \
 ```
 
 ```json
-{ "id": "28D1DBD7-…", "state": "recording", "audio": "meeting.m4a", "transcript": "meeting.srt" }
+{ "id": "28D1DBD7-…", "state": "recording", "muted": false, "audio": "meeting.m4a", "transcript": "meeting.srt" }
 ```
 
 Relative paths resolve under the agent's working directory (`-C` at launch).
@@ -97,6 +156,7 @@ Relative paths resolve under the agent's working directory (`-C` at launch).
 |-------|------|---------|
 | `audio` | string | `-a/--audio` (file; `.wav/.m4a/.flac/.mp3/.opus`) |
 | `transcript` | string | `-t/--transcript` (file; `.txt/.srt/.json`) |
+| `muted` | bool | start with the mic muted (requires a mic in the capture, else `422`) |
 | `system` | bool | `--system` |
 | `apps` | [string] | `--app` (repeatable) |
 | `excludeApps` | [string] | `--exclude-app` (repeatable) |
@@ -121,33 +181,37 @@ Relative paths resolve under the agent's working directory (`-C` at launch).
 | `speakerThreshold` | number | `--speaker-threshold` |
 | `vad` / `vadThreshold` / `gain` | bool/number/bool | `--vad` / `--vad-threshold` / `--gain` |
 
-### `POST /pause`, `/resume`, `/stop`
+### `POST /pause`, `/resume`, `/mute`, `/unmute`, `/stop`
 
 ```sh
 curl -s -X POST http://127.0.0.1:8473/pause
 curl -s -X POST http://127.0.0.1:8473/resume
+curl -s -X POST http://127.0.0.1:8473/mute     # silence only the mic; timeline preserved
+curl -s -X POST http://127.0.0.1:8473/unmute
 curl -s -X POST http://127.0.0.1:8473/stop
 ```
 
 ```json
-{ "id": "28D1DBD7-…", "state": "paused" }
+{ "id": "28D1DBD7-…", "state": "paused", "muted": false }
 ```
 
 Pausing **excludes** the paused interval from both the audio file and the
-transcript (a true gap), so the output is shorter than wall-clock.
+transcript (a true gap), so the output is shorter than wall-clock. Muting instead
+silences **only the microphone** and keeps the timeline intact (any system/call
+audio keeps recording); it is independent of pause and idempotent.
 
 ## Status codes
 
 | Code | When |
 |------|------|
-| `200` | status / pause / resume / stop |
+| `200` | status / pause / resume / mute / unmute / stop |
 | `201` | start accepted |
 | `400` | invalid JSON or invalid parameters (bad combo, stdout output) |
 | `401` | missing/incorrect bearer token |
 | `403` | permission denied (microphone / system audio) |
 | `404` | control verb with no active recording; input not found |
 | `409` | a recording is already active |
-| `422` | unusable engine/model |
+| `422` | unusable engine/model; or `mute`/`unmute` on a capture with no microphone |
 
 Errors carry a JSON body `{ "error": "…" }`.
 
