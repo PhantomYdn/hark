@@ -6,6 +6,8 @@
 
 > Unscheduled items. Add new work here; `/plan` will triage on next run.
 
+- [ ] Bug: a permission-less system capture can hang the worker instead of finishing — observed live (macOS 26, agent, `auto`→coreaudio fallback after a TCC grant went stale post-upgrade): zero bytes delivered, `POST /stop` marked the session `stopped` optimistically but `executeLive` never returned, so no all-silence warning was logged and `session.error` stayed empty (a stuck thread leaks per occurrence; also seen as a foreground `--capture-backend coreaudio` teardown hang). Investigate the Core Audio tap start/teardown path without the AudioCapture grant; consider a stop-timeout watchdog in the agent worker that force-fails the session and surfaces an error in `GET /status`
+
 ## Phase 1: Project Foundation & Core Capture (PRD M1)
 
 - [x] Initialize git repository with `.gitignore` for Swift/SwiftPM

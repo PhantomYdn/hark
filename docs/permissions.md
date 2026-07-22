@@ -125,9 +125,12 @@ macOS 26).
   (check `$(brew --prefix)/var/log/hark-remote.log`).
 
 **Upgrades:** macOS records CLI grants **by path**, and the resolved path is
-the versioned Cellar directory (e.g. `…/Cellar/hark/0.4.0/bin/hark`), so a
-`brew upgrade` may drop the system-audio grant — re-add it if service captures
-go silent after an upgrade.
+the versioned Cellar directory (e.g. `…/Cellar/hark/0.4.1/bin/hark`), so a
+`brew upgrade` drops the system-audio grant (verified live on the 0.4.0→0.4.1
+upgrade) — re-add hark and restart the service if captures go silent after an
+upgrade. The pane keeps the old version's entry as a stale duplicate `hark`
+row; remove it (−) to avoid confusion. (The mic grant re-prompts on first use
+instead, since mic prompts work for the directly-attributed binary.)
 
 ## Multiplexers (tmux, screen)
 
