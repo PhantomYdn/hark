@@ -4,6 +4,17 @@ import Testing
 
 @testable import CLI
 
+@Suite("Version single source of truth")
+struct VersionTests {
+    /// `--version`, the WAV-metadata tag, and the agent's `GET /status` must all
+    /// report the same `harkVersion` — guards against re-hardcoding any of them.
+    @Test func cliVersionMatchesHarkVersion() {
+        #expect(Hark.configuration.version == harkVersion)
+        // A release bump keeps the constant a plain semver triple.
+        #expect(harkVersion.split(separator: ".").count == 3)
+    }
+}
+
 @Suite("Remote-control address parsing")
 struct RemoteAddressTests {
     @Test func parsesBarePortAsLoopback() throws {

@@ -5,6 +5,11 @@ import Encoders
 import Foundation
 import TapEngine
 
+/// The hark version — the single source of truth, used by `--version`, the
+/// WAV-metadata software tag, and the remote-control agent's `GET /status`.
+/// Release bumps edit only this constant.
+let harkVersion = "0.4.0"
+
 /// Root command. `hark` itself is the verb — "listen and transcribe."
 ///
 /// It takes one input (live capture by default, or `-i FILE/-`) and writes
@@ -38,7 +43,7 @@ struct Hark: ParsableCommand {
             model; apple/whisperkit/parakeet are alternatives (see --engine, \
             'hark models').
             """,
-        version: "0.4.0",
+        version: harkVersion,
         subcommands: [
             Devices.self,
             Apps.self,
@@ -688,7 +693,7 @@ struct Hark: ParsableCommand {
         defer { interactiveSession?.stop() }
 
         let metadata = WAVMetadata(
-            creationDate: Date(), software: "hark 0.4.0", title: sourceLabel)
+            creationDate: Date(), software: "hark \(harkVersion)", title: sourceLabel)
 
         var sinks: [AudioSink] = []
         if let audioDest = outputs.audio {

@@ -408,7 +408,8 @@
 - [x] Add a `service do … end` block to `Formula/hark.rb`: `run [opt_bin/"hark", "--remote-control", "--no-keep-awake"]`, `run_type :immediate`, **no `keep_alive`** (crash/bad-start stays visible, not relaunched in a hidden loop), `log_path`/`error_log_path` → `var/log/hark-remote.log`. `brew style` clean. Port/dir/engine come from `hark config`
 - [x] Tests: `ConfigurationTests.roundTripsAllKeys` covers the new key (count invariants auto-pass); `ResolvedSettingsTests.remoteControlPortFollowsEnvConfigDefault` (default › config › env, range error, env-name map); `RemoteControlFlagTests` (argv normalizer + bare/explicit parse). `make test` green — 286 tests, 75 suites
 - [x] Docs: `docs/remote-control.md` "Running as a service (`brew services`)" section (start/stop/restart, log path, config port/dir, per-user-vs-logout, no-KeepAlive rationale + opt-in, `--no-keep-awake`); README "Remote control" note; man page (`--remote-control` optional value, `HARK_REMOTE_CONTROL_PORT`, `brew services` example); CHANGELOG Unreleased
-- [ ] TCC-under-launchd validation (gated/manual — pending-live): the LaunchAgent-spawned signed `hark` can capture (consent attaches to the hark binary in the login session), auto-starts at login, and a userscript reaches it after login without a terminal (US11). Connects to PRD Open Q4 and the Post-beta cron/launchd item (line 176)
+- [x] TCC-under-launchd validation (live, macOS 26.4.1): the LaunchAgent-spawned signed `hark` captures — the **mic prompt attributes directly to hark** and works; **system/app audio needs a manual grant to the hark binary** in Screen & System Audio Recording (no prompt for CLIs; both `sckit` and `coreaudio` then work under the service); parakeet transcription + speaker labels work; grants are **path-recorded against the versioned Cellar path** (re-grant may be needed after upgrades). Resolves PRD Open Q4. Found: launchd on macOS 26 loads but does not spawn newly-bootstrapped user agents mid-session (any binary, any API — RunAtLoad/KeepAlive only take effect from the next login; BTM disposition enabled/allowed, so not BTM); first `brew services start` needs one `launchctl kickstart` → formula caveats + `keep_alive true` (crash resilience) added in 10.9
+- [ ] Auto-start at login re-verified after a real logout/login (pending-live — needs a session restart)
 
 ### Phase 10.8 — Remote-control mute/unmute parity (§6.10, US12)
 
@@ -428,8 +429,22 @@
 - [x] Tests: `CaptureControl.mute/unmute` idempotency; session-manager mute/unmute lifecycle + idempotency, 404 with no session, 422 no-mic, `/start {muted:true}` (and 422 no-mic); `capturesMicrophone` source combos. `make test` green — 292 tests, 76 suites. Live curl: `/mute`/`/unmute` routed, no-session → 404 JSON
 - [x] Docs: `docs/remote-control.md` endpoints + status codes (422 no-mic) + status/`start` JSON `muted`; README curl note; CHANGELOG Unreleased; PRD §6.10 endpoints + §4.2 deferred bullet retired + US12 criterion
 - [x] Reference Meet userscript extracted to `examples/hark-meet.user.js` (Tampermonkey header + `@version`/`@downloadURL`/`@updateURL` for one-click install + self-update) and mirrors the Meet mic toggle to the agent **one-way** (Meet → hark): `MutationObserver` on the mic button (`data-is-muted`/aria-label heuristic) + 2s poll fallback, initial state via `POST /start {muted}`, guarded by `hasMic` (skips `/mute` when the capture has no mic → avoids `422`). `docs/remote-control.md` now links the file instead of inlining it; `examples/README.md` row + Tampermonkey install note; PRD US11/US12/§6.10 + CHANGELOG updated
-- [ ] Live-capture e2e of agent-driven `/mute`/`/unmute` with a real `--mix` recording (mic toggles audibly absent/present) — on the pending-live list (needs mic TCC + model)
+- [x] Live e2e of agent-driven `/mute`/`/unmute` with a real `--mix` recording: exercised against the brew-services agent (macOS 26) — mute/unmute mid-capture flip `muted` while `state` stays `recording`, speaker-labeled transcript produced (strict audible-gap listening check not performed)
 - [ ] Live e2e of the Meet userscript in a real call: verify the `data-is-muted`/aria-label selector reads the mic state and that toggling in Meet mirrors to the recording (gated/manual — needs a browser + Meet)
+
+### Phase 10.9 — Brew-service hardening & agent fixes (0.4.1)
+
+> Outcome of validating 10.7/10.8 live on macOS 26: three agent bugs, a
+> zero-byte-capture blind spot, and two service-delivery fixes (formula
+> `keep_alive` + kickstart caveat). PRD §4.2/§6.10/US11/Open Q4 updated.
+
+- [x] `harkVersion` single source of truth (`Hark.swift`): used by `CommandConfiguration(version:)`, the WAV-metadata `software` tag, and the agent's `GET /status` (was a stale hardcoded "0.1.0"); release bumps now edit one constant; `VersionTests` guards drift
+- [x] `GET /status` reports the parsed bound address (`127.0.0.1:8473`) instead of the raw `[host:]port` value (a bare `--remote-control` used to show just `"8473"`)
+- [x] Clean SIGTERM/SIGINT shutdown: `server.stop()` makes `server.run()` throw (kqueue EBADF), which was misreported as "could not start … port already in use?" with a non-zero exit on every `brew services stop`; a `shuttingDown` flag now suppresses the post-stop error and the agent exits 0 (correct launchd semantics, prereq for `keep_alive`)
+- [x] All-silence warning also fires for zero-byte captures (`CaptureEngine`): a permission-less tap under launchd delivered no bytes at all, so the `totalBytes > 0` guard silenced the TCC hint exactly when it was needed; now fires for ≥2s captures with no signal and mentions the background-service grant path
+- [x] Formula: `keep_alive true` (crash resilience; relaunches throttled + logged) and `caveats` documenting the macOS 26 first-start `launchctl kickstart` nudge and the system-audio grant
+- [x] Docs: permissions.md background-service section; remote-control.md service section rewrite; PRD §4.2/§6.10/US11 + Open Q4 resolved; CHANGELOG
+- [ ] Post-release verification: `brew upgrade hark` → grants survive the Cellar path change? (path-recorded TCC entries) — document the outcome; auto-start after logout/login
 
 ## Phase 11: Legal & Export-Compliance Docs (PRD §7 Legal & Compliance)
 

@@ -263,13 +263,18 @@ struct CaptureEngine {
             "captured \(totalBytes) bytes (\(String(format: "%.1f", elapsed)) s) to "
                 + sinks.map(\.label).joined(separator: ", "))
 
-        if let silenceDetector, silenceDetector.isAllSilence, totalBytes > 0 {
+        // Fires for an all-zero stream AND for a source that never delivered a
+        // byte (e.g. a permission-less tap under launchd writes only a header)
+        // — both look like a missing TCC grant. Skip near-instant stops.
+        if let silenceDetector, silenceDetector.isAllSilence, elapsed >= 2 {
             Log.error("""
-                captured only silence. If audio was playing, the "System \
-                Audio Recording" permission is likely missing: open System \
-                Settings > Privacy & Security > Screen & System Audio \
-                Recording, click "+" under "System Audio Recording Only", \
-                add your terminal app, restart it, and retry.
+                captured \(totalBytes > 0 ? "only silence" : "no audio"). If audio \
+                was playing, the "System Audio Recording" permission is likely \
+                missing: open System Settings > Privacy & Security > Screen & \
+                System Audio Recording, click "+" under "System Audio Recording \
+                Only", and add your terminal app — or the hark binary itself when \
+                hark runs as a background service (brew services). Restart it and \
+                retry.
                 """)
         }
     }

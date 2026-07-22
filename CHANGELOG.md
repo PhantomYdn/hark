@@ -6,6 +6,40 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Fixed
+- The remote-control agent's `GET /status` reported a stale hardcoded version
+  (`0.1.0`) — it now reports the real hark version, from a new single-source
+  `harkVersion` constant (also used by `--version` and the WAV-metadata tag).
+- `GET /status` reported the raw `--remote-control` value as `address` (a bare
+  flag showed just `"8473"`); it now reports the parsed bound address
+  (`127.0.0.1:8473`).
+- A clean SIGTERM/SIGINT stop of the agent was misreported as
+  "remote-control server could not start … (is the port already in use?)" and
+  exited non-zero — every `brew services stop` logged a bogus fatal error. The
+  agent now shuts down silently and exits 0.
+- The "captured only silence" TCC warning never fired when a permission-less
+  system tap delivered no bytes at all (the exact background-service failure
+  mode, which produced header-only files with no visible error). It now also
+  fires for zero-byte captures (≥ 2 s) and mentions granting the permission to
+  the hark binary itself for background (brew-services) use.
+
+### Changed
+- The Homebrew service now sets launchd `KeepAlive` (a crashed agent is
+  relaunched, throttled and logged; a clean stop stays stopped), and the
+  formula prints caveats for macOS 26: launchd does not spawn a
+  newly-bootstrapped agent mid-session, so the first `brew services start`
+  needs one `launchctl kickstart gui/$(id -u)/homebrew.mxcl.hark` (or a
+  re-login).
+
+### Documentation
+- Validated the brew-services agent end-to-end under launchd on macOS 26 (mic +
+  system audio + transcription + mute API) and documented the TCC story:
+  permissions attribute directly to the hark binary; system audio needs a
+  one-time manual grant (and may need re-granting after upgrades — grants are
+  path-recorded against the versioned Cellar path). New "Background service"
+  section in docs/permissions.md; service section rewritten in
+  docs/remote-control.md; PRD Open Q4 resolved.
+
 ## [0.4.0] - 2026-07-22
 
 ### Added

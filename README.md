@@ -344,8 +344,12 @@ config key (default `8473`; also `$HARK_REMOTE_CONTROL_PORT`).
 start hark` runs the agent as a per-user LaunchAgent (auto-starts at login) so the
 userscript can reach it without keeping a terminal open. It binds the
 `remote-control-port` config key and writes recordings under the `directory`
-config key — set both with `hark config`. See
-[docs/remote-control.md](docs/remote-control.md#running-as-a-service-brew-services).
+config key — set both with `hark config` (`directory` must be absolute). On
+macOS 26 the first start needs one
+`launchctl kickstart gui/$(id -u)/homebrew.mxcl.hark`, and system-audio capture
+needs a one-time permission grant to the hark binary — see
+[docs/remote-control.md](docs/remote-control.md#running-as-a-service-brew-services)
+and [docs/permissions.md](docs/permissions.md).
 
 ## Models
 

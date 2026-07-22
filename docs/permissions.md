@@ -102,6 +102,33 @@ listener is loopback-only by default (no network exposure); binding it to a
 non-loopback interface is opt-in and requires `$HARK_REMOTE_TOKEN`. See
 [remote-control.md](remote-control.md).
 
+## Background service (`brew services` / launchd)
+
+When hark runs as a launchd agent (`brew services start hark`, see
+[remote-control.md](remote-control.md)), there is no terminal in the chain:
+permissions attribute **directly to the signed `hark` binary** (validated on
+macOS 26).
+
+- **Microphone** works like an app: the first mic capture pops the standard
+  prompt naming *hark* — approve it once.
+- **System/app audio** never prompts for a CLI (either backend). Grant it
+  manually **to the hark binary**:
+  1. Open **System Settings → Privacy & Security → Screen & System Audio
+     Recording**
+  2. Click **+** (use the **System Audio Recording Only** section for the
+     Core Audio backend; the **Screen Recording** section covers
+     ScreenCaptureKit), press **⌘⇧G**, and add
+     `/opt/homebrew/opt/hark/bin/hark`
+  3. Restart the service (`brew services restart hark`) and retry
+- A missing grant does **not** error: the capture writes a header-only file
+  and hark logs a "captured no audio / only silence" warning pointing here
+  (check `$(brew --prefix)/var/log/hark-remote.log`).
+
+**Upgrades:** macOS records CLI grants **by path**, and the resolved path is
+the versioned Cellar directory (e.g. `…/Cellar/hark/0.4.0/bin/hark`), so a
+`brew upgrade` may drop the system-audio grant — re-add it if service captures
+go silent after an upgrade.
+
 ## Multiplexers (tmux, screen)
 
 Permission attribution resolves through tmux/screen to the terminal that

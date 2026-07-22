@@ -59,10 +59,11 @@ brew services stop hark       # stop (sends SIGTERM; finalises any recording)
 brew services restart hark    # after changing config
 ```
 
-This runs the agent as a **per-user LaunchAgent** in your login session, so it
-has the same microphone / system-audio permissions as a normal capture. It binds
+This runs the agent as a **per-user LaunchAgent** in your login session. It binds
 loopback on the `remote-control-port` config key and writes recordings under the
-`directory` config key — configure both first:
+`directory` config key — configure both first (**the directory must be an
+absolute path**: a launchd agent's working directory is not your shell's, so
+relative outputs would land somewhere surprising):
 
 ```sh
 hark config set remote-control-port 8473
@@ -72,16 +73,27 @@ hark config set engine whisper      # + model, etc. for transcripts
 
 Logs go to `$(brew --prefix)/var/log/hark-remote.log`.
 
+**Permissions.** Under launchd there is no terminal in the chain, so TCC
+attributes **directly to the hark binary**: the mic prompts on first use
+(approve it once), but **system/app audio needs a one-time manual grant** to
+`/opt/homebrew/opt/hark/bin/hark` in System Settings — see
+[permissions.md](permissions.md#background-service-brew-services--launchd),
+including the re-grant-after-upgrade caveat. A capture missing the grant writes
+a header-only file and logs a "captured no audio" warning.
+
 Notes:
 
+- **macOS 26: the first start needs a nudge.** launchd registers a
+  newly-bootstrapped agent but does not spawn it mid-session (`RunAtLoad` and
+  `KeepAlive` only take effect from the next login). After the first
+  `brew services start hark`, run once:
+  `launchctl kickstart gui/$(id -u)/homebrew.mxcl.hark` — or just log out and
+  back in. Subsequent logins start it automatically.
 - **It does not survive logout** (a per-user agent). Headless / survives-logout /
   scheduled operation is a future system-LaunchDaemon feature.
-- **No auto-restart by default.** The service deliberately omits launchd
-  `KeepAlive`: a crash or a bad start (e.g. the port already in use) stays down
-  and visible rather than launchd relaunching it in a throttled loop that hides
-  the problem. To opt in, add `<key>KeepAlive</key><true/>` to the generated
-  LaunchAgent plist (`~/Library/LaunchAgents/homebrew.mxcl.hark.plist`) and
-  `brew services restart hark`.
+- **Auto-restart on crash.** The service sets launchd `KeepAlive`: a crashed
+  agent is relaunched (throttled by launchd to ~10s); a clean
+  `brew services stop` stays stopped. Failures remain visible in the log.
 - **No keep-awake.** The service runs with `--no-keep-awake`, so it never holds a
   power assertion (an idle agent doesn't keep the Mac awake regardless). The Mac
   can therefore idle-sleep during an active service recording and cut it short;

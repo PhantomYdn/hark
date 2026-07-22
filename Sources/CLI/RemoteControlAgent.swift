@@ -17,11 +17,15 @@ final class RemoteControlAgent: @unchecked Sendable {
     private let sessions = RemoteSessionManager()
     private let captureQueue = DispatchQueue(label: "hark.remote.capture")
     private var token: String?
-    private let version = "0.1.0"
+    /// The parsed bound address (`host:port`) reported by `GET /status`; set in
+    /// `run()` once the raw `[host:]port` value is parsed (a bare
+    /// `--remote-control` arrives here as just the resolved port).
+    private var displayAddress: String
 
     init(defaults: Hark, address: String) {
         self.defaults = UncheckedSendableBox(value: defaults)
         self.rawAddress = address
+        self.displayAddress = address
     }
 
     /// Parses the address, enforces the token policy, starts the server, and
@@ -29,6 +33,7 @@ final class RemoteControlAgent: @unchecked Sendable {
     /// `HarkError` for the CLI to map to an exit code.
     func run() throws {
         let address = try RemoteAddress.parse(rawAddress)
+        displayAddress = address.display
         token = Self.configuredToken()
         if !address.isLoopback && token == nil {
             throw HarkError.usage("""
@@ -45,10 +50,12 @@ final class RemoteControlAgent: @unchecked Sendable {
 
         let finished = DispatchSemaphore(value: 0)
         let serverError = LockBox<Error>()
+        let shuttingDown = LockBox<Bool>()
 
         let watcher = SignalWatcher()
         watcher.watch([SIGINT, SIGTERM]) { [sessions] in
             Log.notice("shutting down remote-control agent…")
+            shuttingDown.set(true)
             sessions.stopActive()
             Task { await server.stop(timeout: 1) }
         }
@@ -66,7 +73,11 @@ final class RemoteControlAgent: @unchecked Sendable {
         watcher.cancel()
         task.cancel()
 
-        if let error = serverError.get() {
+        // `server.stop()` tears the listener down, which surfaces as a thrown
+        // error from `server.run()` (e.g. kqueue EBADF). After a shutdown
+        // request that's the *expected* path — a clean stop, exit 0 — so only
+        // report errors that arrive without one (a genuine startup failure).
+        if let error = serverError.get(), shuttingDown.get() != true {
             throw HarkError.ioError(
                 "remote-control server could not start on \(address.display): \(error) "
                     + "(is the port already in use?)")
@@ -152,7 +163,9 @@ final class RemoteControlAgent: @unchecked Sendable {
     }
 
     private func statusResponse() throws -> HTTPResponse {
-        Self.json(StatusResponse(version: version, address: rawAddress, session: sessions.current()), .ok)
+        Self.json(
+            StatusResponse(version: harkVersion, address: displayAddress, session: sessions.current()),
+            .ok)
     }
 
     private func actionResponse(_ snap: RemoteSessionManager.Snapshot) -> HTTPResponse {

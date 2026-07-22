@@ -21,17 +21,31 @@ class Hark < Formula
   # Run the remote-control agent (PRD §6.10) as a per-user LaunchAgent:
   #   brew services start hark
   # It binds loopback on the `remote-control-port` config key (default 8473);
-  # set the port/working dir/engine with `hark config`. No `keep_alive` on
-  # purpose — a crash or a bad start (e.g. port in use) stays down and visible
-  # instead of launchd relaunching it in a throttled loop that hides the bug.
-  # `--no-keep-awake` keeps the agent from holding a power assertion (the idle
-  # agent never sleeps the Mac anyway); add `--keep-awake` here if you want an
-  # active service recording to prevent idle sleep.
+  # set the port/working dir/engine with `hark config`. `keep_alive` restarts a
+  # crashed agent (relaunches are throttled by launchd and visible in the log).
+  # Note: on macOS 26, launchd loads but does not spawn newly-bootstrapped user
+  # agents mid-session (RunAtLoad and even KeepAlive are only honored from the
+  # next login), so the first `brew services start` needs one nudge — see
+  # caveats. `--no-keep-awake` keeps the agent from holding a power assertion
+  # (the idle agent never sleeps the Mac anyway); change to `--keep-awake` if
+  # you want an active service recording to prevent idle sleep.
   service do
     run [opt_bin/"hark", "--remote-control", "--no-keep-awake"]
     run_type :immediate
+    keep_alive true
     log_path var/"log/hark-remote.log"
     error_log_path var/"log/hark-remote.log"
+  end
+
+  def caveats
+    <<~EOS
+      On macOS 26, `brew services start hark` registers the agent but launchd
+      does not spawn it until your next login. To start it right now:
+        launchctl kickstart gui/$(id -u)/homebrew.mxcl.hark
+      System/app audio capture by the service needs the "System Audio
+      Recording" permission granted to the hark binary itself — see
+      https://github.com/PhantomYdn/hark/blob/main/docs/permissions.md
+    EOS
   end
 
   test do
