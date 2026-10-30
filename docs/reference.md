@@ -35,6 +35,7 @@ Default: the system default microphone.
 | `-t, --transcript PATH\|-` | transcript (`.txt`/`.srt`/`.json`), or `-` for text |
 | *(none)* | transcribe to stdout (the default verb) |
 | `--raw` | with `-a -`, stream headerless PCM instead of WAV |
+| `--tracks mixed\|stereo` | how the two capture sources land in the audio output (default `mixed`) |
 | `--if-exists ask\|error\|overwrite\|unique` | what to do when an output file already exists (default `ask`) |
 
 ### Existing output files
@@ -60,9 +61,60 @@ and `--no-output` are never affected, and appending is the shell's job:
 An output that is also the input (`-i rec.wav -a rec.wav`), or `-a` and `-t`
 pointing at the same file, is always a usage error.
 
+### Separate tracks (`--tracks`)
+
+A meeting capture has two genuinely separate signals — your microphone and the
+call — and by default `-a` saves their **sum**: left and right are identical and
+the separation is gone the moment the file is written.
+
+`--tracks stereo` keeps them apart in the same single file: the **microphone on
+the left channel, the system/app audio on the right**. Nothing else changes —
+one file, one `--if-exists` decision, one `--split` series — so a later
+`ffmpeg -filter_complex channelsplit` (or any editor) gets your voice and
+theirs as separate signals:
+
+```sh
+hark --system --mix --tracks stereo -a call.wav
+ffmpeg -i call.wav -filter_complex "channelsplit=channel_layout=stereo[l][r]" \
+       -map "[l]" me.wav -map "[r]" them.wav
+hark -i them.wav -t them.txt        # transcribe just the other side
+```
+
+Splitting is for when you want two audio files. To find out who said what you do
+not need it: `hark -i call.wav --speakers` attributes the recording as it stands,
+and a file written with `--tracks stereo` is exactly the two-channel input that
+per-channel attribution reads.
+
+`mixed` is the default and is exactly today's output. Worth knowing before you
+switch:
+
+- **It needs two sources** — `--mix` together with `--system`/`--app`/
+  `--exclude-app`. One source has nothing to separate, so `stereo` is refused
+  rather than silently writing the same thing twice.
+- **It needs both channels**, so it cannot be combined with `-c/--channels 1`.
+  Typing `--tracks stereo` overrides a `channels 1` stored in the config or the
+  environment for that run.
+- **Each side is folded to mono.** A mono microphone comes back exactly as it
+  was, but **genuinely stereo system audio is downmixed** — if the stereo image
+  of the call matters more than telling the two sides apart, stay on `mixed`.
+- It applies to `-a` only. With no audio output there is nothing to lay out and
+  the setting is ignored, so a configured `tracks stereo` never breaks a
+  transcript-only run.
+- `--duration` trims both channels at the same instant, a paused interval gaps
+  both together, and `--split` chunks the interleaved stream.
+- **A source that goes quiet leaves silence, not a gap.** If one side delivers
+  no audio for more than 2 s (say the mic stops), its channel is filled with
+  silence so the other side is kept and stays on the same timeline. hark says
+  so on stderr, and reports at the end how much of the channel is silence.
+
+Also `$HARK_TRACKS` / config `tracks`, and the `tracks` field of the
+remote-control [`POST /start`](remote-control.md).
+
 ## Capture / timing
 
-`-r/--rate`, `-b/--bits` (16/24/32), `-c/--channels` (1/2), `--duration SEC`,
+`-r/--rate`, `-b/--bits` (16/24/32), `-c/--channels` (1/2),
+`--tracks mixed|stereo` (see [Separate tracks](#separate-tracks---tracks)),
+`--duration SEC`,
 `--split duration=SEC` / `--split silence=SEC` (with `--silence-threshold dBFS`),
 `--keep-awake` to stop the system sleeping mid-recording (also the display in
 `--interactive`; off by default, or `$HARK_KEEP_AWAKE` / config `keep-awake`).
@@ -171,6 +223,7 @@ Every setting has a flag, a `$HARK_*` env var, and a config key. The env var is
 | `if-exists` | `--if-exists` | `ask` |
 | `capture-backend` | `--capture-backend` | `auto` |
 | `rate` / `bits` / `channels` | `-r` / `-b` / `-c` | live `44100`/`16`; convert = source |
+| `tracks` | `--tracks` | `mixed` |
 | `keep-awake` | `--keep-awake`/`--no-keep-awake` | `false` |
 | `silence-threshold` | `--silence-threshold` | `-50` |
 | `vad` | `--vad`/`--no-vad` | `true` |

@@ -200,6 +200,7 @@ replace, or `"error"` to get a `409` instead. `"ask"` is rejected (`400`).
 | `format` | string | `--format` |
 | `transcriptFormat` | string | `--transcript-format` |
 | `rate` / `bits` / `channels` | number | `-r` / `-b` / `-c` |
+| `tracks` | string | `--tracks` (`mixed`/`stereo`; `stereo` needs `mix` + a system/app source) |
 | `split` | string | `--split` (`duration=SEC` / `silence=SEC`) |
 | `silenceThreshold` | number | `--silence-threshold` |
 | `speakers` | bool | `--speakers` |

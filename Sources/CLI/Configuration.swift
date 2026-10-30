@@ -26,6 +26,7 @@ struct Configuration: Codable, Equatable {
     var rate: Int?
     var bits: Int?
     var channels: Int?
+    var tracks: String?
     var keepAwake: Bool?
 
     // Segmentation
@@ -54,7 +55,7 @@ struct Configuration: Codable, Equatable {
         case directory
         case ifExists = "if-exists"
         case captureBackend = "capture-backend"
-        case rate, bits, channels
+        case rate, bits, channels, tracks
         case keepAwake = "keep-awake"
         case silenceThreshold = "silence-threshold"
         case vad
@@ -146,6 +147,11 @@ struct Configuration: Codable, Equatable {
         TypedSetting(.channels, .int, "(auto)", \.channels,
             parse: { try ConfigKey.parseInt($0, .channels, oneOf: [1, 2]) }, format: { String($0) },
             summary: "Capture channels (1 mono, 2 stereo; auto by default)."),
+        TypedSetting(
+            .tracks, .choice(TrackLayout.allCases.map(\.rawValue)), "mixed", \.tracks,
+            parse: { try ConfigKey.parseChoice($0, .tracks, TrackLayout.allCases.map(\.rawValue)) },
+            format: { $0 },
+            summary: "Layout of the two capture sources in the -a file (mixed, stereo)."),
         TypedSetting(.keepAwake, .bool, "false", \.keepAwake,
             parse: { try ConfigKey.parseBool($0, .keepAwake) }, format: ConfigKey.formatBool,
             summary: "Keep the system awake while recording (also the display in --interactive)."),

@@ -75,6 +75,8 @@ struct RootParsingTests {
         ["--segment-window", "61"],                    // out of [2,60]
         ["--interactive", "-i", "f.wav"],              // interactive is live-only
         ["--interactive", "-a", "-"],                  // interactive owns the terminal
+        ["-i", "f.wav", "--tracks", "stereo"],         // tracks is live-only
+        ["--tracks", "quad"],                          // unknown layout
     ])
     func rejectsInvalidCombinations(_ arguments: [String]) {
         #expect(throws: (any Error).self) {
@@ -140,6 +142,8 @@ struct RootParsingTests {
         ["--interactive"],                                      // live UI, transcript to terminal
         ["--interactive", "-a", "rec.m4a"],                     // record + interactive transcript view
         ["--interactive", "--system", "--mix"],                 // interactive meeting capture
+        ["--system", "--mix", "--tracks", "stereo", "-a", "m.wav"],  // mic left / system right
+        ["--system", "--mix", "--tracks", "mixed", "-a", "m.wav"],   // the default, spelled out
     ])
     func acceptsValidCombinations(_ arguments: [String]) throws {
         _ = try Hark.parse(arguments)
