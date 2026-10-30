@@ -6,7 +6,20 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Added
+- All of FluidAudio's Parakeet variants are now available — `ultra`, `v3`,
+  `redux` (25 European languages); `v2`, `phonon2`, `bark3`, `bark3-clean`,
+  `tdt-ctc-110m` (English); `ja` (Japanese). Pick one with `--model` or
+  `hark models download parakeet:<variant>`; `hark models list --available`
+  lists them with exact installed status. `redux`, `phonon2` and the `bark3`
+  pair need macOS 15+.
+
 ### Changed
+- The default Parakeet model is now **`ultra`** (a post-trained v3: more
+  accurate in every language at the same speed). A configured `model` (e.g.
+  `v3`) is still honored; with none set, the first run downloads ultra
+  (~595 MB). A model name that isn't a Parakeet variant now falls back to the
+  default with a notice instead of silently.
 - Dependencies updated: WhisperKit (argmax-oss-swift) 0.18 → 1.1.1,
   FluidAudio 0.15 → 0.18, FlyingFox 0.26 → 0.27. WhisperKit 1.x vendors its
   Hugging Face plumbing, dropping six transitive packages (swift-transformers,
@@ -15,6 +28,10 @@ All notable changes to Hark are documented here. The format is loosely based on
   normalization), keeping the release binary at ~15 MB instead of ~28 MB.
 - Building from source now needs Swift 6.2+ (Xcode 26+); the binary still
   runs on macOS 14.4+.
+
+### Fixed
+- The "downloading parakeet … (first use)" notice is printed again before a
+  first-run model fetch.
 
 ## [0.4.3] - 2026-09-17
 
