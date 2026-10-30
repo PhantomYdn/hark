@@ -6,6 +6,16 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Changed
+- Dependencies updated: WhisperKit (argmax-oss-swift) 0.18 → 1.1.1,
+  FluidAudio 0.15 → 0.18, FlyingFox 0.26 → 0.27. WhisperKit 1.x vendors its
+  Hugging Face plumbing, dropping six transitive packages (swift-transformers,
+  swift-jinja, swift-crypto, swift-asn1, swift-collections, yyjson).
+- FluidAudio is linked with only its `Diarizer` trait (no TTS / NeMo text
+  normalization), keeping the release binary at ~15 MB instead of ~28 MB.
+- Building from source now needs Swift 6.2+ (Xcode 26+); the binary still
+  runs on macOS 14.4+.
+
 ### Fixed
 - Reading a stereo file threw away the right channel. Everything that folds a
   file down to mono — transcription, offline diarization, and a transcode to
