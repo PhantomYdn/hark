@@ -166,6 +166,14 @@ struct Hark: ParsableCommand {
         valueName: "n"))
     var channels: Int?
 
+    @Option(name: .customLong("tracks"), help: ArgumentHelp(
+        "Live: how the two capture sources land in the -a file. mixed (default) sums "
+            + "them into one stream; stereo keeps them apart — microphone on the left "
+            + "channel, system/app audio on the right — and needs two sources (--mix "
+            + "with --system/--app/--exclude-app). Or $HARK_TRACKS / hark config.",
+        valueName: "mixed|stereo"))
+    var tracks: TrackLayout?
+
     @Flag(name: .customLong("keep-awake"), inversion: .prefixedNo, help: """
         Keep the machine awake while recording so sleep can't interrupt capture \
         (also keeps the display on with --interactive). Default off; --no-keep-awake \
@@ -413,6 +421,10 @@ struct Hark: ParsableCommand {
         }
         if input != nil && split != nil {
             throw ValidationError("--split applies to live capture; it has no effect with -i/--input.")
+        }
+        if input != nil && tracks != nil {
+            throw ValidationError(
+                "--tracks lays out the sources of a live capture; it has no effect with -i/--input.")
         }
 
         // Interactive mode is a live-capture terminal UI: it can't read a file
@@ -699,6 +711,9 @@ struct Hark: ParsableCommand {
         // Resolve speaker labeling up front (downgrading to source-only on Intel
         // where acoustic diarization can't run) so it's settled before capture.
         let speakerPlan = try resolveLivePlan(settings: settings)
+        // …and the -a channel layout, before any permission prompt, so an
+        // impossible `--tracks stereo` fails immediately rather than mid-meeting.
+        let trackLayout = try resolveTrackLayout(settings: settings, outputs: outputs)
 
         // Fail fast on an unusable transcription engine before touching audio
         // permissions or starting capture: whisper resolves its binary+model
@@ -722,7 +737,8 @@ struct Hark: ParsableCommand {
         // Startup status (PRD §6.8): summarise the resolved configuration on
         // stderr (when a TTY, or with -v) before capture begins.
         StartupStatus.emit(liveStatusText(
-            settings: settings, source: sourceLabel, format: format, outputs: outputs))
+            settings: settings, source: sourceLabel, format: format, outputs: outputs,
+            tracks: trackLayout))
 
         // Interactive controls (PRD §6.9): `m` mutes the mic only when one is in
         // the capture (mic-only, or `--mix`); `y` yanks the transcript so far.
@@ -749,10 +765,26 @@ struct Hark: ParsableCommand {
             creationDate: Date(), software: "hark \(harkVersion)", title: sourceLabel)
 
         var sinks: [AudioSink] = []
+        // `--tracks stereo`: the -a file is written from the two separated
+        // sources instead of the mixed stream, so its sink leaves `sinks` (which
+        // carries the mix) and becomes a pair of tagged per-source adapters.
+        var trackSinks: [(CaptureSource, AudioSink)] = []
+        var stereoWriter: StereoTrackWriter?
         if let audioDest = outputs.audio {
-            sinks.append(try makeAudioSink(
+            let audioSink = try makeAudioSink(
                 audioDest, format: format, metadata: metadata,
-                silenceThreshold: settings.silenceThreshold))
+                silenceThreshold: settings.silenceThreshold)
+            switch trackLayout {
+            case .mixed:
+                sinks.append(audioSink)
+            case .stereo:
+                let control = captureEngine.control
+                let writer = StereoTrackWriter(
+                    sink: audioSink, format: format,
+                    pauseGeneration: { control?.pauseCount ?? 0 })
+                trackSinks = writer.trackSinks()
+                stereoWriter = writer
+            }
         }
 
         // Speaker labeling (PRD §6.7): dispatch on the resolved plan.
@@ -762,32 +794,34 @@ struct Hark: ParsableCommand {
         case .sourceOnly(let labels):
             try runSourceAttributedLive(
                 outputs: outputs, settings: settings, captureEngine: captureEngine,
-                session: session, format: format, mixedSinks: sinks, labels: labels,
-                systemDiarizer: nil, transcriptLog: transcriptLog)
+                session: session, format: format, mixedSinks: sinks, trackSinks: trackSinks,
+                labels: labels, systemDiarizer: nil, transcriptLog: transcriptLog)
             return
         case .sourceDiarized(let labels, .streaming):
             let diarizer = try makeStreamingDiarizer(settings: settings)
             try runSourceAttributedLive(
                 outputs: outputs, settings: settings, captureEngine: captureEngine,
-                session: session, format: format, mixedSinks: sinks, labels: labels,
-                systemDiarizer: diarizer, transcriptLog: transcriptLog)
+                session: session, format: format, mixedSinks: sinks, trackSinks: trackSinks,
+                labels: labels, systemDiarizer: diarizer, transcriptLog: transcriptLog)
             return
         case .singleDiarized(.streaming):
             let diarizer = try makeStreamingDiarizer(settings: settings)
             try runSingleDiarizedLive(
                 outputs: outputs, settings: settings, captureEngine: captureEngine,
-                session: session, format: format, mixedSinks: sinks, diarizer: diarizer,
-                transcriptLog: transcriptLog)
+                session: session, format: format, mixedSinks: sinks, trackSinks: trackSinks,
+                diarizer: diarizer, transcriptLog: transcriptLog)
             return
         case .sourceDiarized(let labels, .offline):
             try runOfflineLive(
                 outputs: outputs, settings: settings, captureEngine: captureEngine,
-                session: session, format: format, mixedSinks: sinks, labels: labels)
+                session: session, format: format, mixedSinks: sinks, trackSinks: trackSinks,
+                labels: labels)
             return
         case .singleDiarized(.offline):
             try runOfflineLive(
                 outputs: outputs, settings: settings, captureEngine: captureEngine,
-                session: session, format: format, mixedSinks: sinks, labels: nil)
+                session: session, format: format, mixedSinks: sinks, trackSinks: trackSinks,
+                labels: nil)
             return
         }
 
@@ -811,14 +845,20 @@ struct Hark: ParsableCommand {
                 Log.notice("listening — press Ctrl+C to stop")
             }
         }
-        if sinks.isEmpty {
+        if sinks.isEmpty && trackSinks.isEmpty {
             sinks.append(DiscardSink())  // --no-output dry run
         }
-        Log.verbose("destination: " + sinks.map(\.label).joined(separator: ", "))
+        // The stereo writer's own label is the -a destination; its two adapters
+        // share it, so it is listed once.
+        Log.verbose(
+            "destination: "
+                + (sinks.map(\.label) + [stereoWriter?.label].compactMap { $0 })
+                .joined(separator: ", "))
 
         try captureEngine.run(
             session: session, format: format, into: sinks,
-            duration: duration, warnOnSilence: captureSystem)
+            duration: duration, warnOnSilence: captureSystem,
+            sourceSinks: trackSinks)
 
         // Surface any engine error from the live segments (exit-code-mapped).
         try liveTranscriber?.rethrowErrors()
@@ -858,6 +898,38 @@ struct Hark: ParsableCommand {
         return twoSources ? .sourceDiarized(labels, mode) : .singleDiarized(mode)
     }
 
+    /// Resolves `--tracks` for a live capture (PRD §6.7d). `stereo` gives each
+    /// source its own channel of the `-a` file, so it needs two sources and both
+    /// channels; either one missing is a usage error rather than a silent
+    /// downgrade to the mixed stream. Internal for testing.
+    func resolveTrackLayout(
+        settings: ResolvedSettings, outputs: ResolvedOutputs
+    ) throws -> TrackLayout {
+        // The layout describes the -a file, so with no audio output there is
+        // nothing to lay out and nothing to refuse: a `tracks stereo` left in
+        // the config or the environment must not break a transcript-only run.
+        guard outputs.audio != nil else { return .mixed }
+        guard settings.tracks == .stereo else { return .mixed }
+        let twoSources = mix && (captureSystem || !apps.isEmpty || !excludeApps.isEmpty)
+        guard twoSources else {
+            throw HarkError.usage("""
+                --tracks stereo puts the microphone on one channel and the call on the \
+                other, so it needs two sources: combine --mix with \
+                --system/--app/--exclude-app.
+                """)
+        }
+        // A tap capture defaults to 2 channels (see `makeCapture`), so this only
+        // fires when the channel count was asked down to mono.
+        guard (settings.channels ?? 2) == 2 else {
+            throw HarkError.usage("""
+                --tracks stereo writes the microphone to the left channel and the call \
+                to the right, so it needs both: drop -c/--channels 1 or the configured \
+                channels 1 (or use --tracks mixed to sum them into one mono stream).
+                """)
+        }
+        return .stereo
+    }
+
     /// Loads the streaming EEND diarizer for the system/single stream, or returns
     /// nil (with a notice) if it can't load — callers fall back to a fixed label.
     private func makeStreamingDiarizer(settings: ResolvedSettings) throws -> EENDStreamingDiarizer? {
@@ -875,7 +947,8 @@ struct Hark: ParsableCommand {
     /// `Speaker 1..N` by the streaming EEND timeline.
     private func runSourceAttributedLive(
         outputs: ResolvedOutputs, settings: ResolvedSettings, captureEngine: CaptureEngine,
-        session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink], labels: SpeakerLabels,
+        session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink],
+        trackSinks: [(CaptureSource, AudioSink)], labels: SpeakerLabels,
         systemDiarizer: EENDStreamingDiarizer?, transcriptLog: TranscriptLog? = nil
     ) throws {
         guard let transcriptDest = outputs.transcript else {
@@ -928,7 +1001,7 @@ struct Hark: ParsableCommand {
         try captureEngine.run(
             session: session, format: format, into: mixedSinks,
             duration: duration, warnOnSilence: captureSystem,
-            sourceSinks: sourceSinks)
+            sourceSinks: sourceSinks + trackSinks)
 
         try? writer.close()
         backend.shutdown()
@@ -941,7 +1014,8 @@ struct Hark: ParsableCommand {
     private func runSingleDiarizedLive(
         outputs: ResolvedOutputs, settings: ResolvedSettings, captureEngine: CaptureEngine,
         session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink],
-        diarizer: EENDStreamingDiarizer?, transcriptLog: TranscriptLog? = nil
+        trackSinks: [(CaptureSource, AudioSink)], diarizer: EENDStreamingDiarizer?,
+        transcriptLog: TranscriptLog? = nil
     ) throws {
         guard let transcriptDest = outputs.transcript else {
             throw HarkError.usage(
@@ -977,7 +1051,8 @@ struct Hark: ParsableCommand {
 
         try captureEngine.run(
             session: session, format: format, into: sinks,
-            duration: duration, warnOnSilence: captureSystem)
+            duration: duration, warnOnSilence: captureSystem,
+            sourceSinks: trackSinks)
         try? writer.close()
         backend.shutdown()
         try transcriber.rethrowErrors()
@@ -989,7 +1064,8 @@ struct Hark: ParsableCommand {
     /// the diarized system track; otherwise the single stream is diarized.
     private func runOfflineLive(
         outputs: ResolvedOutputs, settings: ResolvedSettings, captureEngine: CaptureEngine,
-        session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink], labels: SpeakerLabels?
+        session: CaptureSession, format: PCMFormat, mixedSinks: [AudioSink],
+        trackSinks: [(CaptureSource, AudioSink)], labels: SpeakerLabels?
     ) throws {
         guard let transcriptDest = outputs.transcript else {
             throw HarkError.usage(
@@ -1013,11 +1089,14 @@ struct Hark: ParsableCommand {
             try captureEngine.run(
                 session: session, format: format, into: mixedSinks,
                 duration: duration, warnOnSilence: captureSystem,
-                sourceSinks: [(.microphone, try wavSink("mic.wav")), (.system, try wavSink("system.wav"))])
+                sourceSinks: [
+                    (.microphone, try wavSink("mic.wav")), (.system, try wavSink("system.wav")),
+                ] + trackSinks)
         } else {
             try captureEngine.run(
                 session: session, format: format, into: mixedSinks + [try wavSink("system.wav")],
-                duration: duration, warnOnSilence: captureSystem)
+                duration: duration, warnOnSilence: captureSystem,
+                sourceSinks: trackSinks)
         }
 
         Log.notice("diarizing the recording…")
@@ -1047,7 +1126,8 @@ struct Hark: ParsableCommand {
     /// Builds the §6.8 startup-status text for a live capture from the resolved
     /// settings, the capture source label/format, and the chosen outputs.
     private func liveStatusText(
-        settings: ResolvedSettings, source: String, format: PCMFormat, outputs: ResolvedOutputs
+        settings: ResolvedSettings, source: String, format: PCMFormat, outputs: ResolvedOutputs,
+        tracks: TrackLayout
     ) -> String {
         let tapMode = captureSystem || !apps.isEmpty || !excludeApps.isEmpty
         let audioDesc: String?
@@ -1074,6 +1154,9 @@ struct Hark: ParsableCommand {
             translate: settings.translate, source: source,
             captureBackend: tapMode ? settings.captureBackend : nil,
             format: format, audio: audioDesc, transcript: transcriptDesc,
+            // Only worth a line when it changes what lands in the file: the
+            // default layout is already implied by the format row.
+            tracks: tracks == .stereo ? "stereo (mic left / system right)" : nil,
             speakers: speakersDesc, vad: settings.useVad, keepAwake: keepAwakeDesc,
             duration: duration, split: split)
     }

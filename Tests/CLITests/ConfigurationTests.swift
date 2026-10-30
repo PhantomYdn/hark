@@ -76,6 +76,7 @@ struct ConfigurationTests {
             case .rate: raw = "48000"
             case .bits: raw = "24"
             case .channels: raw = "1"
+            case .tracks: raw = "stereo"
             case .silenceThreshold: raw = "-42"
             case .vadThreshold, .speakerThreshold: raw = "0.6"
             case .segmentPause: raw = "0.4"

@@ -215,7 +215,7 @@ output transcribes to stdout.
 | | Pick one input | Name the outputs |
 |---|---|---|
 | **default** | system default microphone | transcript on stdout |
-| **flags** | `-d` device · `--system` · `--app` · `--exclude-app` · `--mix` · `-i` file/stdin | `-a` audio · `-t` transcript (`-` = stdout) |
+| **flags** | `-d` device · `--system` · `--app` · `--exclude-app` · `--mix` · `-i` file/stdin | `-a` audio (`--tracks stereo` = mic left / call right) · `-t` transcript (`-` = stdout) |
 
 ```sh
 hark --app com.apple.Music -a song.m4a       # capture one app
@@ -290,6 +290,11 @@ two ways that combine:
 - **Acoustic diarization** — distinct voices within a stream are separated into
   **`Speaker 1`, `Speaker 2`, …** using on-device CoreML models (Apple Silicon).
 
+The labels are a transcript feature; `--tracks stereo` keeps the same two sides
+apart in the **recording** — your mic on the left channel, the call on the
+right, in one file — so the separation is still there afterwards
+([reference](docs/reference.md#separate-tracks---tracks)).
+
 By default a meeting is labeled **`You` + `Speaker 1..N`**. Use
 `--speaker-mode source` for the cheap `You`/`Others` split with no diarization.
 
@@ -299,6 +304,9 @@ hark --system --mix --speakers -t meeting.srt
 
 # Accurate offline pass (transcript written when you stop)
 hark --system --mix --speakers --diarize-engine offline -t meeting.srt
+
+# Keep the two sides apart in the recording too: mic left, call right
+hark --system --mix --tracks stereo -a call.wav
 
 # Diarize a recording (everyone becomes Speaker N — "You" is live-only)
 hark -i meeting.wav --speakers -t out.json

@@ -14,12 +14,24 @@ final class CaptureControl: @unchecked Sendable {
     private var paused = false
     private var muted = false
     private var stopped = false
+    private var pauses: UInt64 = 0
     private var onStop: (() -> Void)?
 
     /// True while capture is paused (the I/O path drops chunks).
     var isPaused: Bool {
         lock.lock(); defer { lock.unlock() }
         return paused
+    }
+
+    /// How many pause intervals have begun. Chunks are dropped one at a time on
+    /// the capture I/O queue, so a pause can land *between* the two sources of a
+    /// `--mix` capture and drop only one of them. A consumer that pairs the two
+    /// sources (the `--tracks stereo` writer) watches this counter to realign at
+    /// the pause boundary instead of carrying that offset for the rest of the
+    /// recording.
+    var pauseCount: UInt64 {
+        lock.lock(); defer { lock.unlock() }
+        return pauses
     }
 
     /// True while the microphone is muted (interactive `m`, PRD §6.9). Unlike
@@ -54,6 +66,7 @@ final class CaptureControl: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard !stopped else { return paused }
         paused.toggle()
+        if paused { pauses += 1 }
         return paused
     }
 
@@ -94,6 +107,7 @@ final class CaptureControl: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard !paused, !stopped else { return false }
         paused = true
+        pauses += 1
         return true
     }
 

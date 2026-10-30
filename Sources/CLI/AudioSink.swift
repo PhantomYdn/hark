@@ -10,6 +10,17 @@ protocol AudioSink: Sendable {
     var label: String { get }
 }
 
+/// A per-source sink that holds the user's recording — today only the `-a`
+/// file written from the separated sources by `--tracks stereo`.
+///
+/// `CaptureEngine` writes per-source chunks best-effort, because the usual
+/// per-source sink is a transcriber feed or a temporary diarization WAV whose
+/// loss costs a transcript, not the recording. A `RecordingSink` is the
+/// artifact itself, so the engine treats a failed write on one exactly as it
+/// treats a failed write on the mixed stream: stop and report, rather than
+/// leave a silently truncated file behind a success exit.
+protocol RecordingSink: AudioSink {}
+
 /// WAV container output (file or stdout stream).
 final class WAVSink: AudioSink, @unchecked Sendable {
     private let writer: WAVFileWriter

@@ -130,6 +130,22 @@ struct StartRequestTests {
         }
     }
 
+    /// A session can ask for the stereo layout like any other capture setting.
+    @Test func carriesTheTrackLayout() throws {
+        var body = StartRequest()
+        body.system = true
+        body.mix = true
+        body.audio = "meeting.wav"
+        body.tracks = "Stereo"
+        let cmd = try body.makeCommand(defaults: defaults([]))
+        #expect(cmd.tracks == .stereo)
+
+        body.tracks = "quad"
+        #expect(throws: HarkError.self) {
+            _ = try body.makeCommand(defaults: defaults([]))
+        }
+    }
+
     @Test func rejectsInvalidEnum() throws {
         var body = StartRequest()
         body.transcript = "n.txt"

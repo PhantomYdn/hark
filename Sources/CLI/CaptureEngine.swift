@@ -171,7 +171,15 @@ struct CaptureEngine {
         // duration in its own stream, so each gets its own budget; a source's
         // sinks share it, since they all see the same chunks. The queue hop
         // keeps the audio thread free: no work beyond the enqueue happens on
-        // it. Write errors still surface via each sink's own error path.
+        // it.
+        //
+        // A failed write is dropped for a feed (a transcriber's stream, a
+        // temporary diarization WAV) — losing a chunk of those costs a word of
+        // transcript, and killing the recording over it would be worse. A
+        // `RecordingSink` is the recording (`--tracks stereo` writes the -a file
+        // from the separated sources), so its failure goes through the same
+        // FailureBox as the mixed stream's: capture stops, and the run ends with
+        // an I/O error — or, for a closed downstream pipe, gracefully.
         if !sourceSinks.isEmpty, let multi = session as? MultiTrackCaptureSession {
             let routes = sourceSinks
             let budgets = Set(routes.map(\.0)).reduce(into: [CaptureSource: ByteBudget]()) {
@@ -184,7 +192,13 @@ struct CaptureEngine {
                     let chunk = budgets[source]?.consume(data).chunk ?? data
                     guard !chunk.isEmpty else { return }
                     for (tag, sink) in routes where tag == source {
-                        try? sink.write(chunk)
+                        do {
+                            try sink.write(chunk)
+                        } catch {
+                            guard sink is RecordingSink else { continue }
+                            if failure.store(error) { done.signal() }
+                            return
+                        }
                     }
                 }
             }
@@ -308,10 +322,11 @@ struct CaptureEngine {
             }
         }
         let elapsed = Date().timeIntervalSince(startedAt)
-        let totalBytes = sinks.map(\.bytesWritten).max() ?? 0
+        let stats = Self.captureStats(mixed: sinks, perSource: sourceSinks.map(\.1))
+        let totalBytes = stats.bytes
         Log.verbose(
             "captured \(totalBytes) bytes (\(String(format: "%.1f", elapsed)) s) to "
-                + sinks.map(\.label).joined(separator: ", "))
+                + stats.labels.joined(separator: ", "))
 
         // Fires for an all-zero stream AND for a source that never delivered a
         // byte (e.g. a permission-less tap under launchd writes only a header)
@@ -327,6 +342,28 @@ struct CaptureEngine {
                 retry.
                 """)
         }
+    }
+
+    /// What the verbose teardown line reports: the bytes captured and the
+    /// destinations they went to.
+    ///
+    /// The mixed stream's sinks are the recording in the usual case, but
+    /// `--tracks stereo` writes the -a file through per-source sinks instead,
+    /// and looking only at `mixed` there printed "captured 0 bytes … to " with
+    /// an empty destination for a run that had just written a file. Per-source
+    /// *feeds* stay out of the line: they are internal (a transcriber's stream,
+    /// a temporary diarization WAV), not something the user asked for. The
+    /// stereo pair's two adapters share one file, so their common label is
+    /// listed once.
+    static func captureStats(mixed: [AudioSink], perSource: [AudioSink])
+        -> (bytes: UInt64, labels: [String])
+    {
+        let recordings = perSource.filter { $0 is RecordingSink }
+        let bytes = (mixed + recordings).map(\.bytesWritten).max() ?? 0
+        let labels = recordings.map(\.label).reduce(into: mixed.map(\.label)) {
+            if !$0.contains($1) { $0.append($1) }
+        }
+        return (bytes, labels)
     }
 
     /// Runs `work` on a background thread and waits at most `timeout` seconds

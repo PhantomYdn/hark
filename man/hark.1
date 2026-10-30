@@ -146,6 +146,32 @@ Bit depth (live default 16; transcode defaults to the source depth).
 Channel count (defaults from the source, capped at 2). Folding a multi-channel
 file down to 1 averages the channels.
 .TP
+.BI \-\-tracks " mixed|stereo"
+How the two sources of a mixed capture land in the audio output.
+.B mixed
+(default) sums them into one stream, as before;
+.B stereo
+keeps them apart in the same file \(em microphone on the left channel, system
+or app audio on the right \(em so the separation survives the recording. Needs
+two sources
+.RB ( \-\-mix
+with
+.BR \-\-system / \-\-app / \-\-exclude\-app )
+and both channels (not
+.BR "\-c 1" ;
+a typed
+.B \-\-tracks stereo
+overrides a
+.B channels 1
+from the config or environment).
+Each side is folded to mono, so genuinely stereo system audio is downmixed.
+Applies to
+.B \-a
+only. Also
+.B $HARK_TRACKS
+or config
+.BR tracks .
+.TP
 .BI \-\-duration " SEC"
 Stop live capture after SEC seconds (otherwise Ctrl\-C).
 .TP
@@ -464,6 +490,12 @@ in
 Default system/app capture backend
 .RB ( auto / sckit / coreaudio ).
 .TP
+.B HARK_TRACKS
+Default layout of the two capture sources in the audio output
+.RB ( mixed / stereo ,
+config key
+.BR tracks ).
+.TP
 .B HARK_REMOTE_CONTROL_PORT
 Default loopback port for
 .B \-\-remote\-control
@@ -560,6 +592,14 @@ Label a meeting by speaker (You + Speaker 1..N), live:
 .RS
 .nf
 hark \-\-system \-\-mix \-\-speakers \-t meeting.srt
+.fi
+.RE
+.PP
+Keep your microphone and the call on separate channels of the recording:
+.PP
+.RS
+.nf
+hark \-\-system \-\-mix \-\-tracks stereo \-a call.wav
 .fi
 .RE
 .PP

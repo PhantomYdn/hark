@@ -19,6 +19,7 @@ enum StartupStatus {
         format: PCMFormat,
         audio: String?,
         transcript: String?,
+        tracks: String? = nil,
         speakers: String?,
         vad: Bool,
         keepAwake: String? = nil,
@@ -37,6 +38,7 @@ enum StartupStatus {
         row("format", "\(format.sampleRate) Hz · \(format.bitsPerSample)-bit · \(format.channels) ch")
         row("audio", audio ?? "(none)")
         row("transcript", transcript ?? "(none)")
+        if let tracks { row("tracks", tracks) }
         if let speakers { row("speakers", speakers) }
         row("vad", vad ? "on" : "off")
         if let keepAwake { row("keep-awake", keepAwake) }

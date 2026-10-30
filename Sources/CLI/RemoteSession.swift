@@ -238,6 +238,7 @@ struct StartRequest: Decodable {
     var rate: Int?
     var bits: Int?
     var channels: Int?
+    var tracks: String?
     var split: String?
     var silenceThreshold: Double?
     var speakers: Bool?
@@ -289,6 +290,12 @@ struct StartRequest: Decodable {
         if let rate { cmd.rate = rate }
         if let bits { cmd.bits = bits }
         if let channels { cmd.channels = channels }
+        if let tracks {
+            guard let parsed = TrackLayout(rawValue: tracks.lowercased()) else {
+                throw HarkError.usage("invalid tracks '\(tracks)' (mixed, stereo).")
+            }
+            cmd.tracks = parsed
+        }
         if let split { cmd.split = split }
         if let silenceThreshold { cmd.silenceThreshold = silenceThreshold }
         if let speakers { cmd.speakers = speakers }
