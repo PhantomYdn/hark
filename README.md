@@ -171,7 +171,7 @@ no Gatekeeper steps are needed.
 
 ### Build from source (Intel, or to hack on it)
 
-With the Swift toolchain (Swift 6 / Xcode 16):
+With the Swift toolchain (Swift 6.2+ / Xcode 26+):
 
 ```sh
 git clone https://github.com/PhantomYdn/hark.git hark && cd hark
