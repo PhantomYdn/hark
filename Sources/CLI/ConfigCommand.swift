@@ -129,7 +129,7 @@ struct ConfigSet: ParsableCommand {
     ) -> String? {
         let effective = configuredEngine ?? "whisper"
         if let owner, owner != effective {
-            let versionHint = owner == "parakeet" ? " (parakeet selects a version, e.g. v2 or v3)" : ""
+            let versionHint = owner == "parakeet" ? " (parakeet selects a variant, e.g. ultra or v2)" : ""
             return "note: '\(value)' is a \(owner) model; also set the engine — "
                 + "hark config set engine \(owner)\(versionHint)"
         }
@@ -155,7 +155,9 @@ struct ConfigSet: ParsableCommand {
         }
         let parakeet = ModelRegistry.coreMLModels(
             engine: "parakeet", directory: ParakeetBackend.downloadBase)
-        if parakeet.contains(where: { $0.name == value || $0.name.hasSuffix("-\(value)") }) {
+        if parakeet.contains(where: { $0.name == value || $0.name.hasSuffix("-\(value)") })
+            || ParakeetBackend.resolve(value).map(ParakeetBackend.isCached) == true
+        {
             return "parakeet"
         }
         return nil

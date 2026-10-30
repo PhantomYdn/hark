@@ -6,12 +6,53 @@ import Testing
 
 @Suite("Parakeet backend")
 struct ParakeetBackendTests {
-    @Test func modelVersionSelection() {
-        #expect(ParakeetBackend.modelVersion("v2") == .v2)
-        #expect(ParakeetBackend.modelVersion("en") == .v2)
-        #expect(ParakeetBackend.modelVersion(nil) == .v3)
-        #expect(ParakeetBackend.modelVersion("v3") == .v3)
-        #expect(ParakeetBackend.modelVersion("anything") == .v3)
+    @Test func resolvesVariantsByNameAndAlias() {
+        #expect(ParakeetBackend.resolve("ultra")?.version == .ultra)
+        #expect(ParakeetBackend.resolve("v3")?.version == .v3)
+        #expect(ParakeetBackend.resolve("redux")?.version == .redux)
+        #expect(ParakeetBackend.resolve("v2")?.version == .v2)
+        #expect(ParakeetBackend.resolve("en")?.version == .v2)
+        #expect(ParakeetBackend.resolve("phonon-2")?.version == .phonon2)
+        #expect(ParakeetBackend.resolve("bark")?.version == .bark3)
+        #expect(ParakeetBackend.resolve("bark-clean")?.version == .bark3Clean)
+        #expect(ParakeetBackend.resolve("110m")?.version == .tdtCtc110m)
+        #expect(ParakeetBackend.resolve("JA")?.version == .tdtJa)
+        // Engine-prefixed names, as `parakeet-v2` used to be accepted.
+        #expect(ParakeetBackend.resolve("parakeet-v2")?.version == .v2)
+        #expect(ParakeetBackend.resolve("parakeet:ultra")?.version == .ultra)
+    }
+
+    @Test func resolvesCachedBundleNames() {
+        // FluidAudio's cache dir names (what `config set model` users copy from
+        // `hark models list`), with or without the HF repo's -coreml suffix.
+        #expect(ParakeetBackend.resolve("parakeet-tdt-0.6b-v3")?.version == .v3)
+        #expect(ParakeetBackend.resolve("parakeet-tdt-0.6b-v3-coreml")?.version == .v3)
+        for model in ParakeetBackend.models {
+            #expect(ParakeetBackend.resolve(model.bundleName) == model)
+        }
+    }
+
+    @Test func unknownNamesFallBackToUltraDefault() {
+        #expect(ParakeetBackend.defaultModel.version == .ultra)
+        #expect(ParakeetBackend.resolve(nil) == nil)
+        #expect(ParakeetBackend.resolve("base.en") == nil)
+        #expect(ParakeetBackend.resolveOrDefault(nil).version == .ultra)
+        #expect(ParakeetBackend.resolveOrDefault("base.en").version == .ultra)
+    }
+
+    @Test func variantTableIsConsistent() {
+        let models = ParakeetBackend.models
+        // Every name/alias is unique, and every FluidAudio version is exposed once.
+        let keys = models.flatMap { [$0.name] + $0.aliases }
+        #expect(Set(keys).count == keys.count)
+        #expect(Set(models.map(\.bundleName)).count == models.count)
+        #expect(models.count == 9)
+        // Bundle dirs that don't say "parakeet" still classify as the parakeet engine.
+        for model in models {
+            #expect(FluidAudioCache.engine(forBundle: model.bundleName) == "parakeet")
+        }
+        // tdt-ctc-110m has a single-layer decoder (TdtDecoderState must match).
+        #expect(ParakeetBackend.resolve("tdt-ctc-110m")?.version.decoderLayers == 1)
     }
 
     @Test func languageNoticeOnlyForSpecificLanguage() {
