@@ -209,6 +209,7 @@ replace, or `"error"` to get a `409` instead. `"ask"` is rejected (`400`).
 | `maxSpeakers` | number | `--max-speakers` |
 | `speakerThreshold` | number | `--speaker-threshold` |
 | `vad` / `vadThreshold` / `gain` | bool/number/bool | `--vad` / `--vad-threshold` / `--gain` |
+| `segmentPause` / `segmentWindow` | number | `--segment-pause` / `--segment-window` (live segment timing, seconds) |
 
 ### `POST /pause`, `/resume`, `/mute`, `/unmute`, `/stop`
 

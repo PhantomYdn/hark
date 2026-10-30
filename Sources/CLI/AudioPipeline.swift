@@ -38,11 +38,19 @@ enum AudioPipeline {
         // channel 0 and drops the rest, so a file with speech only on the right
         // channel decodes as silence. Average the channels ourselves and hand
         // the converter a mono stream.
+        let needsFold = format.channels == 1 && sourceFormat.channelCount > 1
         let monoFormat: AVAudioFormat? =
-            format.channels == 1 && sourceFormat.channelCount > 1
-            && sourceFormat.commonFormat == .pcmFormatFloat32
+            needsFold && sourceFormat.commonFormat == .pcmFormatFloat32
             ? AVAudioFormat(standardFormatWithSampleRate: sourceFormat.sampleRate, channels: 1)
             : nil
+        if needsFold, monoFormat == nil {
+            // Averaging reads float samples, so a non-float32 decode falls back
+            // to the converter's channel-0 pick. Say so instead of quietly
+            // dropping the other channels.
+            Log.verbose(
+                "\(sourceFormat.channelCount)-channel input is not float32; "
+                    + "folding to mono keeps channel 0 only")
+        }
         let converter: PCMStreamConverter
         do {
             converter = try PCMStreamConverter(
@@ -99,10 +107,16 @@ enum AudioPipeline {
     /// and cannot clip.
     static func downmixToMono(_ source: AVAudioPCMBuffer, into destination: AVAudioPCMBuffer) {
         let frames = Int(source.frameLength)
-        destination.frameLength = AVAudioFrameCount(frames)
         guard frames > 0, let input = source.floatChannelData,
             let output = destination.floatChannelData
-        else { return }
+        else {
+            // Claim no frames rather than advertise a length we did not write:
+            // the destination buffer is reused per chunk, so a length without
+            // samples hands the converter the previous chunk again.
+            destination.frameLength = 0
+            return
+        }
+        destination.frameLength = AVAudioFrameCount(frames)
         let channels = Int(source.format.channelCount)
         let interleaved = source.format.isInterleaved
         let scale = 1.0 / Float(channels)
@@ -122,10 +136,14 @@ enum AudioPipeline {
         _ index: Int, of source: AVAudioPCMBuffer, into destination: AVAudioPCMBuffer
     ) {
         let frames = Int(source.frameLength)
-        destination.frameLength = AVAudioFrameCount(frames)
         guard frames > 0, let input = source.floatChannelData,
             let output = destination.floatChannelData
-        else { return }
+        else {
+            // As in `downmixToMono`: never advertise frames we did not write.
+            destination.frameLength = 0
+            return
+        }
+        destination.frameLength = AVAudioFrameCount(frames)
         let channels = Int(source.format.channelCount)
         guard index >= 0, index < channels else {
             for frame in 0..<frames { output[0][frame] = 0 }

@@ -248,6 +248,8 @@ struct StartRequest: Decodable {
     var speakerThreshold: Double?
     var vad: Bool?
     var vadThreshold: Double?
+    var segmentPause: Double?
+    var segmentWindow: Double?
     var gain: Bool?
 
     /// Builds the per-session `Hark` command from the agent's launch defaults
@@ -307,6 +309,8 @@ struct StartRequest: Decodable {
         if let speakerThreshold { cmd.speakerThreshold = speakerThreshold }
         if let vad { cmd.useVad = vad }
         if let vadThreshold { cmd.vadThreshold = vadThreshold }
+        if let segmentPause { cmd.segmentPause = segmentPause }
+        if let segmentWindow { cmd.segmentWindow = segmentWindow }
         if let gain { cmd.useGain = gain }
 
         // The agent writes to files under the working directory and never to the

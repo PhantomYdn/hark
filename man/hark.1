@@ -181,8 +181,8 @@ a ggml path or short name
 a variant
 .RB ( large\-v3\-v20240930_626MB );
 .B parakeet
-a version
-.RB ( v2 / v3 );
+a variant
+.RB ( ultra ", the default; " v3 ", " redux ", " v2 ", " phonon2 ", " bark3 ", " bark3\-clean ", " tdt\-ctc\-110m ", " ja );
 .B apple
 ignores it. See
 .BR "hark models list \-\-available" .
@@ -214,6 +214,17 @@ Live VAD speech\-detection sensitivity (default
 .BR 0.5 ).
 Lower catches quieter speech (fewer dropped phrases on low\-level captures);
 higher is stricter. Apple Silicon only.
+.TP
+.BI \-\-segment\-pause " sec"
+Live: seconds of silence that end a transcript segment (over 0, up to 2, default
+.BR 0.7 ).
+Higher keeps a slow speaker's sentences together.
+.TP
+.BI \-\-segment\-window " sec"
+Live: seconds of unbroken speech after which a transcript segment is cut
+anyway (2\-60, default
+.BR 12 ).
+Lower emits lines sooner when nobody pauses.
 .TP
 .BR \-\-vad ", " \-\-no\-vad
 Use the on\-device VAD for live segmentation (default on, Apple Silicon);
@@ -397,7 +408,7 @@ The active default is marked with
 Download a model. Names are engine\-tagged: a bare ggml name is a whisper model
 .RB ( base.en );
 CoreML engines use a prefix
-.RB ( whisperkit:tiny ", " parakeet:v3 ).
+.RB ( whisperkit:tiny ", " parakeet:ultra ).
 .B \-\-default
 makes it the default (also setting the engine for whisperkit/parakeet).
 .TP

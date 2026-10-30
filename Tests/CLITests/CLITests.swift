@@ -1,5 +1,6 @@
 import ArgumentParser
 import Encoders
+import FluidAudio
 import Foundation
 import Testing
 
@@ -68,6 +69,10 @@ struct RootParsingTests {
         ["--speakers", "--speaker-threshold", "1.5"],  // out of (0,1]
         ["--vad-threshold", "0"],                      // out of (0,1]
         ["--vad-threshold", "1.5"],                    // out of (0,1]
+        ["--segment-pause", "0"],                      // out of (0,2]
+        ["--segment-pause", "2.5"],                    // out of (0,2]
+        ["--segment-window", "1.5"],                   // out of [2,60]
+        ["--segment-window", "61"],                    // out of [2,60]
         ["--interactive", "-i", "f.wav"],              // interactive is live-only
         ["--interactive", "-a", "-"],                  // interactive owns the terminal
     ])
@@ -75,6 +80,28 @@ struct RootParsingTests {
         #expect(throws: (any Error).self) {
             _ = try Hark.parse(arguments)
         }
+    }
+
+    /// Zero is rejected, so neither the flag message nor the config message may
+    /// describe the bound as a range that contains zero.
+    @Test func segmentPauseRejectionExcludesZero() {
+        var flagMessage = "nothing thrown"
+        do {
+            _ = try Hark.parse(["--segment-pause", "0"])
+            Issue.record("--segment-pause 0 was accepted")
+        } catch {
+            flagMessage = "\(error)"
+        }
+        #expect(flagMessage.contains("greater than 0"), "flag: \(flagMessage)")
+
+        var configMessage = "nothing thrown"
+        do {
+            _ = try ConfigKey.parseSegmentPause("0", .segmentPause)
+            Issue.record("segment-pause 0 was accepted")
+        } catch {
+            configMessage = "\(error)"
+        }
+        #expect(configMessage.contains("greater than 0"), "config: \(configMessage)")
     }
 
     @Test(arguments: [
@@ -104,6 +131,7 @@ struct RootParsingTests {
         ["--speakers", "--max-speakers", "3"],
         ["--speakers", "--speaker-threshold", "0.5"],
         ["--vad-threshold", "0.5"],                             // general live VAD knob
+        ["--segment-pause", "0.3", "--segment-window", "5"],    // faster live segments
         ["--no-speakers"], ["--no-vad"], ["--no-gain"],         // three-state toggles
         ["--speaker-mode", "source"],                          // companion flags: ignored if speakers off
         ["--max-speakers", "2"], ["--diarize-engine", "offline"],
@@ -987,6 +1015,34 @@ struct SpeakerLabelingTests {
     }
 }
 
+@Suite("Offline diarizer config")
+struct OfflineDiarizerConfigTests {
+    @Test func keepsShortSpeech() {
+        let config = DiarizationDefaults.offlineConfig(maxSpeakers: nil, threshold: nil)
+        // FluidAudio's 1.0 s default dropped every sub-second utterance before
+        // the recognizer saw it; 0.55 s speech must now reach it.
+        #expect(config.minSpeechDuration < 0.55)
+        // …but stay above the pipeline's own ~0.17 s activity floor, so a brief
+        // noise burst still can't create a spurious speaker.
+        #expect(config.minSpeechDuration > 0.17)
+    }
+
+    @Test func carriesClusteringAndSpeakerCap() {
+        let defaults = DiarizationDefaults.offlineConfig(maxSpeakers: nil, threshold: nil)
+        #expect(defaults.clusteringThreshold == Float(DiarizationDefaults.clusteringThreshold))
+        // hark's own behaviour, not FluidAudio's sentinel for automatic: with no
+        // --max-speakers we leave numClusters exactly as the vendor set it.
+        #expect(defaults.numClusters == DiarizerConfig().numClusters)
+        let capped = DiarizationDefaults.offlineConfig(maxSpeakers: 3, threshold: 0.5)
+        #expect(capped.clusteringThreshold == 0.5)
+        #expect(capped.numClusters == 3)
+        // Against the intended value, not `defaults`: both sides would fall back
+        // to FluidAudio's 1.0 s together and stay green if the assignment went.
+        #expect(capped.minSpeechDuration == Float(DiarizationDefaults.minSpeechDuration))
+        #expect(defaults.minSpeechDuration == Float(DiarizationDefaults.minSpeechDuration))
+    }
+}
+
 @Suite("Diarizer model catalog")
 struct DiarizerCatalogTests {
     @Test func parsesFluidAudioTags() {
@@ -1230,6 +1286,25 @@ struct SpeakerLabelsParseTests {
         #expect(custom.others == "Them")
         // Malformed -> defaults (validation rejects these before we get here).
         #expect(SpeakerLabels.parse("solo").you == "You")
+    }
+}
+
+/// FluidAudio's segmenter expects `minSilenceDuration <= maxSpeechDuration`.
+/// hark guarantees that by giving the pause and the window ranges that meet but
+/// never overlap, instead of checking the pair across flag/env/config/remote.
+@Suite("Segment timing bounds")
+struct SegmentTimingBoundsTests {
+    @Test func pauseAndWindowRangesNeverOverlap() {
+        #expect(ConfigKey.maxSegmentPause <= ConfigKey.segmentWindowRange.lowerBound)
+    }
+
+    @Test(arguments: [(0.01, 2.0), (2.0, 2.0), (2.0, 60.0), (0.7, 12.0)])
+    func rangeEndsAreAccepted(pause: Double, window: Double) throws {
+        let hark = try Hark.parse([
+            "--segment-pause", "\(pause)", "--segment-window", "\(window)",
+        ])
+        #expect(hark.segmentPause == pause)
+        #expect(hark.segmentWindow == window)
     }
 }
 

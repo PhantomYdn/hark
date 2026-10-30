@@ -123,27 +123,12 @@ struct CaptureEngine {
         sleepPreventer.begin(sleepMode)
         defer { sleepPreventer.end() }
 
-        // Source attribution: route each separated source to its sink(s) in
-        // addition to the mixed stream. The session delivers these on its IO
-        // thread; sink writes are forwarded directly (errors surface later via
-        // each sink's own error path).
         let control = self.control
         // Interactive mute (PRD §6.9): let the session silence only the mic on
         // demand. Generic — only the interactive key reader ever toggles it, so
         // the remote-control path leaves it inert. Set before `start`.
         if let control, let mutable = session as? MicMutableCaptureSession {
             mutable.micMuted = { control.isMuted }
-        }
-        if !sourceSinks.isEmpty, let multi = session as? MultiTrackCaptureSession {
-            let routes = sourceSinks
-            multi.onSourceAudio = { source, data in
-                // Paused capture drops per-source chunks too, so attribution
-                // tracks gap in lock-step with the mixed stream.
-                if control?.isPaused == true { return }
-                for (tag, sink) in routes where tag == source {
-                    try? sink.write(data)
-                }
-            }
         }
         let ioQueue = DispatchQueue(label: "hark.capture.io")
         let failure = FailureBox()
@@ -166,8 +151,43 @@ struct CaptureEngine {
         // --duration counts captured audio, not wall clock: the budget trims
         // the final chunk so the output holds exactly the requested length
         // regardless of engine spin-up latency.
-        let budget = duration.map { seconds in
-            ByteBudget(bytes: UInt64(seconds * Double(format.byteRate)), frameSize: format.bytesPerFrame)
+        func makeBudget() -> ByteBudget? {
+            duration.map { seconds in
+                ByteBudget(
+                    bytes: UInt64(seconds * Double(format.byteRate)),
+                    frameSize: format.bytesPerFrame)
+            }
+        }
+        let budget = makeBudget()
+
+        // Source attribution: route each separated source to its sink(s) in
+        // addition to the mixed stream. The session delivers these on its own
+        // IO thread, so the write hops to `ioQueue` first — exactly like the
+        // mixed stream below — which buys the per-source sinks the same three
+        // protections: late chunks are dropped once teardown has begun, pause
+        // is sampled at the same point in the pipeline as for the mixed stream
+        // (so the two streams can't drift apart across a pause), and the
+        // `--duration` budget is honoured. Each source carries the full
+        // duration in its own stream, so each gets its own budget; a source's
+        // sinks share it, since they all see the same chunks. The queue hop
+        // keeps the audio thread free: no work beyond the enqueue happens on
+        // it. Write errors still surface via each sink's own error path.
+        if !sourceSinks.isEmpty, let multi = session as? MultiTrackCaptureSession {
+            let routes = sourceSinks
+            let budgets = Set(routes.map(\.0)).reduce(into: [CaptureSource: ByteBudget]()) {
+                $0[$1] = makeBudget()
+            }
+            multi.onSourceAudio = { source, data in
+                ioQueue.async {
+                    if stopping.get() == true { return }
+                    if control?.isPaused == true { return }
+                    let chunk = budgets[source]?.consume(data).chunk ?? data
+                    guard !chunk.isEmpty else { return }
+                    for (tag, sink) in routes where tag == source {
+                        try? sink.write(chunk)
+                    }
+                }
+            }
         }
 
         // macOS delivers pure silence from a tap when the System Audio

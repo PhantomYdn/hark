@@ -102,6 +102,8 @@ enum ConfigKey: String, CaseIterable {
     case silenceThreshold = "silence-threshold"
     case vad
     case vadThreshold = "vad-threshold"
+    case segmentPause = "segment-pause"
+    case segmentWindow = "segment-window"
     case gain
     case speakers
     case speakerMode = "speaker-mode"
@@ -210,6 +212,38 @@ enum ConfigKey: String, CaseIterable {
         }
         guard n > 0 && n <= 1 else {
             throw HarkError.usage("\(key.rawValue) must be between 0 and 1.")
+        }
+        return n
+    }
+
+    /// Live segment timing bounds, in seconds. The two ranges meet at 2 s but
+    /// never overlap, so the window can never fall below the pause whatever mix
+    /// of flag, env, config and `POST /start` supplies them — no pair check.
+    static let maxSegmentPause = 2.0
+    static let segmentWindowRange = 2.0...60.0
+
+    /// Silence that ends a live transcript segment, in seconds (0 < s ≤ 2).
+    static func isValidSegmentPause(_ n: Double) -> Bool { n > 0 && n <= maxSegmentPause }
+
+    /// Longest unbroken speech before a live segment is cut anyway, in seconds (2 ≤ s ≤ 60).
+    static func isValidSegmentWindow(_ n: Double) -> Bool { segmentWindowRange.contains(n) }
+
+    static func parseSegmentPause(_ value: String, _ key: ConfigKey) throws -> Double {
+        guard let n = Double(value) else {
+            throw HarkError.usage("\(key.rawValue) must be a number of seconds (got '\(value)').")
+        }
+        guard isValidSegmentPause(n) else {
+            throw HarkError.usage("\(key.rawValue) must be greater than 0 and at most 2 seconds.")
+        }
+        return n
+    }
+
+    static func parseSegmentWindow(_ value: String, _ key: ConfigKey) throws -> Double {
+        guard let n = Double(value) else {
+            throw HarkError.usage("\(key.rawValue) must be a number of seconds (got '\(value)').")
+        }
+        guard isValidSegmentWindow(n) else {
+            throw HarkError.usage("\(key.rawValue) must be between 2 and 60 seconds.")
         }
         return n
     }

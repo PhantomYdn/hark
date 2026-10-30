@@ -71,8 +71,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         screenEcho: Bool = false,
         screen: FileHandle = .standardOutput,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) {
         self.transcriber = backend
@@ -121,8 +121,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         useGain: Bool = true,
         screenEcho: Bool = false,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) throws {
         let backend = try TranscriptionEngine.makeLive(
@@ -154,8 +154,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         useGain: Bool = true,
         screenEcho: Bool = false,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) {
         self.init(
@@ -192,7 +192,7 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
                 return
             }
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !Self.isNonSpeech(trimmed) else { return }
+            guard !trimmed.isEmpty, !isNonSpeechPlaceholder(trimmed) else { return }
             do {
                 try self.writer.append(text: trimmed, start: start, end: end, speaker: speaker)
             } catch {
@@ -226,8 +226,13 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         // low-level captures (the `-a` recording is unaffected — this only
         // touches the temp WAV fed to the engine). Disable with HARK_GAIN=off.
         let boosted = useGain ? GainNormalizer.normalize(pcm, format: format) : pcm
+        // Pad after the boost, so the silence cannot pull the gain calculation
+        // around, and before the write, so the engine never sees a clip under
+        // its own floor.
+        let padded = Self.padToEngineFloor(
+            boosted, format: format, seconds: transcriber.minimumAudioSeconds)
         let writer = try WAVFileWriter(destination: .file(raw), format: format)
-        try writer.write(boosted)
+        try writer.write(padded)
         try writer.finalize()
 
         // VAD segments are already 16 kHz mono 16-bit — whisper's native format —
@@ -246,6 +251,27 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
             wavFile: wav, language: language, translate: translate, format: .txt)
         let speaker = resolver?.label(start: start, end: end) ?? self.speaker
         return (text, speaker)
+    }
+
+    /// Pads a live segment with trailing silence up to the engine's floor, in the
+    /// segment's own format.
+    ///
+    /// The mirror of the padding the diarized batch path applies. Parakeet throws
+    /// on anything under 0.3 s rather than returning nothing, and the live VAD
+    /// segmenter does emit shorter spans — the `.speechStart` branch and `drain()`
+    /// both call `emitSpan` with no minimum of their own. Unpadded, that throw is
+    /// caught per segment and the span is dropped with a verbose line, so the
+    /// speech in it is lost and the user is never told. Cue timings come from the
+    /// segment, so the padding never reaches the transcript, and a backend with no
+    /// floor (whisper, apple, whisperkit) is left alone.
+    static func padToEngineFloor(_ pcm: Data, format: PCMFormat, seconds: Double) -> Data {
+        guard seconds > 0 else { return pcm }
+        let frameSize = max(1, format.bytesPerFrame)
+        let minimumBytes = Int((seconds * Double(format.byteRate)).rounded(.up))
+        let aligned = (minimumBytes + frameSize - 1) / frameSize * frameSize
+        guard pcm.count < aligned else { return pcm }
+        // Zero bytes are silence in every signed PCM depth hark writes.
+        return pcm + Data(count: aligned - pcm.count)
     }
 
     func finalize() throws {
@@ -270,12 +296,6 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
 
     var bytesWritten: UInt64 { totalBytes }
 
-    /// whisper.cpp emits placeholder tokens for silence/non-speech segments;
-    /// drop them so the transcript holds only recognized speech.
-    private static func isNonSpeech(_ text: String) -> Bool {
-        let markers = ["[BLANK_AUDIO]", "[silence]", "(silence)", "[ Silence ]", "[MUSIC]", "(buzzer)"]
-        return markers.contains { text.caseInsensitiveCompare($0) == .orderedSame }
-    }
 }
 
 /// Cuts a live PCM stream into transcription-sized segments. A segment is

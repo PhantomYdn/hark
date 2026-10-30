@@ -62,6 +62,32 @@ struct StereoDownmixTests {
         for frame in 0..<4 { #expect(abs(mono[0][frame] - 0.5) < 0.0001) }
     }
 
+    /// The destination buffer is reused for every chunk, so a downmix that
+    /// cannot read the source must not leave a frame count behind: the caller
+    /// would hand the converter the samples of the previous chunk.
+    @Test func unreadableSourceLeavesNoStaleFrameCount() throws {
+        let monoFormat = try #require(
+            AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1))
+        let destination = try #require(AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: 8))
+        destination.frameLength = 4
+        let previous = try #require(destination.floatChannelData)
+        for frame in 0..<4 { previous[0][frame] = 0.25 }
+
+        // Int16 input has no floatChannelData, so averaging cannot run.
+        let int16Format = try #require(
+            AVAudioFormat(
+                commonFormat: .pcmFormatInt16, sampleRate: sampleRate, channels: 2,
+                interleaved: true))
+        let source = try #require(AVAudioPCMBuffer(pcmFormat: int16Format, frameCapacity: 8))
+        source.frameLength = 8
+
+        AudioPipeline.downmixToMono(source, into: destination)
+
+        #expect(
+            destination.frameLength == 0,
+            "downmix advertised \(destination.frameLength) frames it never wrote")
+    }
+
     // MARK: Helpers
 
     private func makeWorkDirectory() throws -> URL {

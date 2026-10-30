@@ -1,24 +1,55 @@
 import FluidAudio
 import Foundation
 
+/// A Parakeet TDT variant Hark exposes, mapped to FluidAudio's model version.
+/// `name` is the user-facing id (`--model ultra`, `parakeet:bark3-clean`).
+struct ParakeetModel: Equatable, Sendable {
+    let name: String
+    /// Extra accepted spellings (FluidAudio CLI names, short forms).
+    let aliases: [String]
+    let version: AsrModelVersion
+    /// Display label for `models list --available` (multilingual = 25 European).
+    let languages: String
+
+    /// FluidAudio's cache directory for this variant.
+    var cacheDirectory: URL { AsrModels.defaultCacheDirectory(for: version) }
+
+    /// The cached bundle's directory name (what `hark models list` shows).
+    var bundleName: String { cacheDirectory.lastPathComponent }
+}
+
 /// On-device CoreML transcription via FluidAudio's Parakeet TDT models (PRD
-/// §6.6, engine `parakeet`). Apple-Silicon-first, ANE-accelerated. Multilingual
-/// across 25 European languages (v3) or English-only (v2); it auto-handles the
-/// language (no selection) and cannot translate. The models are loaded once
-/// (resident) and CoreML bundles are downloaded from Hugging Face on first use
-/// into `~/.hark/models/parakeet`.
+/// §6.6, engine `parakeet`). Apple-Silicon-first, ANE-accelerated. Variants
+/// (`ParakeetBackend.models`) cover 25 European languages (ultra — the
+/// default — v3, redux), English (v2, phonon2, bark3, bark3-clean,
+/// tdt-ctc-110m) or Japanese (ja); the engine auto-handles the language (no
+/// selection) and cannot translate. The models are loaded once (resident) and
+/// CoreML bundles are downloaded from Hugging Face on first use into
+/// FluidAudio's cache.
 final class ParakeetBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: true, translate: false, usesModelFile: false)
 
     private let manager: AsrManager  // actor (Sendable)
     private let versionLabel: String
+    /// Decoder LSTM depth of the loaded variant (1 for tdt-ctc-110m, else 2).
+    private let decoderLayers: Int
 
-    private init(manager: AsrManager, versionLabel: String) {
+    private init(manager: AsrManager, versionLabel: String, decoderLayers: Int) {
         self.manager = manager
         self.versionLabel = versionLabel
+        self.decoderLayers = decoderLayers
     }
 
     var label: String { "parakeet (CoreML, \(versionLabel))" }
+
+    /// FluidAudio rejects anything shorter with "Must be at least 300ms of 16kHz
+    /// audio" (`ASRConstants.minimumRequiredSamples`). Taken from the constant,
+    /// not copied as `0.3`, so a FluidAudio bump moves this with it. `static` so a
+    /// test can assert the value without loading CoreML: the instance property is
+    /// only reachable through `make`, which downloads and loads the models.
+    static let audioFloorSeconds: Double = ASRConstants.minimumAudioDurationSeconds
+
+    var minimumAudioSeconds: Double { Self.audioFloorSeconds }
 
     /// FluidAudio's managed CoreML cache (`~/Library/Application
     /// Support/FluidAudio/Models`). FluidAudio owns this location and does not
@@ -32,14 +63,18 @@ final class ParakeetBackend: TranscriptionBackend {
     }
 
     /// Loads (and, on first use, downloads) the model. `model` selects the
-    /// version: `v2` = English-only, anything else = `v3` multilingual.
+    /// variant (see `models`); nil or an unknown name uses `defaultModel`.
     /// `language` only triggers a notice — Parakeet auto-detects within its set.
     static func make(model: String?, language: String?) throws -> ParakeetBackend {
         try Platform.requireAppleSilicon(engine: "parakeet")
         if let warning = languageNotice(language) { Log.notice(warning) }
 
-        let version = modelVersion(model)
-        let label = version == .v2 ? "v2 (english)" : "v3 (multilingual)"
+        let selected = resolveOrDefault(model)
+        let version = selected.version
+        let label = "\(selected.name) (\(selected.languages))"
+        if !AsrModels.modelsExist(at: selected.cacheDirectory, version: version) {
+            Log.notice("downloading parakeet \(selected.name) models (first use)…")
+        }
         Log.verbose("parakeet: loading \(label) models")
         let manager: AsrManager = try RunLoopBridge.runBlocking(timeout: 1800) {
             let models = try await AsrModels.downloadAndLoad(version: version)
@@ -47,7 +82,8 @@ final class ParakeetBackend: TranscriptionBackend {
             try await manager.loadModels(models)
             return manager
         }
-        return ParakeetBackend(manager: manager, versionLabel: label)
+        return ParakeetBackend(
+            manager: manager, versionLabel: label, decoderLayers: version.decoderLayers)
     }
 
     func transcribe(
@@ -60,8 +96,9 @@ final class ParakeetBackend: TranscriptionBackend {
         }
         let manager = self.manager
         let url = wavFile
+        let layers = decoderLayers
         let result = try RunLoopBridge.runBlocking(timeout: 1800) {
-            var state = try TdtDecoderState()
+            var state = try TdtDecoderState(decoderLayers: layers)
             return try await manager.transcribe(url, decoderState: &state)
         }
         let fullText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -71,22 +108,73 @@ final class ParakeetBackend: TranscriptionBackend {
 
     func shutdown() {}
 
-    /// Versions offered by `hark models list --available` / `download`.
-    static let downloadableVersions = ["v3", "v2"]
+    /// Every variant, in `models list --available` order. redux, phonon2,
+    /// bark3 and bark3-clean need macOS 15+ (FluidAudio rejects them earlier
+    /// with a clear error).
+    static let models: [ParakeetModel] = [
+        ParakeetModel(name: "ultra", aliases: [], version: .ultra, languages: "multilingual"),
+        ParakeetModel(name: "v3", aliases: ["3"], version: .v3, languages: "multilingual"),
+        ParakeetModel(name: "redux", aliases: [], version: .redux, languages: "multilingual"),
+        ParakeetModel(
+            name: "v2", aliases: ["2", "en", "english"], version: .v2, languages: "english-only"),
+        ParakeetModel(
+            name: "phonon2", aliases: ["phonon-2"], version: .phonon2, languages: "english-only"),
+        ParakeetModel(
+            name: "bark3", aliases: ["bark-3", "bark"], version: .bark3, languages: "english-only"),
+        ParakeetModel(
+            name: "bark3-clean", aliases: ["bark-3-clean", "bark-clean"], version: .bark3Clean,
+            languages: "english-only"),
+        ParakeetModel(
+            name: "tdt-ctc-110m", aliases: ["110m"], version: .tdtCtc110m,
+            languages: "english-only"),
+        ParakeetModel(
+            name: "ja", aliases: ["tdt-ja", "japanese"], version: .tdtJa, languages: "japanese"),
+    ]
 
-    /// Selects the model version: `v2`/`en` → English-only; default → v3.
-    static func modelVersion(_ model: String?) -> AsrModelVersion {
-        switch model?.lowercased() {
-        case "v2", "parakeet-v2", "en", "english": return .v2
-        default: return .v3
+    /// The variant used when none (or an unknown one) is selected.
+    static let defaultModel = models[0]
+
+    /// Looks a variant up by name, alias, `parakeet-`/`parakeet:` prefixed
+    /// name, or cached bundle name (`parakeet-tdt-0.6b-v3`, also with the HF
+    /// repo's `-coreml` suffix); nil if unknown. Pure, for testing.
+    static func resolve(_ name: String?) -> ParakeetModel? {
+        guard var key = name?.lowercased(), !key.isEmpty else { return nil }
+        if key.hasSuffix("-coreml") { key = String(key.dropLast("-coreml".count)) }
+        for prefix in ["parakeet:", "parakeet-"] where key.hasPrefix(prefix) {
+            let stripped = String(key.dropFirst(prefix.count))
+            if models.contains(where: { $0.name == stripped || $0.aliases.contains(stripped) }) {
+                key = stripped
+            }
+        }
+        return models.first { model in
+            let bundle = model.bundleName.lowercased()
+            return model.name == key || model.aliases.contains(key) || bundle == key
         }
     }
 
+    /// `resolve`, falling back to `defaultModel` with a notice for a name that
+    /// isn't a parakeet variant (e.g. a whisper model left in config).
+    static func resolveOrDefault(_ name: String?) -> ParakeetModel {
+        if let model = resolve(name) { return model }
+        if let name, !name.isEmpty {
+            Log.notice(
+                "note: '\(name)' is not a parakeet model; using \(defaultModel.name) "
+                    + "(see 'hark models list --available').")
+        }
+        return defaultModel
+    }
+
+    /// True if the variant's bundles are fully present in FluidAudio's cache.
+    static func isCached(_ model: ParakeetModel) -> Bool {
+        AsrModels.modelsExist(at: model.cacheDirectory, version: model.version)
+    }
+
     /// Pre-downloads the model bundles (no load) into FluidAudio's cache.
-    static func download(version model: String?) throws {
+    static func download(model name: String?) throws {
         try Platform.requireAppleSilicon(engine: "parakeet")
-        let version = modelVersion(model)
-        Log.notice("downloading parakeet \(version == .v2 ? "v2" : "v3") models …")
+        let selected = resolveOrDefault(name)
+        let version = selected.version
+        Log.notice("downloading parakeet \(selected.name) models …")
         try RunLoopBridge.runBlocking(timeout: 3600) {
             _ = try await AsrModels.download(version: version)
         }
