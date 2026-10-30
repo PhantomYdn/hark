@@ -167,13 +167,13 @@ struct ResolvedSettings: Equatable {
         guard silenceThreshold < 0 else {
             throw HarkError.usage("silence threshold must be negative (dBFS).")
         }
-        // A window at or below the pause would cut every segment on the clock
-        // instead of on silence; the flag pair is checked in `Hark.validate()`,
-        // this catches the env/config mixes it can't see.
-        guard segmentWindow > segmentPause else {
-            throw HarkError.usage(
-                "segment-window (\(ConfigKey.formatNumber(segmentWindow))s) must be greater than "
-                    + "segment-pause (\(ConfigKey.formatNumber(segmentPause))s).")
+        // Flags, env and `config set` are range-checked on the way in; this
+        // catches a hand-edited config.json, which is decoded without parsing.
+        guard ConfigKey.isValidSegmentPause(segmentPause) else {
+            throw HarkError.usage("segment-pause must be greater than 0 and at most 2 seconds.")
+        }
+        guard ConfigKey.isValidSegmentWindow(segmentWindow) else {
+            throw HarkError.usage("segment-window must be between 2 and 60 seconds.")
         }
     }
 

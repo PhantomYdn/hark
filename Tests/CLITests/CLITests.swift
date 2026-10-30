@@ -69,11 +69,10 @@ struct RootParsingTests {
         ["--speakers", "--speaker-threshold", "1.5"],  // out of (0,1]
         ["--vad-threshold", "0"],                      // out of (0,1]
         ["--vad-threshold", "1.5"],                    // out of (0,1]
-        ["--segment-pause", "0"],                      // out of (0,5]
-        ["--segment-pause", "6"],                      // out of (0,5]
-        ["--segment-window", "0.5"],                   // out of [1,60]
-        ["--segment-window", "61"],                    // out of [1,60]
-        ["--segment-pause", "3", "--segment-window", "2"],  // window must exceed pause
+        ["--segment-pause", "0"],                      // out of (0,2]
+        ["--segment-pause", "2.5"],                    // out of (0,2]
+        ["--segment-window", "1.5"],                   // out of [2,60]
+        ["--segment-window", "61"],                    // out of [2,60]
         ["--interactive", "-i", "f.wav"],              // interactive is live-only
         ["--interactive", "-a", "-"],                  // interactive owns the terminal
     ])
@@ -1290,22 +1289,22 @@ struct SpeakerLabelsParseTests {
     }
 }
 
-/// The pause and the window are handed to FluidAudio's own segmentation config,
-/// so the ends of the ranges the CLI advertises have to survive that hand-off
-/// unchanged. Building the config needs no model, unlike running the VAD.
-@Suite("VAD segmentation config bounds")
-struct VadSegmentationConfigBoundsTests {
-    @Test(arguments: [(0.01, 60.0), (5.0, 5.1), (0.7, 12.0)])
-    func rangeEndsSurviveTheHandOffToFluidAudio(pause: Double, window: Double) throws {
+/// FluidAudio's segmenter expects `minSilenceDuration <= maxSpeechDuration`.
+/// hark guarantees that by giving the pause and the window ranges that meet but
+/// never overlap, instead of checking the pair across flag/env/config/remote.
+@Suite("Segment timing bounds")
+struct SegmentTimingBoundsTests {
+    @Test func pauseAndWindowRangesNeverOverlap() {
+        #expect(ConfigKey.maxSegmentPause <= ConfigKey.segmentWindowRange.lowerBound)
+    }
+
+    @Test(arguments: [(0.01, 2.0), (2.0, 2.0), (2.0, 60.0), (0.7, 12.0)])
+    func rangeEndsAreAccepted(pause: Double, window: Double) throws {
         let hark = try Hark.parse([
             "--segment-pause", "\(pause)", "--segment-window", "\(window)",
         ])
         #expect(hark.segmentPause == pause)
         #expect(hark.segmentWindow == window)
-
-        let config = VadSegmentationConfig(minSilenceDuration: pause, maxSpeechDuration: window)
-        #expect(config.minSilenceDuration == pause)
-        #expect(config.maxSpeechDuration == window)
     }
 }
 

@@ -128,12 +128,12 @@ struct ConfigurationTests {
         #expect(throws: HarkError.self) { try config.set(.silenceThreshold, rawValue: "abc") }
         #expect(throws: HarkError.self) { try config.set(.silenceThreshold, rawValue: "10") }
         #expect((try? { var c = Configuration(); try c.set(.silenceThreshold, rawValue: "-40"); return c.silenceThreshold }()) == -40)
-        // segment-pause: seconds in (0,5]; segment-window: seconds in [1,60]
+        // segment-pause: seconds in (0,2]; segment-window: seconds in [2,60]
         #expect(throws: HarkError.self) { try config.set(.segmentPause, rawValue: "soon") }
         #expect(throws: HarkError.self) { try config.set(.segmentPause, rawValue: "0") }
-        #expect(throws: HarkError.self) { try config.set(.segmentPause, rawValue: "6") }
+        #expect(throws: HarkError.self) { try config.set(.segmentPause, rawValue: "2.5") }
         #expect((try? { var c = Configuration(); try c.set(.segmentPause, rawValue: "0.4"); return c.segmentPause }()) == 0.4)
-        #expect(throws: HarkError.self) { try config.set(.segmentWindow, rawValue: "0.5") }
+        #expect(throws: HarkError.self) { try config.set(.segmentWindow, rawValue: "1.5") }
         #expect(throws: HarkError.self) { try config.set(.segmentWindow, rawValue: "61") }
         #expect((try? { var c = Configuration(); try c.set(.segmentWindow, rawValue: "5"); return c.segmentWindow }()) == 5)
         // engine: must be known

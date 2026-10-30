@@ -196,14 +196,15 @@ struct Hark: ParsableCommand {
     var vadThreshold: Double?
 
     @Option(name: .customLong("segment-pause"), help: ArgumentHelp(
-        "Live: seconds of silence that end a transcript segment (over 0, up to 5; default 0.7). "
-            + "Lower emits lines sooner. Or $HARK_SEGMENT_PAUSE / config.",
+        "Live: seconds of silence that end a transcript segment (over 0, up to 2; default 0.7). "
+            + "Higher keeps a slow speaker's sentences together. Or $HARK_SEGMENT_PAUSE / config.",
         valueName: "sec"))
     var segmentPause: Double?
 
     @Option(name: .customLong("segment-window"), help: ArgumentHelp(
         "Live: seconds of unbroken speech after which a transcript segment is cut "
-            + "anyway (1–60; default 12). Or $HARK_SEGMENT_WINDOW / config.",
+            + "anyway (2–60; default 12). Lower emits lines sooner when nobody pauses. "
+            + "Or $HARK_SEGMENT_WINDOW / config.",
         valueName: "sec"))
     var segmentWindow: Double?
 
@@ -506,15 +507,11 @@ struct Hark: ParsableCommand {
         if let vadThreshold, !(vadThreshold > 0 && vadThreshold <= 1) {
             throw ValidationError("--vad-threshold must be between 0 and 1.")
         }
-        if let segmentPause, !(segmentPause > 0 && segmentPause <= 5) {
-            throw ValidationError(
-                "--segment-pause must be greater than 0 and at most 5 seconds.")
+        if let segmentPause, !ConfigKey.isValidSegmentPause(segmentPause) {
+            throw ValidationError("--segment-pause must be greater than 0 and at most 2 seconds.")
         }
-        if let segmentWindow, !(segmentWindow >= 1 && segmentWindow <= 60) {
-            throw ValidationError("--segment-window must be between 1 and 60 seconds.")
-        }
-        if let segmentPause, let segmentWindow, segmentWindow <= segmentPause {
-            throw ValidationError("--segment-window must be greater than --segment-pause.")
+        if let segmentWindow, !ConfigKey.isValidSegmentWindow(segmentWindow) {
+            throw ValidationError("--segment-window must be between 2 and 60 seconds.")
         }
 
         // Speaker recognition value formats (flag-level). Cross-cutting checks

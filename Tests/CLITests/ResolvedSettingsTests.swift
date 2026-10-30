@@ -190,15 +190,12 @@ struct ResolvedSettingsTests {
         var badThreshold = Configuration(); badThreshold.silenceThreshold = 0
         #expect(throws: HarkError.self) { try settings(config: badThreshold).validate() }
 
-        // A window at or below the pause: neither value is out of range on its
-        // own, so only the merged check catches it.
-        var narrowWindow = Configuration()
-        narrowWindow.segmentPause = 3
-        narrowWindow.segmentWindow = 2
-        #expect(throws: HarkError.self) { try settings(config: narrowWindow).validate() }
-        #expect(throws: HarkError.self) {
-            try settings(["--segment-window", "1"], env: ["HARK_SEGMENT_PAUSE": "2"]).validate()
-        }
+        // A hand-edited config.json is decoded without `config set` parsing, so
+        // out-of-range segment timing is only caught here.
+        var longPause = Configuration(); longPause.segmentPause = 3
+        #expect(throws: HarkError.self) { try settings(config: longPause).validate() }
+        var shortWindow = Configuration(); shortWindow.segmentWindow = 1
+        #expect(throws: HarkError.self) { try settings(config: shortWindow).validate() }
     }
 
     @Test func validateAcceptsValidMerged() throws {
