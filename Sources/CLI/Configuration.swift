@@ -32,6 +32,8 @@ struct Configuration: Codable, Equatable {
     var silenceThreshold: Double?
     var vad: Bool?
     var vadThreshold: Double?
+    var segmentPause: Double?
+    var segmentWindow: Double?
     var gain: Bool?
 
     // Speaker recognition
@@ -57,6 +59,8 @@ struct Configuration: Codable, Equatable {
         case silenceThreshold = "silence-threshold"
         case vad
         case vadThreshold = "vad-threshold"
+        case segmentPause = "segment-pause"
+        case segmentWindow = "segment-window"
         case gain
         case speakers
         case speakerMode = "speaker-mode"
@@ -155,6 +159,12 @@ struct Configuration: Codable, Equatable {
         TypedSetting(.vadThreshold, .double, "0.5", \.vadThreshold,
             parse: { try ConfigKey.parseUnit($0, .vadThreshold) }, format: ConfigKey.formatNumber,
             summary: "VAD speech-probability cutoff (0–1; higher = stricter)."),
+        TypedSetting(.segmentPause, .double, "0.7", \.segmentPause,
+            parse: { try ConfigKey.parseSegmentPause($0, .segmentPause) }, format: ConfigKey.formatNumber,
+            summary: "Seconds of silence that end a live transcript segment."),
+        TypedSetting(.segmentWindow, .double, "12", \.segmentWindow,
+            parse: { try ConfigKey.parseSegmentWindow($0, .segmentWindow) }, format: ConfigKey.formatNumber,
+            summary: "Seconds of unbroken speech after which a segment is cut anyway."),
         TypedSetting(.gain, .bool, "true", \.gain,
             parse: { try ConfigKey.parseBool($0, .gain) }, format: ConfigKey.formatBool,
             summary: "Boost quiet segments before transcription (recording unaffected)."),

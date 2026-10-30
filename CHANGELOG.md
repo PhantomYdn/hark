@@ -13,6 +13,15 @@ All notable changes to Hark are documented here. The format is loosely based on
   `hark models download parakeet:<variant>`; `hark models list --available`
   lists them with exact installed status. `redux`, `phonon2` and the `bark3`
   pair need macOS 15+.
+- Live segmentation timing is configurable: `--segment-pause` (seconds of
+  silence that end a transcript segment, default `0.7`, over 0 and at most 2)
+  and `--segment-window` (seconds of unbroken speech after which a segment is
+  cut anyway, default `12`, 2–60), also `$HARK_SEGMENT_PAUSE` /
+  `$HARK_SEGMENT_WINDOW`, config keys `segment-pause` / `segment-window`, and
+  `segmentPause` / `segmentWindow` on `POST /start`. A shorter window brings
+  lines up sooner when someone talks without pausing; a longer pause keeps a
+  slow speaker's sentences together. Both the VAD and the amplitude (`--no-vad`)
+  paths honour them. Defaults are unchanged.
 
 ### Changed
 - The default Parakeet model is now **`ultra`** (a post-trained v3: more

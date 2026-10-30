@@ -71,8 +71,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         screenEcho: Bool = false,
         screen: FileHandle = .standardOutput,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) {
         self.transcriber = backend
@@ -121,8 +121,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         useGain: Bool = true,
         screenEcho: Bool = false,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) throws {
         let backend = try TranscriptionEngine.makeLive(
@@ -154,8 +154,8 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         useGain: Bool = true,
         screenEcho: Bool = false,
         transcriptLog: TranscriptLog? = nil,
-        pauseSeconds: Double = 0.7,
-        maxWindowSeconds: Double = 12,
+        pauseSeconds: Double,
+        maxWindowSeconds: Double,
         minSegmentSeconds: Double = 0.4
     ) {
         self.init(
