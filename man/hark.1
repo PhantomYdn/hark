@@ -143,7 +143,8 @@ Sample rate (live default 44100; transcode defaults to the source rate).
 Bit depth (live default 16; transcode defaults to the source depth).
 .TP
 .BI \-c ", " \-\-channels " 1|2"
-Channel count (defaults from the source, capped at 2).
+Channel count (defaults from the source, capped at 2). Folding a multi-channel
+file down to 1 averages the channels.
 .TP
 .BI \-\-duration " SEC"
 Stop live capture after SEC seconds (otherwise Ctrl\-C).

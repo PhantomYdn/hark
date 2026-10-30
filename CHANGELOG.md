@@ -32,6 +32,31 @@ All notable changes to Hark are documented here. The format is loosely based on
 ### Fixed
 - The "downloading parakeet … (first use)" notice is printed again before a
   first-run model fetch.
+- The separated `--speakers` tracks (the live transcribers, and the temporary
+  WAVs the offline diarizer records) were written straight from the audio
+  callback, so they skipped the three guards the mixed stream has. `--duration`
+  never reached them: each track kept everything its source delivered until the
+  stream was torn down, so it ran long by however long teardown took, with no
+  ceiling — nine 2 s captures here overran by 3–8 ms on the mic track and by
+  80–240 ms on the system track. Pause was read at a different point in the
+  pipeline than for the mixed stream, so a busy IO queue could keep a chunk on
+  one side and drop it on the other, and a chunk still arriving during teardown
+  could reach an already-finalized writer. Each track now hops to the capture IO
+  queue like the mixed stream and honours the same stop flag, pause state, and
+  duration budget.
+- Reading a stereo file threw away the right channel. Everything that folds a
+  file down to mono — transcription, offline diarization, and a transcode to
+  `--channels 1` — asked `AVAudioConverter` for the channel change, and it keeps
+  channel 0 instead of mixing, so an interview recorded with one speaker per
+  channel came back as half a conversation and a right-channel-only file
+  transcribed as silence. hark now averages the channels itself before the
+  conversion; a file with identical channels keeps its level, and averaging
+  (rather than summing) cannot clip. An anti-phase stereo file (L = -R) now
+  folds to silence, as any mono fold does. Recorded audio is unchanged, byte
+  for byte. Live transcription changes on one path: without the Silero VAD —
+  Intel, `--no-vad`, or the model failing to load — segments reach the engine
+  in the capture format, which is stereo for system capture, through this same
+  decode, so live transcription now hears both channels too.
 - Diarized batch transcription (`hark -i FILE --speakers`, and the end-of-capture
   `--diarize-engine offline` pass) no longer loses short utterances. It only
   transcribed audio that fell inside a diarizer segment, and FluidAudio discarded
