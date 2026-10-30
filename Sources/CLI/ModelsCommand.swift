@@ -10,7 +10,7 @@ struct Models: ParsableCommand {
             'list' shows installed models across engines; 'list --available' \
             shows what you can download. 'download <name>' fetches a model: a \
             bare ggml name for whisper (base.en), or an engine-tagged name for \
-            CoreML engines (whisperkit:tiny, parakeet:v3). Downloads are the only \
+            CoreML engines (whisperkit:tiny, parakeet:ultra). Downloads are the only \
             commands here that make network requests. The 'apple' engine uses \
             OS-managed assets and is not listed.
             """,
@@ -85,8 +85,6 @@ struct ModelsList: ParsableCommand {
         let whisperNames = Set(ModelRegistry.localModels().map(\.name))
         let wkCache = ModelRegistry.coreMLModels(
             engine: "whisperkit", directory: WhisperKitBackend.downloadBase)
-        let pkCache = ModelRegistry.coreMLModels(
-            engine: "parakeet", directory: ParakeetBackend.downloadBase)
         let currentWhisper = ModelRegistry.currentModelPath()
             .flatMap(ModelRegistry.shortName(forPath:))
         let config = Configuration.load()
@@ -94,23 +92,25 @@ struct ModelsList: ParsableCommand {
         func installed(_ m: DownloadableModel) -> Bool {
             switch m.engine {
             case "whisperkit": return wkCache.contains { $0.name.contains(m.modelId) }
-            case "parakeet": return pkCache.contains { $0.name.contains(m.modelId) }
+            case "parakeet": return ParakeetBackend.resolve(m.modelId).map(ParakeetBackend.isCached) ?? false
             case "fluidaudio": return false  // FluidAudio owns its cache; not introspected
             default: return whisperNames.contains(m.modelId)
             }
         }
         func current(_ m: DownloadableModel) -> Bool {
             if m.engine == "whisper" { return currentWhisper == m.modelId }
-            return config.engine == m.engine && config.model == m.modelId
+            guard config.engine == m.engine else { return false }
+            if m.engine == "parakeet" {
+                // Unset (or a non-parakeet name) means the default variant.
+                let selected = ParakeetBackend.resolve(config.model) ?? ParakeetBackend.defaultModel
+                return selected.name == m.modelId
+            }
+            return config.model == m.modelId
         }
 
-        func languages(_ m: DownloadableModel) -> String {
-            if m.engine == "fluidaudio" { return "speaker pipeline" }
-            return m.isEnglishOnly ? "english-only" : "multilingual"
-        }
         let entries = ModelCatalog.available().map {
             AvailableModel(
-                name: $0.name, engine: $0.engine, languages: languages($0),
+                name: $0.name, engine: $0.engine, languages: $0.languages,
                 installed: installed($0), current: current($0))
         }
         if json {
@@ -150,7 +150,7 @@ struct ModelsDownload: ParsableCommand {
 
     @Argument(help: ArgumentHelp(
         "Model name. whisper: a ggml short name (base.en). CoreML: engine-tagged "
-            + "(whisperkit:tiny, parakeet:v3). See 'hark models list --available'.",
+            + "(whisperkit:tiny, parakeet:ultra). See 'hark models list --available'.",
         valueName: "name"))
     var name: String
 
@@ -204,7 +204,7 @@ enum ModelDownloader {
     static func download(spec: DownloadableModel, force: Bool) throws {
         switch spec.engine {
         case "whisperkit": try WhisperKitBackend.download(variant: spec.modelId)
-        case "parakeet": try ParakeetBackend.download(version: spec.modelId)
+        case "parakeet": try ParakeetBackend.download(model: spec.modelId)
         case "fluidaudio":
             switch spec.modelId {
             case "vad": try FluidVadClassifier.downloadModel()

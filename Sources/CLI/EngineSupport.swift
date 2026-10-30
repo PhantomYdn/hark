@@ -77,6 +77,15 @@ struct TranscriptCue {
     }
 }
 
+/// True for the placeholder tokens a recognizer emits instead of words when it
+/// is handed silence or non-speech: whisper.cpp writes `[BLANK_AUDIO]`, and a
+/// span padded up to an engine's floor is mostly silence. Both the live and the
+/// diarized paths drop them, so the transcript holds only recognized speech.
+func isNonSpeechPlaceholder(_ text: String) -> Bool {
+    let markers = ["[BLANK_AUDIO]", "[silence]", "(silence)", "[ Silence ]", "[MUSIC]", "(buzzer)"]
+    return markers.contains { text.caseInsensitiveCompare($0) == .orderedSame }
+}
+
 /// Renders a whole-file transcript in the requested format from an engine's
 /// joined text plus timed cues. Shared by the CoreML batch backends.
 enum TranscriptFormatting {

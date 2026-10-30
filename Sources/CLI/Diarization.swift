@@ -14,6 +14,30 @@ enum DiarizationDefaults {
     /// lands near `0.78`, separating voices without over-splitting. Overridden by
     /// `--speaker-threshold`. (`Double` so `config show` can render it cleanly.)
     static let clusteringThreshold: Double = 0.65
+
+    /// Shortest span (seconds) the offline diarizer is allowed to emit.
+    ///
+    /// FluidAudio's library default is `1.0`, so every sub-second utterance was
+    /// discarded before the recognizer ever saw it — a 0.55 s "Hello." that plain
+    /// batch transcribes fine vanished from a diarized one. The same value also
+    /// gates new-speaker creation in `SpeakerManager`, so it can't go arbitrarily
+    /// low: `0.25` keeps it above the pipeline's independent activity floor
+    /// (`minActiveFramesCount`, 10 frames ≈ 0.17 s), which is what stops a brief
+    /// noise burst minting a spurious `Speaker N`. Measured on a 26-turn two-voice
+    /// clip (clean and with room noise): every turn from 0.4 s up survives, the
+    /// label count stays at the true 2, and no turn that `1.0` already
+    /// transcribed changes its words or its speaker.
+    static let minSpeechDuration: Double = 0.25
+
+    /// The `DiarizerConfig` hark runs offline diarization with. Pure, so the
+    /// tuning above is unit-testable without loading the CoreML models.
+    static func offlineConfig(maxSpeakers: Int?, threshold: Double?) -> DiarizerConfig {
+        var config = DiarizerConfig()
+        if let maxSpeakers { config.numClusters = maxSpeakers }
+        config.clusteringThreshold = Float(threshold ?? clusteringThreshold)
+        config.minSpeechDuration = Float(minSpeechDuration)
+        return config
+    }
 }
 
 /// One diarized span: a time range attributed to a speaker label.
@@ -88,10 +112,8 @@ final class SpeakerDiarizer {
         } else {
             Log.notice("downloading diarization model (first use)…")
         }
-        var config = DiarizerConfig()
-        if let maxSpeakers { config.numClusters = maxSpeakers }
-        config.clusteringThreshold = Float(threshold ?? DiarizationDefaults.clusteringThreshold)
-        let manager = DiarizerManager(config: config)
+        let manager = DiarizerManager(
+            config: DiarizationDefaults.offlineConfig(maxSpeakers: maxSpeakers, threshold: threshold))
         let models = try RunLoopBridge.runBlocking(timeout: 1800) {
             UncheckedSendableBox(value: try await DiarizerModels.downloadIfNeeded())
         }
@@ -143,7 +165,12 @@ enum BatchDiarization {
         audioPath: String, engineName: String, modelFlag: String?, language: String?,
         translate: Bool, maxSpeakers: Int?, threshold: Double?, relabel: String? = nil
     ) throws -> [TranscriptCue] {
-        let samples = try AudioConverter().resampleAudioFile(URL(fileURLWithPath: audioPath))
+        // Decode through the shared pipeline, as transcription does: FluidAudio's
+        // converter folds channels with AVAudioConverter, which keeps channel 0,
+        // so a speaker recorded only on the right channel would diarize as silence.
+        let mono = try AudioPipeline.normalizeFileForWhisper(audioPath)
+        defer { try? FileManager.default.removeItem(at: mono) }
+        let samples = try AudioConverter().resampleAudioFile(mono)
         guard !samples.isEmpty else { return [] }
 
         let diarizer = try SpeakerDiarizer.makeOffline(maxSpeakers: maxSpeakers, threshold: threshold)
@@ -154,24 +181,50 @@ enum BatchDiarization {
             engineName: engineName, modelFlag: modelFlag, language: language, translate: translate)
         defer { backend.shutdown() }
 
+        let minimumSamples = Int((backend.minimumAudioSeconds * 16000).rounded(.up))
+
         var cues: [TranscriptCue] = []
         for segment in segments {
             let startSample = max(0, Int(segment.start * 16000))
             let endSample = min(samples.count, Int(segment.end * 16000))
-            guard endSample - startSample >= 1600 else { continue }  // < 0.1 s: skip
+            guard
+                let slice = Self.samplesForTranscription(
+                    samples, from: startSample, to: endSample,
+                    skipBelowSamples: 1600, minimumSamples: minimumSamples)
+            else { continue }
 
-            let wav = try writeWav16kMono(Array(samples[startSample..<endSample]))
+            let wav = try writeWav16kMono(slice)
             defer { try? FileManager.default.removeItem(at: wav) }
             let text = try backend.transcribe(
                 wavFile: wav, language: language, translate: translate, format: .txt)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { continue }
+            guard !text.isEmpty, !isNonSpeechPlaceholder(text) else { continue }
             cues.append(
                 TranscriptCue(
                     start: segment.start, end: segment.end, text: text,
                     speaker: relabel ?? segment.speaker))
         }
         return cues
+    }
+
+    /// Samples to hand the recognizer for a diarized span, or nil when the span is
+    /// too short to be speech at all (under `skipBelowSamples`, the existing 0.1 s
+    /// bound). Anything longer is padded with trailing zeros up to `minimumSamples`,
+    /// the engine's floor, so a real quarter-second answer is transcribed instead of
+    /// failing the whole run. Cue timings still come from the diarized span, so the
+    /// padding never reaches the transcript.
+    static func samplesForTranscription(
+        _ samples: [Float], from start: Int, to end: Int,
+        skipBelowSamples: Int, minimumSamples: Int
+    ) -> [Float]? {
+        let lower = max(0, min(start, samples.count))
+        let upper = max(lower, min(end, samples.count))
+        guard upper - lower >= skipBelowSamples else { return nil }
+        var slice = Array(samples[lower..<upper])
+        if slice.count < minimumSamples {
+            slice.append(contentsOf: [Float](repeating: 0, count: minimumSamples - slice.count))
+        }
+        return slice
     }
 
     /// Merges cue lists from multiple tracks into one time-ordered transcript.

@@ -25,6 +25,8 @@ struct ResolvedSettingsTests {
         #expect(s.useGain == true)
         #expect(s.keepAwake == false)
         #expect(s.vadThreshold == nil)
+        #expect(s.segmentPause == 0.7)
+        #expect(s.segmentWindow == 12)
         #expect(s.speakers == false)
         #expect(s.speakerMode == .auto)
         #expect(s.diarizeEngine == .auto)
@@ -133,6 +135,30 @@ struct ResolvedSettingsTests {
         #expect(ConfigKey.remoteControlPort.environmentName == "HARK_REMOTE_CONTROL_PORT")
     }
 
+    @Test func segmentPauseAndWindowFollowFlagEnvConfigDefault() throws {
+        // built-in defaults keep the shipped live segmentation
+        #expect(try settings().segmentPause == 0.7)
+        #expect(try settings().segmentWindow == 12)
+        // config
+        var config = Configuration()
+        config.segmentPause = 1.2
+        config.segmentWindow = 20
+        #expect(try settings(config: config).segmentPause == 1.2)
+        #expect(try settings(config: config).segmentWindow == 20)
+        // env overrides config
+        let env = ["HARK_SEGMENT_PAUSE": "0.5", "HARK_SEGMENT_WINDOW": "15"]
+        #expect(try settings(env: env, config: config).segmentPause == 0.5)
+        #expect(try settings(env: env, config: config).segmentWindow == 15)
+        // flag overrides env + config
+        let s = try settings(
+            ["--segment-pause", "0.3", "--segment-window", "5"], env: env, config: config)
+        #expect(s.segmentPause == 0.3)
+        #expect(s.segmentWindow == 5)
+        // env var names map correctly
+        #expect(ConfigKey.segmentPause.environmentName == "HARK_SEGMENT_PAUSE")
+        #expect(ConfigKey.segmentWindow.environmentName == "HARK_SEGMENT_WINDOW")
+    }
+
     @Test func emptyEnvValuesAreIgnored() throws {
         var config = Configuration()
         config.engine = "whisperkit"
@@ -148,6 +174,8 @@ struct ResolvedSettingsTests {
         #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_SILENCE_THRESHOLD": "5"]) }
         #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_RATE": "abc"]) }
         #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_VAD_THRESHOLD": "2"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_SEGMENT_PAUSE": "0"]) }
+        #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_SEGMENT_WINDOW": "90"]) }
         #expect(throws: HarkError.self) { _ = try settings(env: ["HARK_CAPTURE": "bogus"]) }
     }
 
@@ -162,6 +190,13 @@ struct ResolvedSettingsTests {
 
         var badThreshold = Configuration(); badThreshold.silenceThreshold = 0
         #expect(throws: HarkError.self) { try settings(config: badThreshold).validate() }
+
+        // A hand-edited config.json is decoded without `config set` parsing, so
+        // out-of-range segment timing is only caught here.
+        var longPause = Configuration(); longPause.segmentPause = 3
+        #expect(throws: HarkError.self) { try settings(config: longPause).validate() }
+        var shortWindow = Configuration(); shortWindow.segmentWindow = 1
+        #expect(throws: HarkError.self) { try settings(config: shortWindow).validate() }
     }
 
     @Test func validateAcceptsValidMerged() throws {
@@ -207,7 +242,8 @@ extension ResolvedSettings {
             rate: rate, bits: bits,
             channels: channels, tracks: tracks, keepAwake: keepAwake,
             silenceThreshold: silenceThreshold,
-            useVad: useVad, vadThreshold: vadThreshold, useGain: useGain, speakers: speakers,
+            useVad: useVad, vadThreshold: vadThreshold, segmentPause: segmentPause,
+            segmentWindow: segmentWindow, useGain: useGain, speakers: speakers,
             speakerMode: speakerMode, speakerLabels: speakerLabels, diarizeEngine: diarizeEngine,
             maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold,
             remoteControlPort: remoteControlPort)

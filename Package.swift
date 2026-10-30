@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -10,17 +10,22 @@ let package = Package(
         .executable(name: "hark", targets: ["CLI"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         // Optional CoreML transcription engine (PRD §6.6 `whisperkit`); always
         // linked for now (PLAN Phase 6.3). Apple-Silicon-first.
-        .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "0.9.0"),
+        .package(url: "https://github.com/argmaxinc/argmax-oss-swift.git", from: "1.1.1"),
         // CoreML Parakeet ASR engine (PRD §6.6 `parakeet`); always linked
-        // (PLAN Phase 6.4). Apple-Silicon-first.
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.12.4"),
+        // (PLAN Phase 6.4). Apple-Silicon-first. Only the `Diarizer` trait:
+        // the default TTS + NeMo text-normalization (prebuilt Rust staticlib)
+        // traits are unused and nearly double the binary. Traits need
+        // swift-tools-version 6.2.
+        .package(
+            url: "https://github.com/FluidInference/FluidAudio.git", from: "0.18.0",
+            traits: ["Diarizer"]),
         // Embedded HTTP/1.1 server for the remote-control agent (PRD §6.10,
         // PLAN Phase 10.3). Pure-Swift, minimal deps; statically linked so
         // there is nothing for users to install. MIT — see NOTICES.
-        .package(url: "https://github.com/swhitty/FlyingFox.git", from: "0.20.0"),
+        .package(url: "https://github.com/swhitty/FlyingFox.git", from: "0.27.1"),
     ],
     targets: [
         // Audio device & process enumeration (CoreAudio HAL).

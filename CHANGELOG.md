@@ -7,6 +7,21 @@ All notable changes to Hark are documented here. The format is loosely based on
 ## [Unreleased]
 
 ### Added
+- All of FluidAudio's Parakeet variants are now available — `ultra`, `v3`,
+  `redux` (25 European languages); `v2`, `phonon2`, `bark3`, `bark3-clean`,
+  `tdt-ctc-110m` (English); `ja` (Japanese). Pick one with `--model` or
+  `hark models download parakeet:<variant>`; `hark models list --available`
+  lists them with exact installed status. `redux`, `phonon2` and the `bark3`
+  pair need macOS 15+.
+- Live segmentation timing is configurable: `--segment-pause` (seconds of
+  silence that end a transcript segment, default `0.7`, over 0 and at most 2)
+  and `--segment-window` (seconds of unbroken speech after which a segment is
+  cut anyway, default `12`, 2–60), also `$HARK_SEGMENT_PAUSE` /
+  `$HARK_SEGMENT_WINDOW`, config keys `segment-pause` / `segment-window`, and
+  `segmentPause` / `segmentWindow` on `POST /start`. A shorter window brings
+  lines up sooner when someone talks without pausing; a longer pause keeps a
+  slow speaker's sentences together. Both the VAD and the amplitude (`--no-vad`)
+  paths honour them. Defaults are unchanged.
 - `--tracks mixed|stereo` (also `$HARK_TRACKS`, config `tracks`, and the
   remote-control `tracks` field). A meeting capture already has two separate
   signals — your microphone and the call — but the saved `-a` file was their
@@ -19,7 +34,24 @@ All notable changes to Hark are documented here. The format is loosely based on
   genuinely stereo system signal is downmixed. `mixed` stays the default and is
   unchanged.
 
+### Changed
+- The default Parakeet model is now **`ultra`** (a post-trained v3: more
+  accurate in every language at the same speed). A configured `model` (e.g.
+  `v3`) is still honored; with none set, the first run downloads ultra
+  (~595 MB). A model name that isn't a Parakeet variant now falls back to the
+  default with a notice instead of silently.
+- Dependencies updated: WhisperKit (argmax-oss-swift) 0.18 → 1.1.1,
+  FluidAudio 0.15 → 0.18, FlyingFox 0.26 → 0.27. WhisperKit 1.x vendors its
+  Hugging Face plumbing, dropping six transitive packages (swift-transformers,
+  swift-jinja, swift-crypto, swift-asn1, swift-collections, yyjson).
+- FluidAudio is linked with only its `Diarizer` trait (no TTS / NeMo text
+  normalization), keeping the release binary at ~15 MB instead of ~28 MB.
+- Building from source now needs Swift 6.2+ (Xcode 26+); the binary still
+  runs on macOS 14.4+.
+
 ### Fixed
+- The "downloading parakeet … (first use)" notice is printed again before a
+  first-run model fetch.
 - The separated `--speakers` tracks (the live transcribers, and the temporary
   WAVs the offline diarizer records) were written straight from the audio
   callback, so they skipped the three guards the mixed stream has. `--duration`
@@ -32,6 +64,36 @@ All notable changes to Hark are documented here. The format is loosely based on
   could reach an already-finalized writer. Each track now hops to the capture IO
   queue like the mixed stream and honours the same stop flag, pause state, and
   duration budget.
+- Reading a stereo file threw away the right channel. Everything that folds a
+  file down to mono — transcription, offline diarization, and a transcode to
+  `--channels 1` — asked `AVAudioConverter` for the channel change, and it keeps
+  channel 0 instead of mixing, so an interview recorded with one speaker per
+  channel came back as half a conversation and a right-channel-only file
+  transcribed as silence. hark now averages the channels itself before the
+  conversion; a file with identical channels keeps its level, and averaging
+  (rather than summing) cannot clip. An anti-phase stereo file (L = -R) now
+  folds to silence, as any mono fold does. Recorded audio is unchanged, byte
+  for byte. Live transcription changes on one path: without the Silero VAD —
+  Intel, `--no-vad`, or the model failing to load — segments reach the engine
+  in the capture format, which is stereo for system capture, through this same
+  decode, so live transcription now hears both channels too.
+- Diarized batch transcription (`hark -i FILE --speakers`, and the end-of-capture
+  `--diarize-engine offline` pass) no longer loses short utterances. It only
+  transcribed audio that fell inside a diarizer segment, and FluidAudio discarded
+  every segment shorter than `minSpeechDuration` — 1.0 s by default, which hark
+  never overrode — so a 0.55 s "Hello." that plain batch transcribed fine never
+  reached the recognizer at all. The floor is now 0.25 s: low enough to keep
+  those turns, high enough to stay above the pipeline's own ~0.17 s activity
+  floor, which is what stops a brief noise burst creating a spurious
+  `Speaker N`. On a 26-turn two-voice clip (clean, and again with room noise and
+  taps) every turn from 0.4 s up now survives, the speaker count stays at the
+  true two, and no turn the old floor already transcribed changes its words or
+  its speaker. A span shorter than the recognizer's own floor is now padded with
+  trailing silence instead of being handed over short or skipped, so a real
+  quarter-second answer is transcribed rather than aborting the whole run with
+  "Must be at least 300ms of 16kHz audio" and writing no transcript. The floor
+  is asked from the backend (`minimumAudioSeconds`), so it tracks FluidAudio's
+  own constant and stays zero for whisper, apple and whisperkit.
 
 ## [0.4.3] - 2026-09-17
 

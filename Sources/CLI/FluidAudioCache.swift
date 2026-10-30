@@ -24,8 +24,12 @@ enum FluidAudioCache {
     }
 
     /// Maps a cached bundle directory name to its Hark engine label. Parakeet
-    /// ASR bundles are `parakeet`; the VAD/diarization helpers are `fluidaudio`.
+    /// ASR bundles (incl. non-`parakeet`-named variants like `phonon-2-coreml`)
+    /// are `parakeet`; the VAD/diarization helpers are `fluidaudio`.
     static func engine(forBundle name: String) -> String {
-        name.lowercased().contains("parakeet") ? "parakeet" : "fluidaudio"
+        let lower = name.lowercased()
+        let isParakeet = lower.contains("parakeet")
+            || ParakeetBackend.models.contains { $0.bundleName.lowercased() == lower }
+        return isParakeet ? "parakeet" : "fluidaudio"
     }
 }

@@ -222,6 +222,9 @@ private final class GateSink: AudioSink, @unchecked Sendable {
 @Suite("Per-source capture writes", .serialized)
 struct PerSourceWriteTests {
     private static let format = PCMFormat(sampleRate: 16000, bitsPerSample: 16, channels: 1)
+    /// How long a queued per-source write is given to reach its sink. Shared by
+    /// the teardown test and its positive control so the two cannot disagree.
+    private static let writeWindow: UInt32 = 50_000
 
     private func engine(control: CaptureControl) -> CaptureEngine {
         var engine = CaptureEngine(
@@ -356,11 +359,51 @@ struct PerSourceWriteTests {
         session.emit(
             mixed: Data(repeating: 0x09, count: 320),
             source: Data(repeating: 0x09, count: 320))
-        usleep(50_000)
+        usleep(Self.writeWindow)
 
         #expect(!micSink.wroteAfterFinalize)
         #expect(!micSink.contains(byte: 0x09))
         #expect(micSink.bytesWritten == 320)
         #expect(!mixedSink.wroteAfterFinalize)  // unchanged: already protected
+    }
+
+    /// Positive control for the test above, whose three assertions are all
+    /// negative: a wait too short for a queued write to land would pass it for
+    /// the wrong reason. The same emit and the same wait on a run that is still
+    /// alive must reach the sink, so the window is known to be long enough.
+    @Test func aSourceChunkReachesItsSinkWithinThatSameWindow() throws {
+        let control = CaptureControl()
+        let session = StubMultiTrackSession()
+        let mixedSink = CollectingSink()
+        let micSink = CollectingSink()
+        let engine = engine(control: control)
+
+        let finished = DispatchSemaphore(value: 0)
+        let box = UncheckedSendableBox(value: (engine, session, mixedSink, micSink))
+        Thread.detachNewThread {
+            let (engine, session, mixedSink, micSink) = box.value
+            try? engine.run(
+                session: session, format: Self.format, into: [mixedSink],
+                duration: nil, warnOnSilence: false,
+                sourceSinks: [(.microphone, micSink)])
+            finished.signal()
+        }
+        while !session.isReady { usleep(1000) }
+
+        session.emit(
+            mixed: Data(repeating: 0x09, count: 320),
+            source: Data(repeating: 0x09, count: 320))
+        usleep(Self.writeWindow)
+
+        // Read before the stop, so this is the window alone and not teardown
+        // flushing the queue on the way out.
+        let arrived = micSink.contains(byte: 0x09)
+        let bytes = micSink.bytesWritten
+
+        control.stop()
+        #expect(finished.wait(timeout: .now() + 5) == .success)
+
+        #expect(arrived, "a queued per-source write did not land within the window")
+        #expect(bytes == 320)
     }
 }

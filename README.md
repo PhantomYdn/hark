@@ -171,7 +171,7 @@ no Gatekeeper steps are needed.
 
 ### Build from source (Intel, or to hack on it)
 
-With the Swift toolchain (Swift 6 / Xcode 16):
+With the Swift toolchain (Swift 6.2+ / Xcode 26+):
 
 ```sh
 git clone https://github.com/PhantomYdn/hark.git hark && cd hark
@@ -190,7 +190,7 @@ upgrades instead of resetting on each new binary.
 Then set up an on-device transcription model:
 
 ```sh
-hark models download parakeet:v3 --default   # on-device CoreML; sets engine=parakeet
+hark models download parakeet:ultra --default   # on-device CoreML; sets engine=parakeet
 ```
 
 Parakeet runs fully on-device (Apple Silicon) and needs no extra tools. Prefer
@@ -262,7 +262,7 @@ input; it is normalized to 16 kHz mono internally.
 | `whisper` (default) | whisper.cpp binary | ~99 | yes (`--language auto`) | yes | needs a non-`.en` model for non-English |
 | `apple` | native `Speech.framework` (no deps) | ~50 locales | no (uses the locale) | no | on-device; plain-text only in batch |
 | `whisperkit` | WhisperKit CoreML | ~99 | yes | yes | Apple-Silicon-first; models auto-download |
-| `parakeet` | FluidAudio CoreML | 25 European (v3) / English (v2) | yes | no | Apple-Silicon-first; `--model v2`/`v3` |
+| `parakeet` | FluidAudio CoreML | 25 European / English / Japanese (per variant) | yes | no | Apple-Silicon-first; `--model ultra` (default), see below |
 | `cloud` | post-MVP | — | — | — | — |
 
 - `whisper` is found on `PATH` (`whisper-cli`/`whisper-cpp`, and `whisper-server`
@@ -274,7 +274,10 @@ input; it is normalized to 16 kHz mono internally.
 - `whisperkit` and `parakeet` are CoreML engines (Apple Silicon only). They
   download their models from Hugging Face on first use, then run fully on-device.
   `parakeet` auto-detects its language (`--language` is ignored) and cannot
-  translate.
+  translate. Its variants: `ultra` (default), `v3`, `redux` — 25 European
+  languages; `v2`, `phonon2`, `bark3`, `bark3-clean`, `tdt-ctc-110m` — English;
+  `ja` — Japanese. `redux`, `phonon2` and the `bark3` pair need macOS 15+.
+  `hark models list --available` shows them all.
 
 ## Speaker labels
 
@@ -389,7 +392,7 @@ hark models list --available        # downloadable catalog, with an ENGINE colum
 # Download names are engine-tagged: bare = whisper ggml, prefix = CoreML engine
 hark models download large-v3-turbo            # whisper ggml
 hark models download whisperkit:large-v3-v20240930_626MB
-hark models download parakeet:v3               # or parakeet:v2 (English-only)
+hark models download parakeet:ultra            # or parakeet:v2, parakeet:ja, …
 hark models download fluidaudio:diarizer       # speaker diarization (--speakers)
 ```
 

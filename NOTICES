@@ -38,9 +38,9 @@ under its own license; all are permissive (MIT or Apache-2.0).
   WhisperKit / argmax-oss-swift (MIT) — https://github.com/argmaxinc/argmax-oss-swift
   FluidAudio (Apache-2.0) — https://github.com/FluidInference/FluidAudio
 
-These pull in further permissive transitive dependencies (Apache-2.0:
-swift-asn1, swift-collections, swift-crypto, swift-jinja, swift-transformers;
-MIT: yyjson). The Apache-2.0 license is available at
+argmax-oss-swift vendors the Hub and Tokenizers sources of swift-transformers
+(Apache-2.0, https://github.com/huggingface/swift-transformers) into its
+ArgmaxCore module, with upstream attribution headers retained. The Apache-2.0 license is available at
 https://www.apache.org/licenses/LICENSE-2.0 and the MIT license at
 https://opensource.org/licenses/MIT; each project retains its own LICENSE and
 copyright notices.
