@@ -143,7 +143,12 @@ enum BatchDiarization {
         audioPath: String, engineName: String, modelFlag: String?, language: String?,
         translate: Bool, maxSpeakers: Int?, threshold: Double?, relabel: String? = nil
     ) throws -> [TranscriptCue] {
-        let samples = try AudioConverter().resampleAudioFile(URL(fileURLWithPath: audioPath))
+        // Decode through the shared pipeline, as transcription does: FluidAudio's
+        // converter folds channels with AVAudioConverter, which keeps channel 0,
+        // so a speaker recorded only on the right channel would diarize as silence.
+        let mono = try AudioPipeline.normalizeFileForWhisper(audioPath)
+        defer { try? FileManager.default.removeItem(at: mono) }
+        let samples = try AudioConverter().resampleAudioFile(mono)
         guard !samples.isEmpty else { return [] }
 
         let diarizer = try SpeakerDiarizer.makeOffline(maxSpeakers: maxSpeakers, threshold: threshold)
