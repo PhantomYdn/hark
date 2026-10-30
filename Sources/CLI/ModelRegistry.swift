@@ -168,8 +168,17 @@ enum ModelRegistry {
             .map { dir in
                 let name = dir.lastPathComponent
                 let resolvedEngine = classifyEngine?(name) ?? engine
-                let isCurrent = resolvedEngine == config.engine
-                    && (config.model.map { name.contains($0) } ?? false)
+                let isCurrent: Bool
+                if resolvedEngine == "parakeet" {
+                    // Variant bundles don't always contain the variant name
+                    // (bark3 → bark-3.0); unset means the default variant.
+                    let selected = ParakeetBackend.resolve(config.model)
+                        ?? ParakeetBackend.defaultModel
+                    isCurrent = config.engine == "parakeet" && selected.bundleName == name
+                } else {
+                    isCurrent = resolvedEngine == config.engine
+                        && (config.model.map { name.contains($0) } ?? false)
+                }
                 return LocalModel(
                     name: name, path: dir.path,
                     sizeBytes: directorySize(dir, fileManager: fileManager),
