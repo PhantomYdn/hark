@@ -313,11 +313,26 @@ struct TrackLayoutResolutionTests {
         #expect(throws: HarkError.self) {
             _ = try layout(Self.twoSources + ["--tracks", "stereo", "-c", "1"])
         }
+        // Both stored: neither was typed for this run, so it stays an error.
         var config = Configuration()
         config.channels = 1
-        #expect(throws: HarkError.self) {
-            _ = try layout(Self.twoSources + ["--tracks", "stereo"], config: config)
-        }
+        config.tracks = "stereo"
+        #expect(throws: HarkError.self) { _ = try layout(Self.twoSources, config: config) }
+    }
+
+    /// A typed `--tracks stereo` beats a stored mono default: the user asked for
+    /// two channels on this run, and `channels 1` in config or env was not.
+    @Test func typedStereoOverridesAStoredMonoChannelCount() throws {
+        var config = Configuration()
+        config.channels = 1
+        #expect(try layout(Self.twoSources + ["--tracks", "stereo"], config: config) == .stereo)
+        #expect(
+            try layout(Self.twoSources + ["--tracks", "stereo"], env: ["HARK_CHANNELS": "1"])
+                == .stereo)
+        let settings = try ResolvedSettings.resolve(
+            from: try Hark.parse(Self.twoSources + ["--tracks", "stereo"]),
+            environment: [:], config: config)
+        #expect(settings.channels == nil)  // back to the capture's own default
     }
 
     /// The default layout stays valid everywhere, so a configured `channels 1`

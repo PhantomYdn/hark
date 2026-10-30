@@ -101,12 +101,16 @@ struct ResolvedSettings: Equatable {
         let bits = try int(a.bits, .bits, config.bits) {
             try ConfigKey.parseInt($0, .bits, oneOf: [16, 24, 32])
         }
-        let channels = try int(a.channels, .channels, config.channels) {
-            try ConfigKey.parseInt($0, .channels, oneOf: [1, 2])
-        }
         let tracks = try choice(
             a.tracks, .tracks, config.tracks,
             allowed: TrackLayout.allCases.map(\.rawValue), default: TrackLayout.mixed)
+        // A typed `--tracks stereo` needs both channels, so it beats a stored
+        // `channels 1` from env/config; only `-c 1` typed alongside it is refused.
+        let channels = a.tracks == .stereo && a.channels == nil
+            ? nil
+            : try int(a.channels, .channels, config.channels) {
+                try ConfigKey.parseInt($0, .channels, oneOf: [1, 2])
+            }
         let keepAwake = try bool(a.keepAwake, .keepAwake, config.keepAwake, default: false)
 
         let silenceThreshold = try double(a.silenceThreshold, .silenceThreshold, config.silenceThreshold) {

@@ -92,6 +92,8 @@ switch:
   `--exclude-app`. One source has nothing to separate, so `stereo` is refused
   rather than silently writing the same thing twice.
 - **It needs both channels**, so it cannot be combined with `-c/--channels 1`.
+  Typing `--tracks stereo` overrides a `channels 1` stored in the config or the
+  environment for that run.
 - **Each side is folded to mono.** A mono microphone comes back exactly as it
   was, but **genuinely stereo system audio is downmixed** — if the stereo image
   of the call matters more than telling the two sides apart, stay on `mixed`.

@@ -923,8 +923,8 @@ struct Hark: ParsableCommand {
         guard (settings.channels ?? 2) == 2 else {
             throw HarkError.usage("""
                 --tracks stereo writes the microphone to the left channel and the call \
-                to the right, so it needs both: drop -c/--channels 1 (or use --tracks \
-                mixed to sum them into one mono stream).
+                to the right, so it needs both: drop -c/--channels 1 or the configured \
+                channels 1 (or use --tracks mixed to sum them into one mono stream).
                 """)
         }
         return .stereo
