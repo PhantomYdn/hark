@@ -506,6 +506,14 @@
 - [x] PLAN hygiene: Phase 11 ticked (legal docs shipped in v0.4.0), 8.0 permissions/§6.7/§6.1 items resolved, the two "README/man deferred" placeholders closed, Phase 12 moved after Phase 11
 - [ ] Root cause of the HAL teardown wedge (which of `AudioDeviceStop` / `AudioDeviceDestroyIOProcID` / `AudioHardwareDestroyAggregateDevice` / `tap.destroy()` blocks, and whether the ordering can avoid it) — needs a machine/session without the System Audio Recording grant; the timeouts above keep it survivable meanwhile
 
+## Phase 12.2: Dependency refresh & Parakeet variants
+
+- [x] Dependencies: WhisperKit (argmax-oss-swift) 0.18 → 1.1.1, FluidAudio 0.15 → 0.18 (only the `Diarizer` trait; release binary ~15 MB vs ~28 MB with default traits), FlyingFox 0.26 → 0.27; WhisperKit 1.x vendors its HF plumbing (graph 10 → 4 packages). swift-tools-version 6.2; CI/release on `macos-26` (PR #10)
+- [x] Catalog review: whisper ggml and WhisperKit lists match upstream; no changes needed
+- [x] Parakeet variants (PRD §6.6): `ParakeetBackend.models` table maps every FluidAudio TDT version — `ultra` (new default), `v3`, `redux`, `v2`, `phonon2`, `bark3`, `bark3-clean`, `tdt-ctc-110m`, `ja` — with aliases, language label, and FluidAudio's own cache dir (`AsrModels.defaultCacheDirectory`); `models list --available` lists all nine with exact installed detection (`AsrModels.modelsExist`); local list / `current` / `config set model` resolve variants whose bundle dir lacks the name (`bark-3.0`, `phonon-2`)
+- [x] Fix: decoder state sized per variant (`tdt-ctc-110m` has a 1-layer decoder; was hard-coded 2); first-use `downloading parakeet … (first use)…` notice restored; unknown names fall back to the default with a notice instead of silently
+- [x] Tests: variant/alias/bundle resolution, table consistency, catalog order + languages, bundle-name `current` flagging — 329 tests, 79 suites. Verified live: `--model ultra` and `--model tdt-ctc-110m` transcribe correctly; `--model base.en` falls back with a notice
+
 ## Phase 13: Interactive shortcuts & combined agent (PRD M9, §6.9)
 
 > The only spec'd-but-unbuilt PRD features: user-defined `shortcut.<k>` keys
