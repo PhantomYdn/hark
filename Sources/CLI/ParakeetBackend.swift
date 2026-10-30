@@ -42,6 +42,15 @@ final class ParakeetBackend: TranscriptionBackend {
 
     var label: String { "parakeet (CoreML, \(versionLabel))" }
 
+    /// FluidAudio rejects anything shorter with "Must be at least 300ms of 16kHz
+    /// audio" (`ASRConstants.minimumRequiredSamples`). Taken from the constant,
+    /// not copied as `0.3`, so a FluidAudio bump moves this with it. `static` so a
+    /// test can assert the value without loading CoreML: the instance property is
+    /// only reachable through `make`, which downloads and loads the models.
+    static let audioFloorSeconds: Double = ASRConstants.minimumAudioDurationSeconds
+
+    var minimumAudioSeconds: Double { Self.audioFloorSeconds }
+
     /// FluidAudio's managed CoreML cache (`~/Library/Application
     /// Support/FluidAudio/Models`). FluidAudio owns this location and does not
     /// honor a custom download directory when models already exist there, so —

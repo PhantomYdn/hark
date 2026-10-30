@@ -57,6 +57,23 @@ All notable changes to Hark are documented here. The format is loosely based on
   Intel, `--no-vad`, or the model failing to load — segments reach the engine
   in the capture format, which is stereo for system capture, through this same
   decode, so live transcription now hears both channels too.
+- Diarized batch transcription (`hark -i FILE --speakers`, and the end-of-capture
+  `--diarize-engine offline` pass) no longer loses short utterances. It only
+  transcribed audio that fell inside a diarizer segment, and FluidAudio discarded
+  every segment shorter than `minSpeechDuration` — 1.0 s by default, which hark
+  never overrode — so a 0.55 s "Hello." that plain batch transcribed fine never
+  reached the recognizer at all. The floor is now 0.25 s: low enough to keep
+  those turns, high enough to stay above the pipeline's own ~0.17 s activity
+  floor, which is what stops a brief noise burst creating a spurious
+  `Speaker N`. On a 26-turn two-voice clip (clean, and again with room noise and
+  taps) every turn from 0.4 s up now survives, the speaker count stays at the
+  true two, and no turn the old floor already transcribed changes its words or
+  its speaker. A span shorter than the recognizer's own floor is now padded with
+  trailing silence instead of being handed over short or skipped, so a real
+  quarter-second answer is transcribed rather than aborting the whole run with
+  "Must be at least 300ms of 16kHz audio" and writing no transcript. The floor
+  is asked from the backend (`minimumAudioSeconds`), so it tracks FluidAudio's
+  own constant and stays zero for whisper, apple and whisperkit.
 
 ## [0.4.3] - 2026-09-17
 
