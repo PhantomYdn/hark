@@ -228,33 +228,91 @@ enum BatchDiarization {
     /// speaker, labeled by origin, and merged back into one time-ordered
     /// transcript — the same two-track shape the offline-live path produces.
     /// Overlapping speech survives, because the two voices never share a track.
+    /// The diarizer only finds each channel's speech; where it cannot run (not
+    /// Apple Silicon, or its model fails to load) each channel is transcribed
+    /// whole instead, so the attribution itself never depends on it.
     static func attributeChannels(
         audioPath: String, engineName: String, modelFlag: String?, language: String?,
         translate: Bool, threshold: Double?, labels: SpeakerLabels
     ) throws -> [TranscriptCue] {
         try requireSourceChannels(AudioPipeline.channelCount(of: audioPath), path: audioPath)
         // One transcription backend for both channels, since it is the larger
-        // load and `transcribe` carries nothing between calls. A diarizer each,
-        // on purpose. FluidAudio's `DiarizerManager` holds its speaker database
-        // in a stored property that diarizing never resets, so one instance
-        // would match the call's voices against the microphone's at an
-        // assignment cutoff of `clusteringThreshold * 1.2`, the 0.78 that
-        // `DiarizationDefaults` tunes to keep two people apart. No cue could be
-        // mislabeled, because `relabel` overwrites the speaker per channel, but
-        // spans that belong apart would collapse and move the cue boundaries.
+        // load and `transcribe` carries nothing between calls.
         let backend = try TranscriptionEngine.makeBatch(
             engineName: engineName, modelFlag: modelFlag, language: language, translate: translate)
         defer { backend.shutdown() }
-        func cues(channel: Int, label: String) throws -> [TranscriptCue] {
-            let diarizer = try SpeakerDiarizer.makeOffline(maxSpeakers: 1, threshold: threshold)
-            return try diarizeToCues(
-                audioPath: audioPath, diarizer: diarizer, backend: backend, language: language,
-                translate: translate, relabel: label, channel: channel)
+        return try attributeChannels(
+            audioPath: audioPath, backend: backend, language: language, translate: translate,
+            labels: labels
+        ) { try SpeakerDiarizer.makeOffline(maxSpeakers: 1, threshold: threshold) }
+    }
+
+    /// The per-channel pass with a backend the caller owns. `makeDiarizer` is
+    /// called once per channel; if the first call throws, both channels are
+    /// transcribed whole. Internal so tests can force that fallback.
+    static func attributeChannels(
+        audioPath: String, backend: TranscriptionBackend, language: String?, translate: Bool,
+        labels: SpeakerLabels, makeDiarizer: () throws -> SpeakerDiarizer
+    ) throws -> [TranscriptCue] {
+        // A diarizer each, on purpose. FluidAudio's `DiarizerManager` holds its
+        // speaker database in a stored property that diarizing never resets, so
+        // one instance would match the call's voices against the microphone's at
+        // an assignment cutoff of `clusteringThreshold * 1.2`, the 0.78 that
+        // `DiarizationDefaults` tunes to keep two people apart. No cue could be
+        // mislabeled, because `relabel` overwrites the speaker per channel, but
+        // spans that belong apart would collapse and move the cue boundaries.
+        let first: SpeakerDiarizer
+        do {
+            first = try makeDiarizer()
+        } catch {
+            let reason =
+                Platform.isAppleSilicon
+                ? ((error as? HarkError)?.message ?? "\(error)") : "needs Apple Silicon"
+            Log.notice("per-channel diarizer unavailable (\(reason)); transcribing each channel whole.")
+            return mergeTracks(
+                mic: try wholeChannelCues(
+                    audioPath: audioPath, channel: 0, backend: backend, language: language,
+                    translate: translate, label: labels.you),
+                system: try wholeChannelCues(
+                    audioPath: audioPath, channel: 1, backend: backend, language: language,
+                    translate: translate, label: labels.others))
         }
-        return merge([
-            try cues(channel: 0, label: labels.you),
-            try cues(channel: 1, label: labels.others),
-        ])
+        return mergeTracks(
+            mic: try diarizeToCues(
+                audioPath: audioPath, diarizer: first, backend: backend, language: language,
+                translate: translate, relabel: labels.you, channel: 0),
+            system: try diarizeToCues(
+                audioPath: audioPath, diarizer: makeDiarizer(), backend: backend,
+                language: language, translate: translate, relabel: labels.others, channel: 1))
+    }
+
+    /// Transcribes one channel of `audioPath` in a single call, every cue
+    /// labeled `label`: the source-attribution path when no diarizer can find
+    /// the channel's speech. Timings come from the engine's own srt; the apple
+    /// engine writes plain text only, so its channel is one cue spanning it.
+    static func wholeChannelCues(
+        audioPath: String, channel: Int, backend: TranscriptionBackend, language: String?,
+        translate: Bool, label: String
+    ) throws -> [TranscriptCue] {
+        let mono = try AudioPipeline.normalizeFileForWhisper(audioPath, channel: channel)
+        defer { try? FileManager.default.removeItem(at: mono) }
+        let cues: [TranscriptCue]
+        if backend is AppleSpeechBackend {
+            let text = try backend.transcribe(
+                wavFile: mono, language: language, translate: translate, format: .txt)
+            let file = try AudioPipeline.openForReading(mono.path)
+            let seconds = Double(file.length) / file.processingFormat.sampleRate
+            cues = [TranscriptCue(start: 0, end: seconds, text: text)]
+        } else {
+            cues = TranscriptFormatting.cues(
+                fromSRT: try backend.transcribe(
+                    wavFile: mono, language: language, translate: translate, format: .srt))
+        }
+        return cues.compactMap { cue in
+            let text = cue.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, !isNonSpeechPlaceholder(text) else { return nil }
+            return TranscriptCue(start: cue.start, end: cue.end, text: text, speaker: label)
+        }
     }
 
     /// Rejects a file that cannot carry source attribution. Mirrors the live

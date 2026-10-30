@@ -249,11 +249,14 @@ and on\-device acoustic
 (distinct voices become
 .BR "Speaker 1" ,
 .BR "Speaker 2" ,
-\&...). Source attribution of a live capture works anywhere; diarization needs
-Apple Silicon, and so does labeling an
+\&...). Source attribution works anywhere; diarization needs Apple Silicon,
+and so do the
+.B auto
+and
+.B acoustic
+modes on an
 .B \-i
-file in any mode \(em that path finds each speaker's (or channel's) speech with
-the same model.
+file.
 The label is rendered per format: txt
 .BR "Speaker 1: ..." ,
 srt
@@ -283,7 +286,8 @@ A transcript output is required.
 .BR You / Others
 \(em from two live streams (no model), or from the two channels of an
 .B \-i
-file (offline diarizer, Apple Silicon);
+file (the offline diarizer finds each channel's speech on Apple Silicon;
+elsewhere each channel is transcribed whole);
 .B acoustic
 : diarize a single stream.
 .TP
@@ -321,17 +325,16 @@ survives. A single mixed file cannot separate your voice, so everyone is
 .BR "Speaker N" ,
 and
 .B \-\-speaker\-mode source
-on a mono file is a usage error. Per\-channel attribution still segments each
-channel with the offline diarizer, so on a file it is Apple\-Silicon\-first like
-every other
-.B \-i \-\-speakers
-run. Acoustic models download from Hugging Face on first use
+on a mono file is a usage error. On Apple Silicon each channel's speech is
+found with the offline diarizer; elsewhere, or if its model cannot load, each
+channel is transcribed whole. Acoustic models download from Hugging Face on
+first use
 .RB ( "hark models download fluidaudio:diarizer" );
 on Intel a live capture falls back to
 .BR You / Others ,
-and
+and the other
 .B \-i \-\-speakers
-is an error.
+modes are an error.
 .SH OTHER OPTIONS
 .TP
 .BI \-C ", " \-\-directory " PATH"

@@ -28,11 +28,12 @@ All notable changes to Hark are documented here. The format is loosely based on
   `You`/`Others`, or whatever `--speaker-labels` says — then merged into one
   time-ordered transcript. Because the two voices never share a track, people
   talking over each other both survive, which a mixed recording cannot do at
-  all. The labels are fixed by channel, but finding each channel's speech is
-  still the offline diarizer's job, so this needs Apple Silicon and the diarizer
-  model like every other `-i --speakers` run; only live source attribution is
-  model-free. `--speaker-mode auto` is unchanged: a stereo file is still
-  diarized as one recording, since most stereo is not one speaker per channel.
+  all. The labels are fixed by channel and work on any Mac: on Apple Silicon
+  the offline diarizer finds each channel's speech and only that is
+  transcribed; on Intel, or when the diarizer model can't load, each channel is
+  transcribed whole by the selected engine, with a one-line notice saying so.
+  `--speaker-mode auto` is unchanged: a stereo file is still diarized as one
+  recording, since most stereo is not one speaker per channel.
 
 ### Changed
 - The default Parakeet model is now **`ultra`** (a post-trained v3: more
@@ -108,8 +109,9 @@ All notable changes to Hark are documented here. The format is loosely based on
   diarized modes fall back to `You`/`Others`. That was never true of a file:
   `-i FILE --speakers` goes through the offline diarizer, which refuses to run
   anywhere but Apple Silicon whatever the speaker mode, so the run was already
-  an error rather than a fallback. Each now says that the model-free guarantee
-  covers live source attribution only.
+  an error rather than a fallback. Each now says which file modes need the
+  diarizer (`auto`, `acoustic`) and that two-channel `--speaker-mode source`
+  works without it.
 
 ## [0.4.3] - 2026-09-17
 

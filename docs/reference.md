@@ -146,11 +146,10 @@ error (exit 64) rather than unlabeled output. Use the default
 treats a stereo file as one recording too, since most stereo is not one speaker
 per channel.
 
-The labels are deterministic, but finding each channel's speech is not: the file
-path runs every channel through the offline diarizer, so `-i FILE
---speaker-mode source` needs Apple Silicon and the diarizer model, exactly like
-any other `-i --speakers` run. Only live source attribution (`--mix` with
-`--system`/`--app`) is model-free and runs on Intel.
+The labels are deterministic and work on any Mac. On Apple Silicon the offline
+diarizer finds each channel's speech, and only those spans are transcribed;
+elsewhere, or when the diarizer model can't load, each channel is transcribed
+whole by the selected `--engine` and hark prints a one-line notice saying so.
 
 ## Configuration & environment
 

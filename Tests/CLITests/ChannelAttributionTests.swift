@@ -463,3 +463,87 @@ struct CueMergeOrderTests {
         #expect(merged.map(\.speaker) == ["You", "Others", "You", "Others", "You", "Others"])
     }
 }
+
+/// Where the per-channel diarizer cannot run — Intel, or its model failing to
+/// load — source attribution must not depend on it: each channel is transcribed
+/// whole by the ordinary backend and labeled by origin. Driven with a throwing
+/// diarizer factory and a stub backend, so no model or Apple Silicon is needed.
+@Suite("Source attribution without a diarizer")
+struct ChannelAttributionFallbackTests {
+    private let helpers = ChannelAttributionTests()
+
+    /// Answers by the level of the channel it is handed: the loud one (the
+    /// mic) speaks at 2 s, the quiet one (the call) at 1 s, each followed by a
+    /// placeholder the transcript must not keep.
+    private final class LevelBackend: TranscriptionBackend {
+        let capabilities = EngineCapabilities(autoDetect: true, translate: true, usesModelFile: true)
+        let label = "level stub"
+        var formats: [TranscriptOutputFormat] = []
+
+        func transcribe(
+            wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat
+        ) throws -> String {
+            formats.append(format)
+            let file = try AVAudioFile(forReading: wavFile)
+            let buffer = try #require(
+                AVAudioPCMBuffer(
+                    pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+            try file.read(into: buffer)
+            let samples = try #require(buffer.floatChannelData)
+            let peak = (0..<Int(buffer.frameLength)).map { abs(samples[0][$0]) }.max() ?? 0
+            let cue =
+                peak > 0.3
+                ? TranscriptCue(start: 2, end: 3, text: "mic words")
+                : TranscriptCue(start: 1, end: 2, text: "call words")
+            return TranscriptFormatting.render(
+                cues: [cue, TranscriptCue(start: 4, end: 5, text: "[BLANK_AUDIO]")],
+                fullText: "", format: format)
+        }
+
+        func shutdown() {}
+    }
+
+    @Test func eachChannelIsTranscribedWholeWhenTheDiarizerCannotLoad() throws {
+        let work = try helpers.makeWorkDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let stereo = work.appendingPathComponent("call.wav")
+        let step: Double = 2.0 * Double.pi * 440.0 / 16000.0
+        let tone = (0..<8000).map { (i: Int) -> Float in Float(sin(Double(i) * step)) }
+        try helpers.writeStereo(left: tone.map { $0 * 0.8 }, right: tone.map { $0 * 0.1 }, to: stereo)
+        let backend = LevelBackend()
+        var attempts = 0
+
+        let cues = try BatchDiarization.attributeChannels(
+            audioPath: stereo.path, backend: backend, language: nil, translate: false,
+            labels: SpeakerLabels(you: "Me", others: "Them")
+        ) {
+            attempts += 1
+            throw HarkError.unavailable("no diarizer in tests")
+        }
+
+        // One try at the diarizer, then one whole-file srt call per channel.
+        #expect(attempts == 1)
+        #expect(backend.formats == [.srt, .srt])
+        // Labeled by channel, merged by time, placeholders dropped.
+        #expect(cues.map(\.speaker) == ["Them", "Me"])
+        #expect(cues.map(\.text) == ["call words", "mic words"])
+        #expect(cues.map(\.start) == [1, 2])
+    }
+
+    @Test func srtOutputReadsBackIntoCues() {
+        let srt = TranscriptFormatting.render(
+            cues: [
+                TranscriptCue(start: 0.5, end: 1.25, text: "Hello there."),
+                TranscriptCue(start: 3661.001, end: 3662, text: "An hour later."),
+            ], fullText: "", format: .srt)
+        let cues = TranscriptFormatting.cues(fromSRT: srt + "\n\n")
+        #expect(cues.map(\.text) == ["Hello there.", "An hour later."])
+        #expect(cues.map(\.start) == [0.5, 3661.001])
+        #expect(cues.map(\.end) == [1.25, 3662])
+        // whisper-cli's own srt: a leading space and a cue split over two lines.
+        let whisper = "1\r\n00:00:01,000 --> 00:00:02,500\r\n Two\r\nlines\r\n\r\n"
+        let parsed = TranscriptFormatting.cues(fromSRT: whisper)
+        #expect(parsed.map(\.text) == ["Two lines"])
+        #expect(parsed.map(\.start) == [1])
+    }
+}
