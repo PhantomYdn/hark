@@ -18,7 +18,7 @@ sharp, and Unix-y. Bug reports, docs fixes, and focused features are all welcome
 
 ## Development setup
 
-Requires the Swift 6 toolchain (Xcode 16) on macOS 14.4+.
+Requires the Swift 6.2+ toolchain (Xcode 26+); the built binary runs on macOS 14.4+.
 
 ```sh
 git clone https://github.com/PhantomYdn/hark.git && cd hark
