@@ -32,6 +32,18 @@ All notable changes to Hark are documented here. The format is loosely based on
 ### Fixed
 - The "downloading parakeet … (first use)" notice is printed again before a
   first-run model fetch.
+- The separated `--speakers` tracks (the live transcribers, and the temporary
+  WAVs the offline diarizer records) were written straight from the audio
+  callback, so they skipped the three guards the mixed stream has. `--duration`
+  never reached them: each track kept everything its source delivered until the
+  stream was torn down, so it ran long by however long teardown took, with no
+  ceiling — nine 2 s captures here overran by 3–8 ms on the mic track and by
+  80–240 ms on the system track. Pause was read at a different point in the
+  pipeline than for the mixed stream, so a busy IO queue could keep a chunk on
+  one side and drop it on the other, and a chunk still arriving during teardown
+  could reach an already-finalized writer. Each track now hops to the capture IO
+  queue like the mixed stream and honours the same stop flag, pause state, and
+  duration budget.
 
 ## [0.4.3] - 2026-09-17
 
