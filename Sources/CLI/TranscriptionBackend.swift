@@ -66,6 +66,10 @@ protocol TranscriptionBackend: AnyObject {
     /// Short description for verbose logging.
     var label: String { get }
 
+    /// Shortest clip this backend accepts, in seconds; a shorter span is padded,
+    /// never dropped. 0 = no floor.
+    var minimumAudioSeconds: Double { get }
+
     /// Transcribes one already-normalized WAV. `language` nil or "auto" means
     /// detect; a code (e.g. "de") forces it. `translate` emits English.
     func transcribe(
@@ -74,6 +78,12 @@ protocol TranscriptionBackend: AnyObject {
 
     /// Releases any held resources (e.g., terminates a server process).
     func shutdown()
+}
+
+extension TranscriptionBackend {
+    /// Most engines accept any clip length (whisper, apple, whisperkit), so the
+    /// floor only has to be declared by the ones that reject short audio.
+    var minimumAudioSeconds: Double { 0 }
 }
 
 /// Per-call whisper.cpp CLI backend: spawns `whisper-cli` once per request
@@ -114,6 +124,7 @@ final class SerializedBackend: TranscriptionBackend {
 
     var capabilities: EngineCapabilities { backend.capabilities }
     var label: String { "\(backend.label) (shared)" }
+    var minimumAudioSeconds: Double { backend.minimumAudioSeconds }
 
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat

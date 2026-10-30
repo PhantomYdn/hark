@@ -18,9 +18,9 @@ exchange, or encryption feature of its own. Its only cryptographic use is
 
 - **OS-provided TLS** via `URLSession` when you opt in to downloading a model
   (e.g. from Hugging Face) — the system's cryptography, not Hark's.
-- **`swift-crypto`**, pulled in *transitively* by the CoreML/transformers
-  dependencies (WhisperKit / swift-transformers), used for hashing and transport
-  inside that plumbing — never as a user-facing feature.
+- **Apple CryptoKit** (OS-provided), used by the CoreML engine dependencies
+  (WhisperKit / FluidAudio) for hashing during model download and caching —
+  never as a user-facing feature.
 
 Because the cryptographic functionality is not a primary function and is limited
 to supporting download/integrity/transport, Hark falls under:

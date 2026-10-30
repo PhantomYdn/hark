@@ -143,7 +143,8 @@ Sample rate (live default 44100; transcode defaults to the source rate).
 Bit depth (live default 16; transcode defaults to the source depth).
 .TP
 .BI \-c ", " \-\-channels " 1|2"
-Channel count (defaults from the source, capped at 2).
+Channel count (defaults from the source, capped at 2). Folding a multi-channel
+file down to 1 averages the channels.
 .TP
 .BI \-\-duration " SEC"
 Stop live capture after SEC seconds (otherwise Ctrl\-C).
@@ -180,8 +181,8 @@ a ggml path or short name
 a variant
 .RB ( large\-v3\-v20240930_626MB );
 .B parakeet
-a version
-.RB ( v2 / v3 );
+a variant
+.RB ( ultra ", the default; " v3 ", " redux ", " v2 ", " phonon2 ", " bark3 ", " bark3\-clean ", " tdt\-ctc\-110m ", " ja );
 .B apple
 ignores it. See
 .BR "hark models list \-\-available" .
@@ -386,7 +387,7 @@ The active default is marked with
 Download a model. Names are engine\-tagged: a bare ggml name is a whisper model
 .RB ( base.en );
 CoreML engines use a prefix
-.RB ( whisperkit:tiny ", " parakeet:v3 ).
+.RB ( whisperkit:tiny ", " parakeet:ultra ).
 .B \-\-default
 makes it the default (also setting the engine for whisperkit/parakeet).
 .TP

@@ -146,6 +146,7 @@ struct ModelRegistryTests {
 
     @Test func fluidAudioCacheClassifiesBundles() {
         #expect(FluidAudioCache.engine(forBundle: "parakeet-tdt-0.6b-v3") == "parakeet")
+        #expect(FluidAudioCache.engine(forBundle: "bark-3.0") == "parakeet")
         #expect(FluidAudioCache.engine(forBundle: "silero-vad") == "fluidaudio")
         #expect(FluidAudioCache.engine(forBundle: "speaker-diarization") == "fluidaudio")
     }
@@ -178,6 +179,34 @@ struct ModelRegistryTests {
         #expect(byName["parakeet-tdt-0.6b-v3"]?.current == true)
         #expect(byName["silero-vad"]?.current == false)
         #expect(byName["speaker-diarization"]?.current == false)
+    }
+
+    @Test func coreMLFlagsParakeetVariantByBundleName() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func bundle(_ variant: String) throws {
+            let mlmodelc = dir.appendingPathComponent(variant)
+                .appendingPathComponent("Encoder.mlmodelc")
+            try FileManager.default.createDirectory(at: mlmodelc, withIntermediateDirectories: true)
+            try Data(repeating: 0, count: 4).write(to: mlmodelc.appendingPathComponent("coremldata"))
+        }
+        let ultra = try #require(ParakeetBackend.resolve("ultra")).bundleName
+        let bark = try #require(ParakeetBackend.resolve("bark3")).bundleName
+        try bundle(ultra)
+        try bundle(bark)
+
+        func current(_ config: Configuration) -> Set<String> {
+            Set(ModelRegistry.coreMLModels(
+                engine: "fluidaudio", directory: dir,
+                classifyEngine: FluidAudioCache.engine(forBundle:), config: config
+            ).filter(\.current).map(\.name))
+        }
+        // A variant whose bundle doesn't contain its name (bark3 → bark-3.0).
+        #expect(current(Configuration(model: "bark3", engine: "parakeet")) == [bark])
+        // No model configured: the default variant (ultra) is current.
+        #expect(current(Configuration(engine: "parakeet")) == [ultra])
+        // Another engine configured: nothing parakeet is current.
+        #expect(current(Configuration(model: "bark3", engine: "whisper")).isEmpty)
     }
 
     @Test func coreMLNoCurrentWithoutMatchingConfig() throws {
