@@ -189,36 +189,38 @@ struct StereoTrackLayoutTests {
     /// A source can deliver nothing for a whole recording: on the Core Audio
     /// path the mixed stream still gets audio when the mic buffer is
     /// unavailable, but the per-source callback for the mic never fires. Nothing
-    /// then pairs, so the live side must stop growing rather than buffer the
-    /// entire call and throw it away at finalize — and the run has to say so,
-    /// because the file it produced is empty.
-    @Test func aSilentSourceStopsTheQueueGrowingAndIsReported() throws {
+    /// then pairs, so the live side must stop growing — and none of it may be
+    /// lost: past the cap, and again at finalize, it is written against silence.
+    @Test func aSilentSourceIsFilledWithSilenceNotDropped() throws {
         let sink = CollectingSink()
         let writer = StereoTrackWriter(sink: sink, format: Self.stereo16)
         // 16 kHz, 16-bit, 2 ch = 64 000 B/s, so the cap is 128 000 B.
         let cap = Int(StereoTrackWriter.maxUnpairedSeconds * Double(Self.stereo16.byteRate))
-        let chunk = Data(count: 6400)  // 0.1 s
+        let chunk = Data(fromInt16: Array(repeating: 700, count: 3200))  // 0.1 s
         let seconds = 10.0
+        let total = Int(seconds * Double(Self.stereo16.byteRate))
 
         for _ in 0..<Int(seconds / 0.1) {
             try writer.write(chunk, from: .system)
         }
 
-        // Ten seconds in, the queue holds two, not ten.
+        // Ten seconds in, the queue holds two, not ten; the rest is on disk.
         #expect(
             writer.unpairedBytes <= cap + chunk.count,
             "queue held \(writer.unpairedBytes) B, cap is \(cap) B")
-        #expect(
-            writer.droppedUnpairedBytes
-                == UInt64(Int(seconds * Double(Self.stereo16.byteRate)) - writer.unpairedBytes))
+        #expect(sink.bytesWritten == UInt64(total - writer.unpairedBytes))
 
         try writer.finalize()
-        #expect(sink.bytesWritten == 0)  // nothing ever paired
+        #expect(sink.bytesWritten == UInt64(total))  // every captured second kept
+        #expect(writer.silenceFilledBytes == UInt64(total))
+        #expect(writer.unpairedBytes == 0)
+        #expect(Set(samples(sink.written, channel: 0)) == [0])  // the silent mic
+        #expect(Set(samples(sink.written, channel: 1)) == [700])  // the call, intact
         #expect(sink.finalizations == 1)
     }
 
     /// The bound must not fire on a normal capture: a skew of a chunk or two
-    /// between the two callbacks is ordinary and all of it has to be kept.
+    /// between the two callbacks is ordinary and is waited out, not filled.
     @Test func ordinarySkewIsKeptWhole() throws {
         let sink = CollectingSink()
         let writer = StereoTrackWriter(sink: sink, format: Self.stereo16)
@@ -227,9 +229,13 @@ struct StereoTrackLayoutTests {
         for _ in 0..<3 { try writer.write(chunk, from: .microphone) }
         try writer.write(chunk, from: .system)
 
-        #expect(writer.droppedUnpairedBytes == 0)
+        #expect(writer.silenceFilledBytes == 0)
         #expect(sink.bytesWritten == UInt64(chunk.count))  // the first 0.1 s paired
         #expect(writer.unpairedBytes == 2 * chunk.count)  // the rest still waiting
+
+        // At the end nothing is thrown away: the waiting tail is flushed too.
+        try writer.finalize()
+        #expect(sink.bytesWritten == UInt64(3 * chunk.count))
     }
 
     /// The PRD promises `--split` chunks the interleaved stream, and nothing

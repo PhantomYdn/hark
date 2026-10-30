@@ -100,6 +100,10 @@ switch:
   transcript-only run.
 - `--duration` trims both channels at the same instant, a paused interval gaps
   both together, and `--split` chunks the interleaved stream.
+- **A source that goes quiet leaves silence, not a gap.** If one side delivers
+  no audio for more than 2 s (say the mic stops), its channel is filled with
+  silence so the other side is kept and stays on the same timeline. hark says
+  so on stderr, and reports at the end how much of the channel is silence.
 
 Also `$HARK_TRACKS` / config `tracks`, and the `tracks` field of the
 remote-control [`POST /start`](remote-control.md).

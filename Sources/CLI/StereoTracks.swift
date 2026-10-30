@@ -100,30 +100,27 @@ func interleaveAsStereo(left: Data, right: Data, format: PCMFormat) -> Data {
 /// right (PRD §6.7d).
 ///
 /// The sources arrive as two independent callbacks, so this buffers both and
-/// converts only their **common prefix** — the same shape as the summing
-/// `drainMix` in `ScreenCaptureSession`. The unmatched tail stays buffered and
-/// is dropped at finalize: normally at most one chunk on one channel, exactly
-/// what the mixed stream already drops there.
+/// converts their **common prefix** — the same shape as the summing `drainMix`
+/// in `ScreenCaptureSession`. The unmatched tail waits for the other side.
 ///
-/// That tail is bounded, because "normally" is not always. A source can stop
-/// delivering for the whole recording — the Core Audio path keeps feeding the
-/// mixed stream when the mic buffer is unavailable but never calls the
-/// per-source callback — and then nothing ever pairs. Unbounded, the live side's
-/// queue grows for the length of the call, roughly 635 MB an hour at 44.1 kHz
-/// 16-bit stereo, only to be thrown away at finalize, leaving a bare WAV header
-/// after a run that looked like it worked. Past `maxUnpairedSeconds` the oldest
-/// unpaired audio is dropped instead of kept, the first drop is logged, and the
-/// total is reported at finalize. A stall-watchdog restart, which realigns the
-/// mixed queues but has no hook here, is bounded by the same cap.
+/// A source can stop delivering for the whole recording — the Core Audio path
+/// keeps feeding the mixed stream when the mic buffer is unavailable but never
+/// calls the per-source callback — and then nothing ever pairs. So the wait is
+/// bounded: past `maxUnpairedSeconds` the oldest one-sided audio is written
+/// with silence on the other channel, and at finalize whatever is still
+/// unpaired is flushed the same way. No captured audio is lost and the timeline
+/// stays continuous; the first fill is logged and the total is reported at
+/// finalize. A stall-watchdog restart, which realigns the mixed queues but has
+/// no hook here, is bounded by the same cap.
 ///
 /// Feed it through `trackSinks()`: `CaptureEngine` filters per-source chunks by
 /// tag and then calls the bare `AudioSink.write`, so a sink cannot tell which
 /// source it got and each side needs its own tagged adapter.
 final class StereoTrackWriter: @unchecked Sendable {
-    /// Longest stretch of one-sided audio kept while the other source catches
+    /// Longest stretch of one-sided audio held while the other source catches
     /// up. Two seconds is far beyond any real skew between the two callbacks —
     /// the summing path pairs them within a chunk — so reaching it means one
-    /// source has stopped, and keeping more only costs memory.
+    /// source has stopped, and its channel is filled with silence from there.
     static let maxUnpairedSeconds = 2.0
 
     private let lock = NSLock()
@@ -134,8 +131,8 @@ final class StereoTrackWriter: @unchecked Sendable {
     private var systemQueue = Data()
     private var lastPauseGeneration: UInt64
     private var finalized = false
-    private var droppedUnpaired: UInt64 = 0
-    private var reportedUnpaired = false
+    private var silenceFilled: UInt64 = 0
+    private var reportedFill = false
 
     /// - Parameters:
     ///   - sink: the `-a` sink; it receives the interleaved two-channel stream.
@@ -182,77 +179,75 @@ final class StereoTrackWriter: @unchecked Sendable {
         case .system: systemQueue.append(data)
         }
         let frameSize = max(1, format.bytesPerFrame)
-        let overflowed = boundUnpairedTailLocked(frameSize: frameSize)
+        var out = Data()
         let common = min(micQueue.count, systemQueue.count) / frameSize * frameSize
-        guard common > 0 else {
-            lock.unlock()
-            if overflowed { reportUnpairedOverflow() }
-            return
+        if common > 0 {
+            out = interleaveAsStereo(
+                left: Data(micQueue.prefix(common)), right: Data(systemQueue.prefix(common)),
+                format: format)
+            micQueue.removeFirst(common)
+            systemQueue.removeFirst(common)
         }
-        paired = interleaveAsStereo(
-            left: Data(micQueue.prefix(common)), right: Data(systemQueue.prefix(common)),
-            format: format)
-        micQueue.removeFirst(common)
-        systemQueue.removeFirst(common)
-        lock.unlock()
-        if overflowed { reportUnpairedOverflow() }
-        try sink.write(paired)
-    }
-
-    /// Drops the oldest unpaired audio beyond `maxUnpairedSeconds`. Only the
-    /// side that is still delivering can exceed the cap: whenever both queues
-    /// hold audio the common prefix drains them. Returns true the first time it
-    /// has to drop anything, so the caller can say so once, off the lock.
-    ///
-    /// Call with the lock held.
-    private func boundUnpairedTailLocked(frameSize: Int) -> Bool {
         let limit = max(
             frameSize,
             Int(Self.maxUnpairedSeconds * Double(format.byteRate)) / frameSize * frameSize)
-        func trim(_ queue: inout Data) -> Int {
-            let excess = (queue.count - limit) / frameSize * frameSize
-            guard queue.count > limit, excess > 0 else { return 0 }
-            queue.removeFirst(excess)
-            return excess
+        out.append(fillUnpairedLocked(beyond: limit, frameSize: frameSize))
+        let firstFill = silenceFilled > 0 && !reportedFill
+        if firstFill { reportedFill = true }
+        paired = out
+        lock.unlock()
+        if firstFill {
+            Log.notice(
+                "--tracks stereo: one source has delivered nothing for over "
+                    + "\(Int(Self.maxUnpairedSeconds))s; filling its channel with silence")
         }
-        let dropped = trim(&micQueue) + trim(&systemQueue)
-        guard dropped > 0 else { return false }
-        droppedUnpaired += UInt64(dropped)
-        guard !reportedUnpaired else { return false }
-        reportedUnpaired = true
-        return true
+        if !paired.isEmpty { try sink.write(paired) }
     }
 
-    private func reportUnpairedOverflow() {
-        Log.notice(
-            "--tracks stereo: one source has delivered nothing for over "
-                + "\(Int(Self.maxUnpairedSeconds))s; dropping the other channel's oldest "
-                + "audio rather than buffering all of it")
+    /// Interleaves the oldest one-sided audio beyond `limit` bytes against
+    /// silence and removes it from its queue. Only one queue can hold audio
+    /// here: the common prefix has just drained whichever was shorter.
+    ///
+    /// Call with the lock held, after the common prefix has been taken.
+    private func fillUnpairedLocked(beyond limit: Int, frameSize: Int) -> Data {
+        func take(_ queue: inout Data) -> Data {
+            let excess = (queue.count - limit) / frameSize * frameSize
+            guard queue.count > limit, excess > 0 else { return Data() }
+            let oldest = Data(queue.prefix(excess))
+            queue.removeFirst(excess)
+            return oldest
+        }
+        let mic = take(&micQueue)
+        let system = take(&systemQueue)
+        guard !mic.isEmpty || !system.isEmpty else { return Data() }
+        silenceFilled += UInt64(mic.count + system.count)
+        return interleaveAsStereo(
+            left: mic.isEmpty ? Data(count: system.count) : mic,
+            right: system.isEmpty ? Data(count: mic.count) : system,
+            format: format)
     }
 
-    /// Finalizes the underlying sink once, however many adapters report in, and
-    /// reports any audio that never found a partner — which is the only warning
-    /// a user gets that a source was silent for the whole recording.
+    /// Flushes the still-unpaired tail against silence, finalizes the
+    /// underlying sink once however many adapters report in, and reports how
+    /// much of one channel was silence-filled — the only warning a user gets
+    /// that a source went quiet.
     func finalize() throws {
         lock.lock()
         let alreadyFinalized = finalized
         finalized = true
-        let dropped = droppedUnpaired
+        let tail = alreadyFinalized
+            ? Data() : fillUnpairedLocked(beyond: 0, frameSize: max(1, format.bytesPerFrame))
+        let filled = silenceFilled
         lock.unlock()
         guard !alreadyFinalized else { return }
-        let paired = sink.bytesWritten
+        if !tail.isEmpty { try sink.write(tail) }
         try sink.finalize()
-        guard dropped > 0 else { return }
-        let seconds = Double(dropped) / Double(max(1, format.byteRate))
+        // A tail of a chunk or so is ordinary callback skew, not a silent source.
+        guard Double(filled) / Double(max(1, format.byteRate)) >= 0.1 else { return }
         Log.notice(
             String(
-                format: "--tracks stereo: dropped %.1fs of audio that never paired "
-                    + "with the other source", seconds))
-        if paired == 0 {
-            Log.notice(
-                "--tracks stereo: only one source ever delivered audio, so "
-                    + "\(sink.label) holds none of it")
-        }
+                format: "--tracks stereo: %.1fs of one channel is silence because its "
+                    + "source delivered no audio", Double(filled) / Double(max(1, format.byteRate))))
     }
 
     var bytesWritten: UInt64 { sink.bytesWritten }
@@ -266,12 +261,13 @@ final class StereoTrackWriter: @unchecked Sendable {
         return micQueue.count + systemQueue.count
     }
 
-    /// Audio dropped because it never paired up — nonzero only when a source
-    /// stopped delivering for longer than `maxUnpairedSeconds`.
-    var droppedUnpairedBytes: UInt64 {
+    /// One-sided audio written against silence, because the other source
+    /// delivered nothing for longer than `maxUnpairedSeconds` or never caught
+    /// up before finalize.
+    var silenceFilledBytes: UInt64 {
         lock.lock()
         defer { lock.unlock() }
-        return droppedUnpaired
+        return silenceFilled
     }
 }
 

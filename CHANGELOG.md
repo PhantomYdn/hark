@@ -31,8 +31,9 @@ All notable changes to Hark are documented here. The format is loosely based on
   for `ffmpeg -filter_complex channelsplit` or any editor. It needs two sources
   (`--mix` with `--system`/`--app`/`--exclude-app`) and both channels, and says
   so instead of quietly falling back. Each side is folded to mono, so a
-  genuinely stereo system signal is downmixed. `mixed` stays the default and is
-  unchanged.
+  genuinely stereo system signal is downmixed. If one source delivers nothing
+  for more than 2 s, its channel is filled with silence so the other side is
+  kept, and hark says so. `mixed` stays the default and is unchanged.
 
 ### Changed
 - The default Parakeet model is now **`ultra`** (a post-trained v3: more
