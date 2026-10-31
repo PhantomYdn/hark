@@ -6,6 +6,8 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-30
+
 ### Added
 - All of FluidAudio's Parakeet variants are now available — `ultra`, `v3`,
   `redux` (25 European languages); `v2`, `phonon2`, `bark3`, `bark3-clean`,
@@ -399,6 +401,9 @@ transcribes them, and composes into Unix pipelines.
 - The release binary is signed (Developer ID) and notarized, so it passes
   Gatekeeper; its stable code identity keeps privacy grants across upgrades.
 
+[0.5.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.5.0
+[0.4.3]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.3
+[0.4.2]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.2
 [0.4.1]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.1
 [0.4.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.0
 [0.3.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.3.0

@@ -8,7 +8,7 @@ import TapEngine
 /// The hark version — the single source of truth, used by `--version`, the
 /// WAV-metadata software tag, and the remote-control agent's `GET /status`.
 /// Release bumps edit only this constant.
-let harkVersion = "0.4.3"
+let harkVersion = "0.5.0"
 
 /// Root command. `hark` itself is the verb — "listen and transcribe."
 ///
