@@ -275,7 +275,14 @@ and on\-device acoustic
 (distinct voices become
 .BR "Speaker 1" ,
 .BR "Speaker 2" ,
-\&...). Diarization needs Apple Silicon; source attribution works anywhere.
+\&...). Source attribution works anywhere; diarization needs Apple Silicon,
+and so do the
+.B auto
+and
+.B acoustic
+modes on an
+.B \-i
+file.
 The label is rendered per format: txt
 .BR "Speaker 1: ..." ,
 srt
@@ -303,7 +310,10 @@ A transcript output is required.
 .B source
 : only
 .BR You / Others
-(no model);
+\(em from two live streams (no model), or from the two channels of an
+.B \-i
+file (the offline diarizer finds each channel's speech on Apple Silicon;
+elsewhere each channel is transcribed whole);
 .B acoustic
 : diarize a single stream.
 .TP
@@ -328,14 +338,29 @@ readily; higher merges them.
 Rename the two source\-attribution labels.
 .PP
 .B You
-is a live\-only label: a single mixed
+needs the two sides to be separate. On
 .B \-i
-file cannot separate your voice, so everyone is
-.BR "Speaker N" .
-Acoustic models download from Hugging Face on first use
+that means two channels:
+.B \-\-speaker\-mode source
+reads channel 1 (left) as
+.BR You ,
+channel 2 (right) as
+.BR Others ,
+transcribes each on its own and merges them by time, so overlapping speech
+survives. A single mixed file cannot separate your voice, so everyone is
+.BR "Speaker N" ,
+and
+.B \-\-speaker\-mode source
+on a mono file is a usage error. On Apple Silicon each channel's speech is
+found with the offline diarizer; elsewhere, or if its model cannot load, each
+channel is transcribed whole. Acoustic models download from Hugging Face on
+first use
 .RB ( "hark models download fluidaudio:diarizer" );
-on Intel, diarized modes fall back to
-.BR You / Others .
+on Intel a live capture falls back to
+.BR You / Others ,
+and the other
+.B \-i \-\-speakers
+modes are an error.
 .SH OTHER OPTIONS
 .TP
 .BI \-C ", " \-\-directory " PATH"
@@ -608,6 +633,14 @@ Diarize a recording, tuning sensitivity:
 .RS
 .nf
 hark \-i meeting.wav \-\-speakers \-\-speaker\-threshold 0.55 \-t out.json
+.fi
+.RE
+.PP
+Label a two\-channel recording by channel (mic left, call right):
+.PP
+.RS
+.nf
+hark \-i call.wav \-\-speakers \-\-speaker\-mode source \-t call.srt
 .fi
 .RE
 .PP

@@ -286,7 +286,11 @@ two ways that combine:
 
 - **Source attribution** — in a meeting capture (`--mix` with `--system`/`--app`),
   your microphone is labeled **`You`** and the call audio **`Others`**.
-  Deterministic, no model, works on Intel and headless.
+  Deterministic, no model, works on Intel and headless. A recording that kept
+  the two sides on separate channels gets the same labels from
+  `-i FILE --speaker-mode source`: on Apple Silicon the diarizer finds each
+  channel's speech; elsewhere (or if its model can't load) each channel is
+  transcribed whole.
 - **Acoustic diarization** — distinct voices within a stream are separated into
   **`Speaker 1`, `Speaker 2`, …** using on-device CoreML models (Apple Silicon).
 
@@ -308,14 +312,19 @@ hark --system --mix --speakers --diarize-engine offline -t meeting.srt
 # Keep the two sides apart in the recording too: mic left, call right
 hark --system --mix --tracks stereo -a call.wav
 
-# Diarize a recording (everyone becomes Speaker N — "You" is live-only)
+# Diarize a mixed recording (one track, so everyone becomes Speaker N)
 hark -i meeting.wav --speakers -t out.json
+
+# Two-channel recording: mic on the left, the call on the right -> You/Others
+hark -i call.wav --speakers --speaker-mode source -t call.srt
 ```
 
 The label appears per format: txt `Speaker 1: …`, srt `[Speaker 1] …`, json a
-`"speaker"` field. **Acoustic diarization is Apple-Silicon-only** (on Intel,
-diarized modes fall back to `You`/`Others`); the first use downloads a CoreML
-model — pre-fetch with `hark models download fluidaudio:diarizer`. See the
+`"speaker"` field. **Acoustic diarization is Apple-Silicon-only** (on Intel, a
+live capture falls back to `You`/`Others`, `-i FILE --speaker-mode source`
+transcribes each channel whole, and other `-i FILE --speakers` runs are an
+error); the first use downloads a CoreML model — pre-fetch with
+`hark models download fluidaudio:diarizer`. See the
 [full flag table](docs/reference.md#speaker-labels) for `--speaker-mode`,
 `--diarize-engine`, `--max-speakers`, `--speaker-threshold`, and
 `--speaker-labels`.

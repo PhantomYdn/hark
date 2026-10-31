@@ -34,6 +34,18 @@ All notable changes to Hark are documented here. The format is loosely based on
   genuinely stereo system signal is downmixed. If one source delivers nothing
   for more than 2 s, its channel is filled with silence so the other side is
   kept, and hark says so. `mixed` stays the default and is unchanged.
+- `--speaker-mode source` now works on a two-channel file. An interview or call
+  recorded with your microphone on the left channel and the other side on the
+  right is transcribed one channel at a time and labeled by origin —
+  `You`/`Others`, or whatever `--speaker-labels` says — then merged into one
+  time-ordered transcript. Because the two voices never share a track, people
+  talking over each other both survive, which a mixed recording cannot do at
+  all. The labels are fixed by channel and work on any Mac: on Apple Silicon
+  the offline diarizer finds each channel's speech and only that is
+  transcribed; on Intel, or when the diarizer model can't load, each channel is
+  transcribed whole by the selected engine, with a one-line notice saying so.
+  `--speaker-mode auto` is unchanged: a stereo file is still diarized as one
+  recording, since most stereo is not one speaker per channel.
 
 ### Changed
 - The default Parakeet model is now **`ultra`** (a post-trained v3: more
@@ -49,6 +61,14 @@ All notable changes to Hark are documented here. The format is loosely based on
   normalization), keeping the release binary at ~15 MB instead of ~28 MB.
 - Building from source now needs Swift 6.2+ (Xcode 26+); the binary still
   runs on macOS 14.4+.
+- `-i FILE --speakers --speaker-mode source` on a file that has no two channels
+  to attribute (mono, or more than two) is now a usage error naming the channel
+  count, instead of being ignored. It used to produce a `Speaker 1/2…`
+  transcript that looked labeled but told you nothing about who was who. The
+  mode resolves from `$HARK_SPEAKER_MODE` and the `speaker-mode` config key as
+  well as the flag, so anyone who set `source` globally for live captures now
+  meets this error on every mono `-i FILE --speakers` run until they pass
+  `--speaker-mode auto` or drop the setting.
 
 ### Fixed
 - The "downloading parakeet … (first use)" notice is printed again before a
@@ -95,6 +115,15 @@ All notable changes to Hark are documented here. The format is loosely based on
   "Must be at least 300ms of 16kHz audio" and writing no transcript. The floor
   is asked from the backend (`minimumAudioSeconds`), so it tracks FluidAudio's
   own constant and stays zero for whisper, apple and whisperkit.
+
+### Documentation
+- The README, `man/hark.1` and `docs/permissions.md` said that on Intel the
+  diarized modes fall back to `You`/`Others`. That was never true of a file:
+  `-i FILE --speakers` goes through the offline diarizer, which refuses to run
+  anywhere but Apple Silicon whatever the speaker mode, so the run was already
+  an error rather than a fallback. Each now says which file modes need the
+  diarizer (`auto`, `acoustic`) and that two-channel `--speaker-mode source`
+  works without it.
 
 ## [0.4.3] - 2026-09-17
 

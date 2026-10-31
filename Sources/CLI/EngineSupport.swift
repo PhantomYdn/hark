@@ -135,6 +135,32 @@ enum TranscriptFormatting {
             return String(decoding: data, as: UTF8.self) + "\n"
         }
     }
+
+    /// Reads the cues back out of an engine's srt output (whisper-cli's own, or
+    /// `render(format: .srt)` above). Blocks without a `-->` timing line are
+    /// skipped; a cue's lines are joined with spaces.
+    static func cues(fromSRT srt: String) -> [TranscriptCue] {
+        func seconds(_ stamp: String) -> Double? {
+            let parts = stamp.trimmingCharacters(in: .whitespaces)
+                .replacingOccurrences(of: ",", with: ".").split(separator: ":")
+            guard parts.count == 3, let h = Double(parts[0]), let m = Double(parts[1]),
+                let s = Double(parts[2])
+            else { return nil }
+            return h * 3600 + m * 60 + s
+        }
+        let blocks = srt.replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n\n")
+        return blocks.compactMap { block in
+            let lines = block.split(separator: "\n")
+            guard let timing = lines.firstIndex(where: { $0.contains("-->") }) else { return nil }
+            let stamps = lines[timing].components(separatedBy: "-->")
+            guard stamps.count == 2, let start = seconds(stamps[0]), let end = seconds(stamps[1])
+            else { return nil }
+            let text = lines[(timing + 1)...]
+                .map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+            return TranscriptCue(start: start, end: end, text: text)
+        }
+    }
 }
 
 /// Architecture gating for CoreML/ANE engines (whisperkit, parakeet) that are

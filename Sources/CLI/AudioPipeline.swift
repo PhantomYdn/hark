@@ -21,9 +21,18 @@ enum AudioPipeline {
         }
     }
 
+    /// How many channels an audio file carries.
+    static func channelCount(of path: String) throws -> Int {
+        Int(try openForReading(path).processingFormat.channelCount)
+    }
+
     /// Decodes `source` into `sink`, converting to `format`. Finalizes the
-    /// sink on success.
-    static func decode(_ source: AVAudioFile, to sink: AudioSink, format: PCMFormat) throws {
+    /// sink on success. `channel`, when given, keeps only that channel of a
+    /// multi-channel source instead of averaging them all (per-source
+    /// attribution reads one capture source per channel).
+    static func decode(
+        _ source: AVAudioFile, to sink: AudioSink, format: PCMFormat, channel: Int? = nil
+    ) throws {
         let sourceFormat = source.processingFormat
         // Asked to fold several channels into one, AVAudioConverter keeps
         // channel 0 and drops the rest, so a file with speech only on the right
@@ -68,7 +77,11 @@ enum AudioPipeline {
                 if buffer.frameLength == 0 { break }
                 var chunk = buffer
                 if let monoBuffer {
-                    downmixToMono(buffer, into: monoBuffer)
+                    if let channel {
+                        copyChannel(channel, of: buffer, into: monoBuffer)
+                    } else {
+                        downmixToMono(buffer, into: monoBuffer)
+                    }
                     chunk = monoBuffer
                 }
                 if let data = converter.convert(chunk) {
@@ -116,15 +129,43 @@ enum AudioPipeline {
         }
     }
 
+    /// Copies channel `index` of `source` into the single channel of
+    /// `destination`, leaving the other channels out. Both buffers must be
+    /// Float32. Out-of-range indices yield silence rather than a crash.
+    static func copyChannel(
+        _ index: Int, of source: AVAudioPCMBuffer, into destination: AVAudioPCMBuffer
+    ) {
+        let frames = Int(source.frameLength)
+        guard frames > 0, let input = source.floatChannelData,
+            let output = destination.floatChannelData
+        else {
+            // As in `downmixToMono`: never advertise frames we did not write.
+            destination.frameLength = 0
+            return
+        }
+        destination.frameLength = AVAudioFrameCount(frames)
+        let channels = Int(source.format.channelCount)
+        guard index >= 0, index < channels else {
+            for frame in 0..<frames { output[0][frame] = 0 }
+            return
+        }
+        let interleaved = source.format.isInterleaved
+        for frame in 0..<frames {
+            output[0][frame] =
+                interleaved ? input[0][frame * channels + index] : input[index][frame]
+        }
+    }
+
     /// Decodes any readable audio file to a whisper-ready temporary WAV.
-    /// Caller is responsible for deleting the returned file.
-    static func normalizeFileForWhisper(_ path: String) throws -> URL {
+    /// Caller is responsible for deleting the returned file. `channel` takes
+    /// that one channel instead of the average of all of them.
+    static func normalizeFileForWhisper(_ path: String, channel: Int? = nil) throws -> URL {
         let source = try openForReading(path)
         let target = FileManager.default.temporaryDirectory
             .appendingPathComponent("hark-norm-\(UUID().uuidString).wav")
         let writer = try WAVFileWriter(destination: .file(target), format: whisperFormat)
         let sink = WAVSink(writer: writer, label: target.path)
-        try decode(source, to: sink, format: whisperFormat)
+        try decode(source, to: sink, format: whisperFormat, channel: channel)
         return target
     }
 }

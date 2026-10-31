@@ -260,7 +260,8 @@
 - [x] **Offline-live** (`--diarize-engine offline`): record mic+system to temp WAVs during capture; at stop, offline-diarize the system track (accurate) + force mic to `You`, merge cues by time → transcript at end (`runOfflineLive`)
 - [x] Single-stream live acoustic (`--speakers` on mic-only / system-only) → `Speaker N`; the old "planned" guard is lifted. Intel downgrades to source-only/none with a notice
 - [x] `--diarize-engine` resolution: `auto` → streaming (live) / offline (batch); `--max-speakers`, `--speaker-threshold` thread through both
-- [x] Stable `Speaker N` namespace (first-appearance numbering); `You` is live-only (a mixed `-i` file → `Speaker N` for all, including you)
+- [x] Stable `Speaker N` namespace (first-appearance numbering); a **mixed** `-i` file → `Speaker N` for all, including you
+- [x] **Source attribution on a file** (`-i FILE --speakers --speaker-mode source`, PRD §6.7c): a two-channel recording is read one channel at a time (mic left → `You`, call right → `Others`, honouring `--speaker-labels`), each transcribed on its own and merged by time through the same `diarizeToCues`/`merge` pair the offline-live path uses — so overlapping speech survives. Mono (or >2 channels) is now a usage error instead of `Speaker N` output that only looks labeled. `auto` is unchanged: an ordinary stereo file is still diarized as one recording. Where the per-channel diarizer can't run (Intel, model load failure) each channel is transcribed whole and relabeled, with a notice
 - [x] Tests: numbering/merge/resolver (pure + offline); verified live-style separation on a 2-voice clip via the raw-PCM pipeline
 - [ ] Live-capture e2e of streaming diarization (real multi-party call) — pending-live list (can't run permission-free; offline 2-voice + unit tests cover the logic)
 
