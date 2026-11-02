@@ -6,6 +6,46 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Added
+- `--min-speakers <n>` (config key `min-speakers`, `$HARK_MIN_SPEAKERS`) bounds
+  the speaker count from below; `--max-speakers` bounds it from above. Equal
+  values force an exact count, which is the reliable choice for a known cast.
+- `--diarize-only` (implies `--speakers`) dumps the raw speaker timeline of an
+  input file without transcribing it: `[Speaker N]` cues in `srt`, bare
+  timestamped lines in `txt`, segments without `text` in `json`.
+- `-v` with `--speakers` on a file logs the clustering parameters, the number
+  of utterances embedded, the resulting labels, and the centroid cosine
+  distance matrix.
+
+### Changed
+- Offline speaker labels are decided per utterance. `-i FILE --speakers`
+  transcribes first with the engine's own segmentation (Parakeet token
+  timings, whisper srt), embeds each utterance on its own span, and clusters
+  the voices in hark: k-means at an exact count, average-linkage agglomerative
+  clustering at `--speaker-threshold` otherwise, clamped into the bounds. Text
+  is never re-cut to diarizer spans.
+- `--speaker-threshold` is now hark's cosine-distance cut between utterance
+  clusters (default `0.8`, 0–1) rather than a FluidAudio pipeline setting.
+  Same-voice utterances sit around 0.74 apart, different voices around 0.84,
+  so small changes move the automatic count a lot; prefer an exact count.
+- Parakeet batch cues start at their first token, close on a `--segment-pause`
+  gap, and are cut before a token that would pass `--segment-window`. The two
+  flags therefore shape batch Parakeet cues as well as live segments, and the
+  default cap on a batch cue moves from 8 s to 12 s.
+- `--speaker-mode source` on a file transcribes each channel whole and labels
+  it by origin; no diarizer model is loaded.
+
+### Fixed
+- `-i FILE --speakers` collapsed several voices into "Speaker 1" and ignored
+  `--max-speakers`. The "offline" path ran FluidAudio's online tracker, which
+  never reads the cluster count and extracts one embedding per 10 s chunk and
+  local slot, so voices sharing a slot got one blended embedding and the text
+  inherited the merged spans. On the three-voice repro clip the fix yields
+  35 cues with 3 labels mapping one-to-one to the ground truth, 28 of 35
+  correct (80 %), against 11 cues with 9 of them "Speaker 1" before.
+- Parakeet batch cues no longer start at the previous cue's end, and song or
+  music passages no longer come back as single 30–120 s cues of junk text.
+
 ## [0.5.0] - 2026-10-30
 
 ### Added
