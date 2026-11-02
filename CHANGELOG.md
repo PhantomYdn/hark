@@ -6,6 +6,8 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-02
+
 ### Added
 - `--min-speakers <n>` (config key `min-speakers`, `$HARK_MIN_SPEAKERS`) bounds
   the speaker count from below; `--max-speakers` bounds it from above. Equal
@@ -445,6 +447,7 @@ transcribes them, and composes into Unix pipelines.
 - The release binary is signed (Developer ID) and notarized, so it passes
   Gatekeeper; its stable code identity keeps privacy grants across upgrades.
 
+[0.6.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.6.0
 [0.5.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.5.0
 [0.4.3]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.3
 [0.4.2]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.2
