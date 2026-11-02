@@ -201,7 +201,7 @@ struct Configuration: Codable, Equatable {
             .speakerThreshold, .double, ConfigKey.formatNumber(DiarizationDefaults.clusteringThreshold),
             \.speakerThreshold,
             parse: { try ConfigKey.parseUnit($0, .speakerThreshold) }, format: ConfigKey.formatNumber,
-            summary: "Offline/batch voice-distance cut (0–1; lower splits more, default 0.8)."),
+            summary: "Offline/batch voice-distance cut (0–1; lower splits more, default 0.68)."),
 
         TypedSetting(.remoteControlPort, .int, "8473", \.remoteControlPort,
             parse: { try ConfigKey.parseInt($0, .remoteControlPort, in: 1...65535) },

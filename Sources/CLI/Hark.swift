@@ -300,7 +300,7 @@ struct Hark: ParsableCommand {
     var maxSpeakers: Int?
 
     @Option(name: .customLong("speaker-threshold"), help: ArgumentHelp(
-        "Offline/batch: how far apart (cosine distance, 0–1; default 0.8) two voices must be "
+        "Offline/batch: how far apart (cosine distance, 0–1; default 0.68) two voices must be "
             + "to stay separate speakers when no exact count is given. Lower splits more, "
             + "higher merges more. No effect on the live streaming diarizer.",
         valueName: "0..1"))

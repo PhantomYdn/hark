@@ -9,13 +9,24 @@ import Foundation
 enum DiarizationDefaults {
     /// Default cut for hark's utterance clustering (`--speaker-threshold`):
     /// the cosine distance between clusters of utterance embeddings above
-    /// which they stay separate speakers. Measured on a three-woman film scene:
-    /// utterances by one voice sit around 0.74 apart (p90 0.91), two voices
-    /// around 0.84 (p10 0.69), so the metric is tight; `0.8` lands nearest the
-    /// true count there, `0.7` splits a voice into several, `0.9` merges all
-    /// three. When the cast is known, equal `--min-speakers`/`--max-speakers`
-    /// are the reliable route. (`Double` so `config show` renders it.)
-    static let clusteringThreshold: Double = 0.8
+    /// which they stay separate speakers. Chosen on 15 recordings with a known
+    /// cast (a three-woman film scene, two AMI meetings of 4, a 30 s AMI
+    /// excerpt, and 11 LibriSpeech conversations of 1–8 voices): together with
+    /// `minSpeakerShare` and `coreUtteranceSeconds`, cuts from 0.66 to 0.70
+    /// find the exact count on 13–14 of the 15 and are within one on all,
+    /// at 92 % utterance agreement; 0.72 and above start merging voices, 0.6
+    /// and below split them. When the cast is known, equal
+    /// `--min-speakers`/`--max-speakers` remain the reliable route. (`Double`
+    /// so `config show` renders it.)
+    static let clusteringThreshold: Double = 0.68
+
+    /// A cluster holding less than this share of the speech time is folded
+    /// into the nearest voice when the count is automatic (PRD §6.7b).
+    static let minSpeakerShare: Double = 0.05
+
+    /// Utterances shorter than this (seconds) do not take part in deciding the
+    /// speakers; they are assigned to the nearest voice afterwards.
+    static let coreUtteranceSeconds: Double = 1.0
 
     /// Shortest zero-vote stretch (seconds) the pipeline re-embeds on its own.
     ///
@@ -331,12 +342,14 @@ enum BatchDiarization {
         guard !spans.isEmpty else { return cues }
         let embeddings = try diarizer.embed(spans: spans.map(\.span), in: samples)
         let threshold = diarizer.threshold ?? DiarizationDefaults.clusteringThreshold
+        let durations = spans.map { $0.span.upperBound - $0.span.lowerBound }
         let clusters = SpeakerClustering.cluster(
-            embeddings, minSpeakers: diarizer.minSpeakers, maxSpeakers: diarizer.maxSpeakers,
-            threshold: threshold)
+            embeddings, durations: durations,
+            minSpeakers: diarizer.minSpeakers, maxSpeakers: diarizer.maxSpeakers, threshold: threshold)
+        let core = durations.filter { $0 >= DiarizationDefaults.coreUtteranceSeconds }.count
         Log.verbose(
-            "diarization: \(spans.count) utterance(s) embedded, \(Set(clusters).count) speaker(s) "
-                + "(threshold \(threshold), speakers "
+            "diarization: \(spans.count) utterance(s) embedded (\(core) of 1 s or longer decide), "
+                + "\(Set(clusters).count) speaker(s) (threshold \(threshold), speakers "
                 + "\(diarizer.minSpeakers.map(String.init) ?? "1")…\(diarizer.maxSpeakers.map(String.init) ?? "auto"))")
         var labels = [String?](repeating: nil, count: cues.count)
         for (position, item) in spans.enumerated() {

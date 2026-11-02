@@ -25,9 +25,13 @@ All notable changes to Hark are documented here. The format is loosely based on
   clustering at `--speaker-threshold` otherwise, clamped into the bounds. Text
   is never re-cut to diarizer spans.
 - `--speaker-threshold` is now hark's cosine-distance cut between utterance
-  clusters (default `0.8`, 0–1) rather than a FluidAudio pipeline setting.
-  Same-voice utterances sit around 0.74 apart, different voices around 0.84,
-  so small changes move the automatic count a lot; prefer an exact count.
+  clusters (default `0.68`, 0–1) rather than a FluidAudio pipeline setting.
+  Only utterances of 1 s or longer take part in deciding the speakers, a
+  voice holding under 5 % of the speech time is folded into the nearest one,
+  and the short utterances then follow the nearest voice. The defaults were
+  chosen on 15 recordings with a known cast of 1 to 8 voices (a film scene,
+  AMI meetings, LibriSpeech conversations): the automatic count is exact on
+  13 of them and within one on all, with 92 % of utterances labeled right.
 - Parakeet batch cues start at their first token, close on a `--segment-pause`
   gap, and are cut before a token that would pass `--segment-window`. The two
   flags therefore shape batch Parakeet cues as well as live segments, and the

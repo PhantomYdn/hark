@@ -294,9 +294,9 @@ two ways that combine:
   **`Speaker 1`, `Speaker 2`, …** using on-device CoreML models (Apple Silicon).
   On a file, the engine first cuts the recording into utterances with its own
   timestamps; each utterance is then embedded and the utterances are clustered
-  into speakers, so a diarizer span can never swallow several turns. When you
-  know the cast, say so: `--min-speakers 3 --max-speakers 3` forces three
-  speakers, which is far more reliable than the automatic count.
+  into speakers, so a diarizer span can never swallow several turns. The
+  automatic count is tuned on recordings of 1–8 voices; when you know the
+  cast, say so: `--min-speakers 3 --max-speakers 3` forces three speakers.
 
 The labels are a transcript feature; `--tracks stereo` keeps the same two sides
 apart in the **recording** — your mic on the left channel, the call on the

@@ -68,6 +68,46 @@ struct SpeakerClusteringTests {
         #expect(two.count == 2)
     }
 
+    @Test func aStrayClusterBelowTheShareFloorJoinsTheNearestVoice() {
+        var (vectors, truth) = conversation
+        // One odd utterance far from every voice but nearest to voice B (axis 3):
+        // on its own it is a 4th cluster at any sane threshold.
+        vectors.append([0, 0, 0, 0.5, 0, 0, 0, 0.9]); truth.append(1)
+        // 15 turns of 2 s, the stray 1 s: a 3 % share, under the 5 % floor.
+        let durations = [Double](repeating: 2, count: vectors.count - 1) + [1]
+        let out = SpeakerClustering.cluster(
+            vectors, durations: durations, minSpeakers: nil, maxSpeakers: nil, threshold: 0.5)
+        #expect(out == truth)
+        // Without the floor it stays a speaker of its own.
+        let raw = SpeakerClustering.cluster(
+            vectors, durations: durations, minSpeakers: nil, maxSpeakers: nil, threshold: 0.5, minShare: 0)
+        #expect(Set(raw).count == 4)
+        // A floor on the count stops the absorption.
+        let kept = SpeakerClustering.cluster(
+            vectors, durations: durations, minSpeakers: 4, maxSpeakers: nil, threshold: 0.5)
+        #expect(Set(kept).count == 4)
+    }
+
+    @Test func shortUtterancesFollowTheNearestLongVoice() {
+        var (vectors, truth) = conversation
+        var durations = [Double](repeating: 2, count: vectors.count)
+        // A noisy 0.4 s utterance that leans towards voice C (axis 6) but would
+        // split off as its own cluster if it took part in the decision.
+        vectors.insert([0.3, 0, 0, 0, 0.3, 0, 0.6, 0.6], at: 2); truth.insert(2, at: 2); durations.insert(0.4, at: 2)
+        let out = SpeakerClustering.cluster(
+            vectors, durations: durations, minSpeakers: nil, maxSpeakers: nil, threshold: 0.5)
+        #expect(out == truth)
+        #expect(Set(out).count == 3)
+    }
+
+    @Test func allShortUtterancesStillCluster() {
+        let (vectors, truth) = conversation
+        let durations = [Double](repeating: 0.3, count: vectors.count)
+        let out = SpeakerClustering.cluster(
+            vectors, durations: durations, minSpeakers: nil, maxSpeakers: nil, threshold: 0.5)
+        #expect(out == truth)
+    }
+
     @Test func renumberingFollowsFirstAppearance() {
         #expect(SpeakerClustering.renumberByFirstAppearance([7, 7, 2, 7, 9, 2]) == [0, 0, 1, 0, 2, 1])
     }

@@ -3,31 +3,95 @@ import Foundation
 /// Clusters per-utterance voice embeddings into speakers (PRD §6.7b). Pure
 /// arithmetic over unit vectors, so it is unit-tested without models.
 ///
-/// The count is decided in one of two ways. With an exact count (equal
-/// `--min-speakers`/`--max-speakers`) the utterances are k-means clustered to
-/// it. Otherwise average-linkage agglomerative clustering runs until the
-/// closest pair of clusters is farther apart than the threshold (cosine
-/// distance), and the resulting count is clamped into the bounds by
-/// re-clustering with k-means at the bound it crossed.
+/// Only utterances of at least `coreSeconds` take part in deciding the
+/// speakers; shorter ones are too noisy to cluster and are assigned to the
+/// nearest resulting voice afterwards. With an exact count (equal
+/// `--min-speakers`/`--max-speakers`) the core utterances are k-means
+/// clustered to it. Otherwise average-linkage agglomerative clustering runs
+/// until the closest pair of clusters is farther apart than the threshold
+/// (cosine distance), clusters holding less than `minShare` of the speech time
+/// are absorbed into the nearest remaining voice (a stray cluster of one or
+/// two odd utterances is far more common than a speaker that quiet), and the
+/// count is clamped into the bounds by re-clustering with k-means at the
+/// bound it crossed.
 enum SpeakerClustering {
     /// Cluster index per embedding (0-based, in order of first appearance).
+    /// `durations` are the utterance lengths in seconds (nil: all alike).
     static func cluster(
-        _ embeddings: [[Float]], minSpeakers: Int?, maxSpeakers: Int?, threshold: Double
+        _ embeddings: [[Float]], durations: [Double]? = nil,
+        minSpeakers: Int?, maxSpeakers: Int?, threshold: Double,
+        minShare: Double = DiarizationDefaults.minSpeakerShare,
+        coreSeconds: Double = DiarizationDefaults.coreUtteranceSeconds
     ) -> [Int] {
         let unit = embeddings.map(normalize)
         guard unit.count > 1 else { return unit.map { _ in 0 } }
+        let durations = durations ?? [Double](repeating: coreSeconds, count: unit.count)
+        var core = (0..<unit.count).filter { durations[$0] >= coreSeconds }
+        if core.count < 2 { core = Array(0..<unit.count) }
+        let coreUnit = core.map { unit[$0] }
         let lower = max(1, minSpeakers ?? 1)
-        let upper = max(lower, maxSpeakers ?? unit.count)
+        let upper = max(lower, maxSpeakers ?? coreUnit.count)
+
         var assignment: [Int]
         if let minSpeakers, let maxSpeakers, minSpeakers == maxSpeakers {
-            assignment = kMeans(unit, k: min(minSpeakers, unit.count))
+            assignment = kMeans(coreUnit, k: min(minSpeakers, coreUnit.count))
         } else {
-            assignment = agglomerative(unit, threshold: Float(threshold))
+            assignment = agglomerative(coreUnit, threshold: Float(threshold))
+            absorbSmallClusters(
+                &assignment, unit: coreUnit, durations: core.map { durations[$0] },
+                minShare: minShare, keepAtLeast: lower)
             let found = Set(assignment).count
             let target = min(max(found, lower), upper)
-            if target != found { assignment = kMeans(unit, k: min(target, unit.count)) }
+            if target != found { assignment = kMeans(coreUnit, k: min(target, coreUnit.count)) }
         }
-        return renumberByFirstAppearance(assignment)
+
+        // Short utterances follow the nearest voice decided on the long ones.
+        let centroids = self.centroids(of: coreUnit, assignment: assignment)
+        var labels = [Int](repeating: 0, count: unit.count)
+        for (position, index) in core.enumerated() { labels[index] = assignment[position] }
+        let coreSet = Set(core)
+        for index in 0..<unit.count where !coreSet.contains(index) {
+            labels[index] = nearest(unit[index], in: centroids)
+        }
+        return renumberByFirstAppearance(labels)
+    }
+
+    /// Reassigns the members of every cluster holding less than `minShare` of
+    /// the total duration to the nearest other cluster's centroid, smallest
+    /// cluster first, never going below `keepAtLeast` clusters.
+    static func absorbSmallClusters(
+        _ assignment: inout [Int], unit: [[Float]], durations: [Double],
+        minShare: Double, keepAtLeast: Int
+    ) {
+        let total = durations.reduce(0, +)
+        guard total > 0, minShare > 0 else { return }
+        while Set(assignment).count > max(1, keepAtLeast) {
+            var share: [Int: Double] = [:]
+            for (cluster, duration) in zip(assignment, durations) { share[cluster, default: 0] += duration / total }
+            guard let victim = share.filter({ $0.value < minShare }).min(by: { $0.value < $1.value })?.key
+            else { return }
+            let others = centroids(of: unit, assignment: assignment).filter { $0.key != victim }
+            for index in assignment.indices where assignment[index] == victim {
+                assignment[index] = nearest(unit[index], in: others)
+            }
+        }
+    }
+
+    /// Unit-length centroid per cluster id.
+    static func centroids(of unit: [[Float]], assignment: [Int]) -> [Int: [Float]] {
+        guard let dimension = unit.first?.count else { return [:] }
+        var sums: [Int: [Float]] = [:]
+        for (vector, cluster) in zip(unit, assignment) {
+            var sum = sums[cluster] ?? [Float](repeating: 0, count: dimension)
+            for d in 0..<dimension { sum[d] += vector[d] }
+            sums[cluster] = sum
+        }
+        return sums.mapValues(normalize)
+    }
+
+    /// The id of the centroid closest (cosine) to `vector`; 0 when there is none.
+    static func nearest(_ vector: [Float], in centroids: [Int: [Float]]) -> Int {
+        centroids.min { cosineDistance(vector, $0.value) < cosineDistance(vector, $1.value) }?.key ?? 0
     }
 
     /// Renumbers cluster ids so the first embedding is cluster 0, the next new

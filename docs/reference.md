@@ -177,7 +177,7 @@ before it would run past `--segment-window`.
 | `--speaker-mode auto\|source\|acoustic` | `auto` (default): source + diarization; `source`: You/Others only; `acoustic`: diarize one stream |
 | `--diarize-engine auto\|streaming\|offline` | `auto` (default): streaming live / offline batch; `streaming`: real-time; `offline`: accurate, diarized at end of capture |
 | `--min-speakers N` / `--max-speakers N` | bounds on the number of distinct speakers (offline/batch); equal bounds force an exact count |
-| `--speaker-threshold 0..1` | how far apart two voices must be to stay separate when no exact count is given (cosine distance; default `0.8`; lower splits more, higher merges) |
+| `--speaker-threshold 0..1` | how far apart two voices must be to stay separate when no exact count is given (cosine distance; default `0.68`; lower splits more, higher merges). Only utterances of 1 s or longer decide; a voice under 5 % of the speech time is folded into the nearest one |
 | `--diarize-only` | with `-i FILE`: write the diarizer's own timeline (start, end, speaker; no text) instead of a transcript |
 | `--speaker-labels "You,Others"` | rename the source labels |
 
@@ -252,7 +252,7 @@ Every setting has a flag, a `$HARK_*` env var, and a config key. The env var is
 | `diarize-engine` | `--diarize-engine` | `auto` |
 | `min-speakers` | `--min-speakers` | (unset) |
 | `max-speakers` | `--max-speakers` | (unset) |
-| `speaker-threshold` | `--speaker-threshold` | `0.8` |
+| `speaker-threshold` | `--speaker-threshold` | `0.68` |
 
 ```sh
 hark config set engine apple

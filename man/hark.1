@@ -338,9 +338,11 @@ it forces an exact count, the reliable choice when the cast is known.
 At most this many distinct speakers (offline/batch diarization).
 .TP
 .BI \-\-speaker\-threshold " 0..1"
-How far apart two voices must be (cosine distance, default 0.8) to stay
+How far apart two voices must be (cosine distance, default 0.68) to stay
 separate speakers when no exact count is given. Lower splits more readily;
-higher merges more.
+higher merges more. Only utterances of 1 s or longer take part in the
+decision, and a voice with under 5 % of the speech time is folded into the
+nearest one; shorter utterances follow the nearest voice.
 .TP
 .B \-\-diarize\-only
 With
