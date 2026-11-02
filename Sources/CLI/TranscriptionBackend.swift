@@ -168,8 +168,11 @@ enum TranscriptionEngine {
 
     /// Batch (whole-file) backend. whisper: a single CLI invocation (STDERR
     /// passes through). apple: an on-device recognizer for the locale.
+    /// `cueLimits` shapes the cues parakeet builds from its token timings; the
+    /// other engines segment their own output.
     static func makeBatch(
-        engineName: String, modelFlag: String?, language: String?, translate: Bool
+        engineName: String, modelFlag: String?, language: String?, translate: Bool,
+        cueLimits: CueLimits = .default
     ) throws -> TranscriptionBackend {
         switch try requireImplemented(engineName) {
         case "whisper":
@@ -183,7 +186,8 @@ enum TranscriptionEngine {
         case "whisperkit":
             return try WhisperKitBackend.make(model: rawModel(modelFlag))
         case "parakeet":
-            return try ParakeetBackend.make(model: rawModel(modelFlag), language: language)
+            return try ParakeetBackend.make(
+                model: rawModel(modelFlag), language: language, cueLimits: cueLimits)
         default:
             throw HarkError.software("engine '\(engineName)' has no batch backend.")
         }

@@ -312,10 +312,12 @@ A transcript output is required.
 .BR You / Others
 \(em from two live streams (no model), or from the two channels of an
 .B \-i
-file (the offline diarizer finds each channel's speech on Apple Silicon;
-elsewhere each channel is transcribed whole);
+file (each channel is transcribed whole and labeled by origin);
 .B acoustic
-: diarize a single stream.
+: diarize a single stream. On a file, diarization is utterance\-level: the
+engine cuts the recording into utterances with its own timestamps, each
+utterance is embedded on its own span, and the utterances are clustered into
+speakers, so a merged diarizer span never swallows several turns.
 .TP
 .BI \-\-diarize\-engine " auto|streaming|offline"
 .B auto
@@ -327,12 +329,26 @@ files.
 .B offline
 : record, then diarize accurately at stop (transcript at end).
 .TP
+.BI \-\-min\-speakers " N"
+At least this many distinct speakers (offline/batch diarization). Equal to
+.B \-\-max\-speakers
+it forces an exact count, the reliable choice when the cast is known.
+.TP
 .BI \-\-max\-speakers " N"
-Cap the number of distinct speakers.
+At most this many distinct speakers (offline/batch diarization).
 .TP
 .BI \-\-speaker\-threshold " 0..1"
-Acoustic clustering sensitivity (default ~0.7). Lower splits speakers more
-readily; higher merges them.
+How far apart two voices must be (cosine distance, default 0.8) to stay
+separate speakers when no exact count is given. Lower splits more readily;
+higher merges more.
+.TP
+.B \-\-diarize\-only
+With
+.BR \-i " FILE" :
+write the diarizer's own speaker timeline (start, end, speaker; no text) to the
+transcript output instead of transcribing, to inspect what the diarizer saw.
+Implies
+.BR \-\-speakers .
 .TP
 .BI \-\-speaker\-labels " You,Others"
 Rename the two source\-attribution labels.

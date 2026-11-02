@@ -164,7 +164,10 @@ seconds (over 0, up to 2; default `0.7`), or when unbroken speech reaches
 sooner when someone talks without pausing; raise the pause to keep a slow
 speaker's sentences together. Shorter segments give the engine less context.
 The two ranges meet at 2 s, so the window is never shorter than the pause. Both
-apply to the VAD path and to the amplitude fallback (`--no-vad`).
+apply to the VAD path and to the amplitude fallback (`--no-vad`). The same two
+values shape the cues the `parakeet` engine builds from its token timings on a
+file: a cue closes at sentence punctuation, after a `--segment-pause` gap, or
+before it would run past `--segment-window`.
 
 ## Speaker labels
 
@@ -173,9 +176,21 @@ apply to the VAD path and to the amplitude fallback (`--no-vad`).
 | `--speakers`, `--diarize` | enable speaker labels (off by default) |
 | `--speaker-mode auto\|source\|acoustic` | `auto` (default): source + diarization; `source`: You/Others only; `acoustic`: diarize one stream |
 | `--diarize-engine auto\|streaming\|offline` | `auto` (default): streaming live / offline batch; `streaming`: real-time; `offline`: accurate, diarized at end of capture |
-| `--max-speakers N` | cap the number of distinct speakers |
-| `--speaker-threshold 0..1` | clustering sensitivity (default ~0.7; lower splits more, higher merges) |
+| `--min-speakers N` / `--max-speakers N` | bounds on the number of distinct speakers (offline/batch); equal bounds force an exact count |
+| `--speaker-threshold 0..1` | how far apart two voices must be to stay separate when no exact count is given (cosine distance; default `0.8`; lower splits more, higher merges) |
+| `--diarize-only` | with `-i FILE`: write the diarizer's own timeline (start, end, speaker; no text) instead of a transcript |
 | `--speaker-labels "You,Others"` | rename the source labels |
+
+On a file, acoustic diarization is **utterance-level**: the engine first cuts
+the recording into utterances with its own timestamps, each utterance is
+embedded on its own span, and the utterances are clustered into speakers
+(k-means at an exact count, otherwise clustered at `--speaker-threshold` and
+clamped into the bounds). The text is never re-cut to the diarizer's spans, so
+a span that merged several turns still yields one labeled cue per turn. When
+the number of voices is known, give it: `--min-speakers 3 --max-speakers 3` is
+far more reliable than the automatic count, whose result depends on the
+threshold. `--diarize-only` shows the pyannote pipeline's own view of the file
+for comparison.
 
 `source` labels by where the audio came from, so it needs the two sides to be
 separate: two live streams (`--mix` with `--system`/`--app`), or a two-channel
@@ -235,8 +250,9 @@ Every setting has a flag, a `$HARK_*` env var, and a config key. The env var is
 | `speaker-mode` | `--speaker-mode` | `auto` |
 | `speaker-labels` | `--speaker-labels` | `You,Others` |
 | `diarize-engine` | `--diarize-engine` | `auto` |
+| `min-speakers` | `--min-speakers` | (unset) |
 | `max-speakers` | `--max-speakers` | (unset) |
-| `speaker-threshold` | `--speaker-threshold` | (engine default) |
+| `speaker-threshold` | `--speaker-threshold` | `0.8` |
 
 ```sh
 hark config set engine apple

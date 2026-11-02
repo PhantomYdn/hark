@@ -181,7 +181,7 @@ struct SayShortTurnDiarizationTests {
 
         let cues = try BatchDiarization.diarizeToCues(
             audioPath: wav.path, engineName: "parakeet", modelFlag: nil, language: nil,
-            translate: false, maxSpeakers: nil, threshold: nil)
+            translate: false, minSpeakers: nil, maxSpeakers: nil, threshold: nil)
         // Before the fix this line was never reached: the throw came out of the
         // per-span transcribe call and the whole run exited 1.
         #expect(!cues.isEmpty)

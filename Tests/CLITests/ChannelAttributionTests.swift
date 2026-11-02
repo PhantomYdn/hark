@@ -351,7 +351,7 @@ struct ChannelAttributionIntegrationTests {
 
         let cues = try BatchDiarization.attributeChannels(
             audioPath: file.path, engineName: engine, modelFlag: nil, language: nil,
-            translate: false, threshold: nil, labels: .default)
+            translate: false, labels: .default)
 
         #expect(cues.allSatisfy { $0.speaker == "You" || $0.speaker == "Others" })
         #expect(cues.map(\.start) == cues.map(\.start).sorted(), "cues are not in time order")
@@ -464,11 +464,10 @@ struct CueMergeOrderTests {
     }
 }
 
-/// Where the per-channel diarizer cannot run — Intel, or its model failing to
-/// load — source attribution must not depend on it: each channel is transcribed
-/// whole by the ordinary backend and labeled by origin. Driven with a throwing
-/// diarizer factory and a stub backend, so no model or Apple Silicon is needed.
-@Suite("Source attribution without a diarizer")
+/// Source attribution needs no diarizer: each channel is transcribed whole by
+/// the ordinary backend, with the engine's own utterance timings, and labeled
+/// by origin. Driven with a stub backend, so no model or Apple Silicon is needed.
+@Suite("Source attribution by channel")
 struct ChannelAttributionFallbackTests {
     private let helpers = ChannelAttributionTests()
 
@@ -503,7 +502,7 @@ struct ChannelAttributionFallbackTests {
         func shutdown() {}
     }
 
-    @Test func eachChannelIsTranscribedWholeWhenTheDiarizerCannotLoad() throws {
+    @Test func eachChannelIsTranscribedWholeAndLabeledByOrigin() throws {
         let work = try helpers.makeWorkDirectory()
         defer { try? FileManager.default.removeItem(at: work) }
         let stereo = work.appendingPathComponent("call.wav")
@@ -511,18 +510,12 @@ struct ChannelAttributionFallbackTests {
         let tone = (0..<8000).map { (i: Int) -> Float in Float(sin(Double(i) * step)) }
         try helpers.writeStereo(left: tone.map { $0 * 0.8 }, right: tone.map { $0 * 0.1 }, to: stereo)
         let backend = LevelBackend()
-        var attempts = 0
 
         let cues = try BatchDiarization.attributeChannels(
             audioPath: stereo.path, backend: backend, language: nil, translate: false,
-            labels: SpeakerLabels(you: "Me", others: "Them")
-        ) {
-            attempts += 1
-            throw HarkError.unavailable("no diarizer in tests")
-        }
+            labels: SpeakerLabels(you: "Me", others: "Them"))
 
-        // One try at the diarizer, then one whole-file srt call per channel.
-        #expect(attempts == 1)
+        // One whole-file srt call per channel, nothing else.
         #expect(backend.formats == [.srt, .srt])
         // Labeled by channel, merged by time, placeholders dropped.
         #expect(cues.map(\.speaker) == ["Them", "Me"])

@@ -42,6 +42,7 @@ struct Configuration: Codable, Equatable {
     var speakerMode: String?
     var speakerLabels: String?
     var diarizeEngine: String?
+    var minSpeakers: Int?
     var maxSpeakers: Int?
     var speakerThreshold: Double?
 
@@ -67,6 +68,7 @@ struct Configuration: Codable, Equatable {
         case speakerMode = "speaker-mode"
         case speakerLabels = "speaker-labels"
         case diarizeEngine = "diarize-engine"
+        case minSpeakers = "min-speakers"
         case maxSpeakers = "max-speakers"
         case speakerThreshold = "speaker-threshold"
         case remoteControlPort = "remote-control-port"
@@ -189,14 +191,17 @@ struct Configuration: Codable, Equatable {
             parse: { try ConfigKey.parseChoice($0, .diarizeEngine, ["auto", "streaming", "offline"]) },
             format: { $0 },
             summary: "Diarizer timing: auto, streaming (live), or offline (at end)."),
+        TypedSetting(.minSpeakers, .int, "(unset)", \.minSpeakers,
+            parse: { try ConfigKey.parsePositiveInt($0, .minSpeakers) }, format: { String($0) },
+            summary: "Fewest distinct speakers for offline/batch diarization (= max forces the count)."),
         TypedSetting(.maxSpeakers, .int, "(unset)", \.maxSpeakers,
             parse: { try ConfigKey.parsePositiveInt($0, .maxSpeakers) }, format: { String($0) },
-            summary: "Cap on distinct speakers for offline/batch diarization."),
+            summary: "Most distinct speakers for offline/batch diarization (= min forces the count)."),
         TypedSetting(
             .speakerThreshold, .double, ConfigKey.formatNumber(DiarizationDefaults.clusteringThreshold),
             \.speakerThreshold,
             parse: { try ConfigKey.parseUnit($0, .speakerThreshold) }, format: ConfigKey.formatNumber,
-            summary: "Offline/batch clustering sensitivity (0–1; lower splits more)."),
+            summary: "Offline/batch voice-distance cut (0–1; lower splits more, default 0.8)."),
 
         TypedSetting(.remoteControlPort, .int, "8473", \.remoteControlPort,
             parse: { try ConfigKey.parseInt($0, .remoteControlPort, in: 1...65535) },

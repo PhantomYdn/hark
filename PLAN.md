@@ -10,10 +10,8 @@ Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #
 
 - [ ] Live `--channels 1` on a stereo tap keeps only the left channel: the capture sessions hand the tap format to `PCMStreamConverter` (`AVAudioConverter`, `downmix` off). Fold by averaging there, like `AudioPipeline.decode` does for files since #5
 - [ ] Live segments are padded to the engine's minimum (Parakeet 0.3 s) in the capture format, *before* the resample to 16 kHz; a rounding loss of one sample would make Parakeet reject the segment silently. Pad after normalizing, or add a few ms of margin (#4)
-- [ ] Check whether the 0.25 s diarizer `minSpeechDuration` (#4) creates spurious speakers: the contributor's 14-minute meeting went from 9 to 11 labels with no ground truth. Measure on a recording with a known speaker count
 - [ ] Remote `POST /start` never calls `settings.validate()` on the merged settings (`reservingOutputs()`), so a bad value from env/config answers 201 and then fails the session; validate before replying
 - [ ] `-i FILE --speaker-mode source` fallback (no diarizer) with `--engine apple`: apple writes plain text only, so each channel becomes one cue spanning it, with no interleaving by time (#9)
-- [ ] `-i FILE --speaker-mode source`: if the first channel's diarizer loads but the second fails, the run errors instead of using the whole-channel fallback (#9)
 - [ ] Flaky under parallel `make test` (locally; CI green): `wedgedStopStillFinalizesTheRecording` and `runBoundedReportsWhetherWorkFinished` (`CaptureControlIntegrationTests`) wait 1 s for work on `DispatchQueue.global()`, which other tests running in parallel can starve. Both pass alone and in a `--no-parallel` run. Serialize that suite or stop depending on the global queue's latency
 
 ## Phase 1: Project Foundation & Core Capture (PRD M1)
@@ -272,6 +270,30 @@ Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #
 - [x] **Source attribution on a file** (`-i FILE --speakers --speaker-mode source`, PRD §6.7c): a two-channel recording is read one channel at a time (mic left → `You`, call right → `Others`, honouring `--speaker-labels`), each transcribed on its own and merged by time through the same `diarizeToCues`/`merge` pair the offline-live path uses — so overlapping speech survives. Mono (or >2 channels) is now a usage error instead of `Speaker N` output that only looks labeled. `auto` is unchanged: an ordinary stereo file is still diarized as one recording. Where the per-channel diarizer can't run (Intel, model load failure) each channel is transcribed whole and relabeled, with a notice
 - [x] Tests: numbering/merge/resolver (pure + offline); verified live-style separation on a 2-voice clip via the raw-PCM pipeline
 - [ ] Live-capture e2e of streaming diarization (real multi-party call) — pending-live list (can't run permission-free; offline 2-voice + unit tests cover the logic)
+
+### Phase 8.9 — Utterance-level offline diarization (replacing span-transcription)
+
+> Motivation (2026-11-01, film-dialogue repro): `-i clip.wav --speakers` on a 90 s
+> three-woman scene gave 12 cues, 9 of them `Speaker 1`, the other labels only on
+> sub-second fragments, whatever `--speaker-threshold`/`--max-speakers` said.
+> Diagnosis with the resolved config and the centroid distance matrix: the
+> "offline" path used FluidAudio's *online* `DiarizerManager`, which never reads
+> `numClusters` and extracts one embedding per 10 s chunk and local pyannote
+> slot — all three voices shared a slot, so every utterance in a chunk carried
+> one blended embedding 0.2–0.4 from centroid 1 while the voices themselves sit
+> 0.83 apart. The transcript then inherited the merged spans because each span
+> was transcribed as one cue. No threshold can separate what was averaged first.
+
+- [x] Transcribe first, with the engine's own utterances (parakeet token timings → cues; whisper srt), then label: `BatchDiarization.diarizeToCues` embeds each utterance on its own span (`OfflineDiarizerManager.embedSpans`, WeSpeaker) and clusters the utterances (`SpeakerClustering`: k-means at an exact count, average-linkage AHC at `--speaker-threshold` otherwise, clamped into the bounds). Text is never re-cut to diarizer spans
+- [x] `SpeakerDiarizer` now wraps FluidAudio's `OfflineDiarizerManager` (pyannote community-1, zero-vote re-embed on) for the timeline: `--diarize-only` (timeline without transcription; json omits `text`, txt prints `start --> end  Speaker`) and the text-only `apple` fallback (`transcribeSpans`)
+- [x] `--min-speakers` (new config key `min-speakers`, env, remote field) + `--max-speakers` as bounds; equal = exact count. `--speaker-threshold` default 0.8 = hark's utterance cut (cosine); the pipeline's own 0.6 Euclidean cut is not user-facing any more
+- [x] Parakeet batch cues: start at the first token (not the previous cue's end), close on a `--segment-pause` gap and before a token that would pass `--segment-window` (`CueLimits`; the live knobs now shape batch cues too). Fixes 30–120 s junk cues over song passages
+- [x] `--speaker-mode source` on a file no longer loads a diarizer: each channel is transcribed whole with its own utterance timings and labeled by origin
+- [x] `-v` logs the clustering parameters, utterance/speaker counts, and for the timeline the raw span/id counts plus the centroid cosine-distance matrix
+- [x] Acceptance on the repro clip (parakeet:ultra, `--min-speakers 3 --max-speakers 3`): 35 cues, 3 labels mapping 1:1 to the ground truth, 28/35 (80 %) agreement; before: 11 cues, 9 × Speaker 1. Auto count at 0.8: 4 labels, 83 %
+- [x] Tests: `SpeakerClusteringTests` (exact/threshold/clamp/degenerate/renumber), parakeet cue gap+window, offline config mapping, flag validation (`--min-speakers`, min>max, `--diarize-only` needs `-i`), config round-trip
+- [ ] Short utterances (< 1 s) are the main residual error: 5 of the 7 misses on the clip. Try padding a short utterance's embedding span with its neighbours' silence, or weighting by duration in the linkage
+- [ ] Harder target from the brief: two brothers + a girl, 17+ minor roles over 74 min — expect 3 clean clusters + an "others" bucket with `--min-speakers 3 --max-speakers 4`
 
 ### Phase 8.6 — Model management & config
 

@@ -190,7 +190,7 @@ struct StereoDownmixDiarizationTests {
 
         let cues = try BatchDiarization.diarizeToCues(
             audioPath: stereo.path, engineName: engine, modelFlag: nil, language: nil,
-            translate: false, maxSpeakers: nil, threshold: nil)
+            translate: false, minSpeakers: nil, maxSpeakers: nil, threshold: nil)
 
         #expect(!cues.isEmpty, "right-channel-only speech produced no diarized cues")
         let transcript = cues.map(\.text).joined(separator: " ").lowercased()

@@ -288,11 +288,15 @@ two ways that combine:
   your microphone is labeled **`You`** and the call audio **`Others`**.
   Deterministic, no model, works on Intel and headless. A recording that kept
   the two sides on separate channels gets the same labels from
-  `-i FILE --speaker-mode source`: on Apple Silicon the diarizer finds each
-  channel's speech; elsewhere (or if its model can't load) each channel is
-  transcribed whole.
+  `-i FILE --speaker-mode source`: each channel is transcribed whole and
+  labeled by origin.
 - **Acoustic diarization** — distinct voices within a stream are separated into
   **`Speaker 1`, `Speaker 2`, …** using on-device CoreML models (Apple Silicon).
+  On a file, the engine first cuts the recording into utterances with its own
+  timestamps; each utterance is then embedded and the utterances are clustered
+  into speakers, so a diarizer span can never swallow several turns. When you
+  know the cast, say so: `--min-speakers 3 --max-speakers 3` forces three
+  speakers, which is far more reliable than the automatic count.
 
 The labels are a transcript feature; `--tracks stereo` keeps the same two sides
 apart in the **recording** — your mic on the left channel, the call on the
@@ -315,6 +319,12 @@ hark --system --mix --tracks stereo -a call.wav
 # Diarize a mixed recording (one track, so everyone becomes Speaker N)
 hark -i meeting.wav --speakers -t out.json
 
+# A film scene with three known voices: force the count
+hark -i scene.wav --speakers --min-speakers 3 --max-speakers 3 -t scene.srt
+
+# Just the diarizer's own timeline (who spoke when, no text)
+hark -i scene.wav --diarize-only -t timeline.txt
+
 # Two-channel recording: mic on the left, the call on the right -> You/Others
 hark -i call.wav --speakers --speaker-mode source -t call.srt
 ```
@@ -326,8 +336,8 @@ transcribes each channel whole, and other `-i FILE --speakers` runs are an
 error); the first use downloads a CoreML model — pre-fetch with
 `hark models download fluidaudio:diarizer`. See the
 [full flag table](docs/reference.md#speaker-labels) for `--speaker-mode`,
-`--diarize-engine`, `--max-speakers`, `--speaker-threshold`, and
-`--speaker-labels`.
+`--diarize-engine`, `--min-speakers`/`--max-speakers`, `--speaker-threshold`,
+`--diarize-only`, and `--speaker-labels`.
 
 ## Interactive mode
 

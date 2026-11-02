@@ -110,6 +110,7 @@ enum ConfigKey: String, CaseIterable {
     case speakerMode = "speaker-mode"
     case speakerLabels = "speaker-labels"
     case diarizeEngine = "diarize-engine"
+    case minSpeakers = "min-speakers"
     case maxSpeakers = "max-speakers"
     case speakerThreshold = "speaker-threshold"
     case remoteControlPort = "remote-control-port"

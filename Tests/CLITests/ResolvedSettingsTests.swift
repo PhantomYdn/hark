@@ -245,7 +245,7 @@ extension ResolvedSettings {
             useVad: useVad, vadThreshold: vadThreshold, segmentPause: segmentPause,
             segmentWindow: segmentWindow, useGain: useGain, speakers: speakers,
             speakerMode: speakerMode, speakerLabels: speakerLabels, diarizeEngine: diarizeEngine,
-            maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold,
+            minSpeakers: minSpeakers, maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold,
             remoteControlPort: remoteControlPort)
     }
 }

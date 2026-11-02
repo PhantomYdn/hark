@@ -99,6 +99,11 @@ enum TranscriptFormatting {
             if cues.contains(where: { $0.speaker != nil }) {
                 let lines = cues.map { cue -> String in
                     let body = cue.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    // A text-less cue (`--diarize-only`) is a timeline row.
+                    if body.isEmpty, let speaker = cue.speaker {
+                        return "\(LiveTranscriptWriter.srtTimestamp(cue.start)) --> "
+                            + "\(LiveTranscriptWriter.srtTimestamp(cue.end))  \(speaker)"
+                    }
                     return cue.speaker.map { "\($0): \(body)" } ?? body
                 }
                 return lines.joined(separator: "\n") + "\n"
@@ -111,22 +116,24 @@ enum TranscriptFormatting {
                 out += "\(LiveTranscriptWriter.srtTimestamp(cue.start)) --> "
                 out += "\(LiveTranscriptWriter.srtTimestamp(cue.end))\n"
                 let body = cue.text.trimmingCharacters(in: .whitespaces)
-                out += (cue.speaker.map { "[\($0)] \(body)" } ?? body) + "\n\n"
+                out += (cue.speaker.map { body.isEmpty ? "[\($0)]" : "[\($0)] \(body)" } ?? body)
+                    + "\n\n"
             }
             return out
         case .json:
             // `speaker` is optional: nil omits the key (synthesized
-            // encodeIfPresent), keeping default output byte-identical.
+            // encodeIfPresent), keeping default output byte-identical. `text`
+            // is omitted the same way when a cue has none (`--diarize-only`).
             struct Segment: Encodable {
                 let start: Double
                 let end: Double
-                let text: String
+                let text: String?
                 let speaker: String?
             }
             let segments = cues.map {
-                Segment(
-                    start: $0.start, end: $0.end,
-                    text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                let text = $0.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return Segment(
+                    start: $0.start, end: $0.end, text: text.isEmpty ? nil : text,
                     speaker: $0.speaker)
             }
             let encoder = JSONEncoder()

@@ -33,12 +33,15 @@ struct TranscribeEngine {
     let language: String?
     let translate: Bool
     let format: TranscriptOutputFormat
+    /// Cue length limits for engines that build cues from token timings (parakeet).
+    var cueLimits: CueLimits = .default
 
     /// Normalizes `audioPath` to a 16 kHz mono WAV, runs the selected engine,
     /// and returns the transcript text in the requested format.
     func transcribe(audioPath: String) throws -> String {
         let backend = try TranscriptionEngine.makeBatch(
-            engineName: engineName, modelFlag: modelFlag, language: language, translate: translate)
+            engineName: engineName, modelFlag: modelFlag, language: language, translate: translate,
+            cueLimits: cueLimits)
         defer { backend.shutdown() }
         Log.verbose("normalizing '\(audioPath)' to 16 kHz mono WAV")
         let wavFile = try AudioPipeline.normalizeFileForWhisper(audioPath)

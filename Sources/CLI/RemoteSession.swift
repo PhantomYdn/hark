@@ -245,6 +245,7 @@ struct StartRequest: Decodable {
     var speakerMode: String?
     var speakerLabels: String?
     var diarizeEngine: String?
+    var minSpeakers: Int?
     var maxSpeakers: Int?
     var speakerThreshold: Double?
     var vad: Bool?
@@ -312,6 +313,7 @@ struct StartRequest: Decodable {
             }
             cmd.diarizeEngine = parsed
         }
+        if let minSpeakers { cmd.minSpeakers = minSpeakers }
         if let maxSpeakers { cmd.maxSpeakers = maxSpeakers }
         if let speakerThreshold { cmd.speakerThreshold = speakerThreshold }
         if let vad { cmd.useVad = vad }

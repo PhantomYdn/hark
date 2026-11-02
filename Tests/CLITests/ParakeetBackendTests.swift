@@ -82,7 +82,49 @@ struct ParakeetBackendTests {
         #expect(cues[0].start == 0.0)
         #expect(cues[0].end == 1.1)
         #expect(cues[1].text == "Bye")
+        // The cue starts where its first token does, not where the last one ended.
+        #expect(cues[1].start == 1.5)
         #expect(cues[1].end == 2.0)
+    }
+
+    /// A long silence followed by one stray token (a song passage decoded as "U")
+    /// used to become a cue spanning the whole silence, because a cue started
+    /// where the previous one ended. A gap of `pauseSeconds` now closes the cue
+    /// and the next one starts at its own first token.
+    @Test func cuesBreakOnAPauseAndStartAtTheirFirstToken() {
+        let timings = [
+            TokenTiming(token: "▁one", tokenId: 1, startTime: 0.0, endTime: 0.4, confidence: 1),
+            TokenTiming(token: "▁two", tokenId: 2, startTime: 0.5, endTime: 0.9, confidence: 1),
+            TokenTiming(token: "▁U", tokenId: 3, startTime: 60.0, endTime: 60.3, confidence: 1),
+            TokenTiming(token: "▁three", tokenId: 4, startTime: 61.0, endTime: 61.5, confidence: 1),
+        ]
+        let result = ASRResult(
+            text: "one two U three", confidence: 1, duration: 62, processingTime: 0.1,
+            tokenTimings: timings)
+        let cues = ParakeetBackend.cues(
+            from: result, limits: CueLimits(maxSeconds: 12, pauseSeconds: 0.7))
+        #expect(cues.map(\.text) == ["one two", "U", "three"])
+        #expect(cues[1].start == 60.0 && cues[1].end == 60.3)
+        #expect(cues[2].start == 61.0)
+        // A tighter pause splits "one" from "two" (0.1 s apart) as well.
+        let tight = ParakeetBackend.cues(
+            from: result, limits: CueLimits(maxSeconds: 12, pauseSeconds: 0.05))
+        #expect(tight.map(\.text) == ["one", "two", "U", "three"])
+    }
+
+    @Test func cuesAreCutAtTheWindowEvenWithoutPunctuation() {
+        let timings = (0..<10).map { i in
+            TokenTiming(
+                token: "▁w\(i)", tokenId: i, startTime: Double(i), endTime: Double(i) + 0.9,
+                confidence: 1)
+        }
+        let result = ASRResult(
+            text: "", confidence: 1, duration: 10, processingTime: 0.1, tokenTimings: timings)
+        let cues = ParakeetBackend.cues(
+            from: result, limits: CueLimits(maxSeconds: 4, pauseSeconds: 5))
+        #expect(cues.count == 3)
+        #expect(cues[0].start == 0 && cues[0].end == 3.9)
+        #expect(cues[1].start == 4)
     }
 
     @Test func cuesFallBackToWholeClipWithoutTimings() {

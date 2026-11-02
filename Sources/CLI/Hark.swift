@@ -287,18 +287,30 @@ struct Hark: ParsableCommand {
         valueName: "auto|streaming|offline"))
     var diarizeEngine: DiarizeEngine?
 
+    @Option(name: .customLong("min-speakers"), help: ArgumentHelp(
+        "Offline/batch diarization: at least this many distinct speakers. Equal to "
+            + "--max-speakers forces an exact count (no effect on the live streaming diarizer).",
+        valueName: "n"))
+    var minSpeakers: Int?
+
     @Option(name: .customLong("max-speakers"), help: ArgumentHelp(
-        "Offline/batch diarization only: cap the number of distinct speakers "
-            + "(no effect on the live streaming EEND diarizer).",
+        "Offline/batch diarization: at most this many distinct speakers. Equal to "
+            + "--min-speakers forces an exact count (no effect on the live streaming diarizer).",
         valueName: "n"))
     var maxSpeakers: Int?
 
     @Option(name: .customLong("speaker-threshold"), help: ArgumentHelp(
-        "Offline/batch clustering sensitivity (0–1; default ~0.65). Lower splits "
-            + "speakers more readily, higher merges them. No effect on the live "
-            + "streaming EEND diarizer.",
+        "Offline/batch: how far apart (cosine distance, 0–1; default 0.8) two voices must be "
+            + "to stay separate speakers when no exact count is given. Lower splits more, "
+            + "higher merges more. No effect on the live streaming diarizer.",
         valueName: "0..1"))
     var speakerThreshold: Double?
+
+    @Flag(name: .customLong("diarize-only"), help: ArgumentHelp(
+        "With -i FILE: write the diarizer's speaker timeline (start, end, speaker) to the "
+            + "transcript output without transcribing, to inspect what the diarizer saw. "
+            + "Implies --speakers."))
+    var diarizeOnly = false
 
     // MARK: Advanced
 
@@ -532,8 +544,17 @@ struct Hark: ParsableCommand {
         // Speaker recognition value formats (flag-level). Cross-cutting checks
         // that depend on the resolved mode (which may come from env/config) —
         // e.g. "source needs two sources" — run in `resolveLivePlan`.
+        if let minSpeakers, minSpeakers < 1 {
+            throw ValidationError("--min-speakers must be a positive integer.")
+        }
         if let maxSpeakers, maxSpeakers < 1 {
             throw ValidationError("--max-speakers must be a positive integer.")
+        }
+        if let minSpeakers, let maxSpeakers, minSpeakers > maxSpeakers {
+            throw ValidationError("--min-speakers cannot exceed --max-speakers.")
+        }
+        if diarizeOnly && input == nil {
+            throw ValidationError("--diarize-only reads a file; give it with -i FILE.")
         }
         if let speakerThreshold, !(speakerThreshold > 0 && speakerThreshold <= 1) {
             throw ValidationError("--speaker-threshold must be between 0 and 1.")
@@ -1109,13 +1130,15 @@ struct Hark: ParsableCommand {
             systemCues = try BatchDiarization.diarizeToCues(
                 audioPath: systemPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
-                maxSpeakers: maxSpeakers, threshold: speakerThreshold)
+                minSpeakers: settings.minSpeakers, maxSpeakers: settings.maxSpeakers,
+                threshold: settings.speakerThreshold, cueLimits: settings.cueLimits)
         }
         if let labels, FileManager.default.fileExists(atPath: micPath) {
             micCues = try BatchDiarization.diarizeToCues(
                 audioPath: micPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
-                maxSpeakers: 1, threshold: speakerThreshold, relabel: labels.you)
+                minSpeakers: nil, maxSpeakers: nil, threshold: nil,
+                cueLimits: settings.cueLimits, relabel: labels.you)
         }
         let cues = BatchDiarization.mergeTracks(mic: micCues, system: systemCues)
         let format = transcriptFormat(for: transcriptDest)
@@ -1191,14 +1214,14 @@ struct Hark: ParsableCommand {
             try convert(sourcePath: sourcePath, to: audioDest, settings: settings)
         }
         if let transcriptDest = outputs.transcript {
-            if settings.speakers {
+            if settings.speakers || diarizeOnly {
                 try runBatchDiarization(
                     audioPath: sourcePath, to: transcriptDest, settings: settings)
             } else {
                 try transcribeAndWrite(
                     audioPath: sourcePath, to: transcriptDest, settings: settings)
             }
-        } else if settings.speakers {
+        } else if settings.speakers || diarizeOnly {
             throw HarkError.usage(
                 "--speakers labels a transcript; name one with -t FILE (or omit -a).")
         }
@@ -1212,6 +1235,18 @@ struct Hark: ParsableCommand {
     func runBatchDiarization(
         audioPath: String, to destination: TranscriptDestination, settings: ResolvedSettings
     ) throws {
+        let format = transcriptFormat(for: destination)
+        if diarizeOnly {
+            // No engine: the timeline is the output.
+            let cues = try BatchDiarization.timelineCues(
+                audioPath: audioPath, minSpeakers: settings.minSpeakers,
+                maxSpeakers: settings.maxSpeakers, threshold: settings.speakerThreshold)
+            try TranscribeEngine(
+                engineName: settings.engine, modelFlag: model, language: settings.language,
+                translate: settings.translate, format: format
+            ).write(TranscriptFormatting.render(cues: cues, fullText: "", format: format), to: destination)
+            return
+        }
         // Reject a file that cannot be attributed up front: the engine preflight
         // below can ask for Speech authorization, and the diarizer loads a model.
         let bySource = settings.speakerMode == .source
@@ -1227,7 +1262,6 @@ struct Hark: ParsableCommand {
             Log.notice(
                 "note: diarize-engine streaming applies to live capture; using the offline diarizer for files.")
         }
-        let format = transcriptFormat(for: destination)
         let rendered: String
         if bySource {
             let labels = settings.speakerLabels
@@ -1236,14 +1270,15 @@ struct Hark: ParsableCommand {
             let cues = try BatchDiarization.attributeChannels(
                 audioPath: audioPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
-                threshold: settings.speakerThreshold, labels: labels)
+                cueLimits: settings.cueLimits, labels: labels)
             rendered = TranscriptFormatting.render(
                 cues: cues, fullText: cues.map(\.text).joined(separator: " "), format: format)
         } else {
             rendered = try BatchDiarization.diarizeAndTranscribe(
                 audioPath: audioPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
-                maxSpeakers: settings.maxSpeakers, threshold: settings.speakerThreshold,
+                minSpeakers: settings.minSpeakers, maxSpeakers: settings.maxSpeakers,
+                threshold: settings.speakerThreshold, cueLimits: settings.cueLimits,
                 format: format)
         }
         try TranscribeEngine(
@@ -1285,7 +1320,7 @@ struct Hark: ParsableCommand {
         let format = transcriptFormat(for: destination)
         let transcriber = TranscribeEngine(
             engineName: settings.engine, modelFlag: model, language: settings.language,
-            translate: settings.translate, format: format)
+            translate: settings.translate, format: format, cueLimits: settings.cueLimits)
         let text = try transcriber.transcribe(audioPath: audioPath)
         try transcriber.write(text, to: destination)
     }

@@ -65,6 +65,9 @@ struct RootParsingTests {
         ["--system", "--capture-backend", "bogus", "-a", "x.wav"],  // bad backend
         ["--speakers", "--speaker-labels", "a,b,c"],  // labels must be a pair
         ["--speakers", "--max-speakers", "0"],        // must be positive
+        ["--speakers", "--min-speakers", "0"],        // must be positive
+        ["--min-speakers", "4", "--max-speakers", "2"],  // min above max
+        ["--diarize-only"],                           // needs -i FILE
         ["--speakers", "--speaker-threshold", "0"],   // out of (0,1]
         ["--speakers", "--speaker-threshold", "1.5"],  // out of (0,1]
         ["--vad-threshold", "0"],                      // out of (0,1]
@@ -137,6 +140,9 @@ struct RootParsingTests {
         ["--no-speakers"], ["--no-vad"], ["--no-gain"],         // three-state toggles
         ["--speaker-mode", "source"],                          // companion flags: ignored if speakers off
         ["--max-speakers", "2"], ["--diarize-engine", "offline"],
+        ["--min-speakers", "3", "--max-speakers", "3"],           // exact count
+        ["-i", "x.wav", "--diarize-only"],                        // timeline only
+        ["-i", "x.wav", "--diarize-only", "--min-speakers", "2"],
         ["-i", "x.wav", "--speakers"],                          // batch diarization
         ["-i", "x.wav", "--speakers", "--speaker-mode", "acoustic", "--diarize-engine", "offline"],
         ["--interactive"],                                      // live UI, transcript to terminal
@@ -1021,29 +1027,27 @@ struct SpeakerLabelingTests {
 
 @Suite("Offline diarizer config")
 struct OfflineDiarizerConfigTests {
-    @Test func keepsShortSpeech() {
-        let config = DiarizationDefaults.offlineConfig(maxSpeakers: nil, threshold: nil)
-        // FluidAudio's 1.0 s default dropped every sub-second utterance before
-        // the recognizer saw it; 0.55 s speech must now reach it.
-        #expect(config.minSpeechDuration < 0.55)
-        // …but stay above the pipeline's own ~0.17 s activity floor, so a brief
-        // noise burst still can't create a spurious speaker.
-        #expect(config.minSpeechDuration > 0.17)
+    @Test func defaultsFollowTheCommunityPipelineAndReembedShortTurns() {
+        let config = DiarizationDefaults.offlineConfig(minSpeakers: nil, maxSpeakers: nil)
+        // The pipeline keeps pyannote's own cut: --speaker-threshold is hark's
+        // utterance-clustering cut and lives on another distance scale.
+        #expect(config.clusteringThreshold == OfflineDiarizerConfig.Clustering.community.threshold)
+        #expect(config.clustering.numSpeakers == nil)
+        #expect(config.clustering.minSpeakers == nil && config.clustering.maxSpeakers == nil)
+        // A turn under the 1 s embedding floor must be re-embedded on its own
+        // span, or it is tie-broken onto the surrounding speaker.
+        #expect(config.zeroVoteReembed.enabled)
+        #expect(config.zeroVoteReembed.minDurationSeconds < 0.5)
     }
 
-    @Test func carriesClusteringAndSpeakerCap() {
-        let defaults = DiarizationDefaults.offlineConfig(maxSpeakers: nil, threshold: nil)
-        #expect(defaults.clusteringThreshold == Float(DiarizationDefaults.clusteringThreshold))
-        // hark's own behaviour, not FluidAudio's sentinel for automatic: with no
-        // --max-speakers we leave numClusters exactly as the vendor set it.
-        #expect(defaults.numClusters == DiarizerConfig().numClusters)
-        let capped = DiarizationDefaults.offlineConfig(maxSpeakers: 3, threshold: 0.5)
-        #expect(capped.clusteringThreshold == 0.5)
-        #expect(capped.numClusters == 3)
-        // Against the intended value, not `defaults`: both sides would fall back
-        // to FluidAudio's 1.0 s together and stay green if the assignment went.
-        #expect(capped.minSpeechDuration == Float(DiarizationDefaults.minSpeechDuration))
-        #expect(defaults.minSpeechDuration == Float(DiarizationDefaults.minSpeechDuration))
+    @Test func boundsMapToMinMaxAndEqualBoundsForceTheCount() {
+        let bounded = DiarizationDefaults.offlineConfig(minSpeakers: 2, maxSpeakers: 4)
+        #expect(bounded.clustering.minSpeakers == 2 && bounded.clustering.maxSpeakers == 4)
+        #expect(bounded.clustering.numSpeakers == nil)
+        let exact = DiarizationDefaults.offlineConfig(minSpeakers: 3, maxSpeakers: 3)
+        #expect(exact.clustering.numSpeakers == 3)
+        let floor = DiarizationDefaults.offlineConfig(minSpeakers: 2, maxSpeakers: nil)
+        #expect(floor.clustering.minSpeakers == 2 && floor.clustering.maxSpeakers == nil)
     }
 }
 
@@ -1068,7 +1072,7 @@ struct DiarizationIntegrationTests {
         guard ProcessInfo.processInfo.environment["HARK_TEST_DIARIZE"] == "1",
             Platform.isAppleSilicon
         else { return }
-        let diarizer = try SpeakerDiarizer.makeOffline(maxSpeakers: nil, threshold: nil)
+        let diarizer = try SpeakerDiarizer.makeOffline(minSpeakers: nil, maxSpeakers: nil, threshold: nil)
         var samples = [Float](repeating: 0, count: 16000 * 12)
         for i in 0..<samples.count {
             samples[i] = 0.3 * sin(2 * .pi * 200 * Float(i) / 16000)

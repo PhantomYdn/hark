@@ -18,6 +18,18 @@ struct ParakeetModel: Equatable, Sendable {
     var bundleName: String { cacheDirectory.lastPathComponent }
 }
 
+/// How parakeet groups its token timings into transcript cues in batch mode:
+/// a cue ends at sentence punctuation, after `pauseSeconds` without a token,
+/// or once it has run `maxSeconds`. The same `--segment-pause` /
+/// `--segment-window` values the live segmenter uses, so one pair of knobs
+/// shapes cue length on both paths.
+struct CueLimits: Equatable {
+    let maxSeconds: Double
+    let pauseSeconds: Double
+
+    static let `default` = CueLimits(maxSeconds: 12, pauseSeconds: 0.7)
+}
+
 /// On-device CoreML transcription via FluidAudio's Parakeet TDT models (PRD
 /// §6.6, engine `parakeet`). Apple-Silicon-first, ANE-accelerated. Variants
 /// (`ParakeetBackend.models`) cover 25 European languages (ultra — the
@@ -33,11 +45,13 @@ final class ParakeetBackend: TranscriptionBackend {
     private let versionLabel: String
     /// Decoder LSTM depth of the loaded variant (1 for tdt-ctc-110m, else 2).
     private let decoderLayers: Int
+    private let cueLimits: CueLimits
 
-    private init(manager: AsrManager, versionLabel: String, decoderLayers: Int) {
+    private init(manager: AsrManager, versionLabel: String, decoderLayers: Int, cueLimits: CueLimits) {
         self.manager = manager
         self.versionLabel = versionLabel
         self.decoderLayers = decoderLayers
+        self.cueLimits = cueLimits
     }
 
     var label: String { "parakeet (CoreML, \(versionLabel))" }
@@ -65,7 +79,9 @@ final class ParakeetBackend: TranscriptionBackend {
     /// Loads (and, on first use, downloads) the model. `model` selects the
     /// variant (see `models`); nil or an unknown name uses `defaultModel`.
     /// `language` only triggers a notice — Parakeet auto-detects within its set.
-    static func make(model: String?, language: String?) throws -> ParakeetBackend {
+    static func make(
+        model: String?, language: String?, cueLimits: CueLimits = .default
+    ) throws -> ParakeetBackend {
         try Platform.requireAppleSilicon(engine: "parakeet")
         if let warning = languageNotice(language) { Log.notice(warning) }
 
@@ -83,7 +99,8 @@ final class ParakeetBackend: TranscriptionBackend {
             return manager
         }
         return ParakeetBackend(
-            manager: manager, versionLabel: label, decoderLayers: version.decoderLayers)
+            manager: manager, versionLabel: label, decoderLayers: version.decoderLayers,
+            cueLimits: cueLimits)
     }
 
     func transcribe(
@@ -103,7 +120,7 @@ final class ParakeetBackend: TranscriptionBackend {
         }
         let fullText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return TranscriptFormatting.render(
-            cues: Self.cues(from: result), fullText: fullText, format: format)
+            cues: Self.cues(from: result, limits: cueLimits), fullText: fullText, format: format)
     }
 
     func shutdown() {}
@@ -187,33 +204,48 @@ final class ParakeetBackend: TranscriptionBackend {
         return "note: the parakeet engine auto-detects language; --language \(language) is ignored."
     }
 
-    /// Groups Parakeet token timings into transcript cues for srt/json. Breaks on
-    /// sentence-ending punctuation or after `maxSeconds`. Pure, for testing.
-    static func cues(from result: ASRResult, maxSeconds: Double = 8) -> [TranscriptCue] {
+    /// Groups Parakeet token timings into transcript cues for srt/json. A cue
+    /// runs from its first token's start to its last token's end and closes on
+    /// sentence-ending punctuation, on a gap of `limits.pauseSeconds` before the
+    /// next token, or before a token that would carry it past
+    /// `limits.maxSeconds`. The gap rule is what keeps a minute of music
+    /// followed by one stray token from becoming a minute-long cue: the cue
+    /// starts where the token does, not where the last sentence ended. Pure,
+    /// for testing.
+    static func cues(from result: ASRResult, limits: CueLimits = .default) -> [TranscriptCue] {
         guard let timings = result.tokenTimings, !timings.isEmpty else {
             return [TranscriptCue(start: 0, end: result.duration, text: result.text)]
         }
         let boundary = ASRConstants.sentencePieceWordBoundary
         var cues: [TranscriptCue] = []
-        var start = timings[0].startTime
+        var start: Double?
+        var end = 0.0
         var buffer = ""
 
-        func flush(end: Double) {
+        func flush() {
             let text = buffer.replacingOccurrences(of: boundary, with: " ")
                 .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { cues.append(TranscriptCue(start: start, end: end, text: text)) }
+            if let start, !text.isEmpty {
+                cues.append(TranscriptCue(start: start, end: end, text: text))
+            }
             buffer = ""
+            start = nil
         }
 
         for timing in timings {
-            buffer += timing.token
-            let endsSentence = timing.token.last.map { ".!?。".contains($0) } ?? false
-            if endsSentence || (timing.endTime - start) >= maxSeconds {
-                flush(end: timing.endTime)
-                start = timing.endTime
+            if let open = start {
+                if timing.startTime - end >= limits.pauseSeconds
+                    || timing.endTime - open > limits.maxSeconds
+                {
+                    flush()
+                }
             }
+            if start == nil { start = timing.startTime }
+            buffer += timing.token
+            end = max(end, timing.endTime)
+            if timing.token.last.map({ ".!?。".contains($0) }) ?? false { flush() }
         }
-        flush(end: timings.last!.endTime)
+        flush()
         return cues
     }
 }

@@ -41,8 +41,13 @@ struct ResolvedSettings: Equatable {
     let speakerMode: SpeakerMode
     let speakerLabels: SpeakerLabels
     let diarizeEngine: DiarizeEngine
+    let minSpeakers: Int?
     let maxSpeakers: Int?
     let speakerThreshold: Double?
+
+    /// Cue length limits for batch engines that build cues from token timings
+    /// (parakeet): the live `segment-pause` / `segment-window` pair, reused.
+    var cueLimits: CueLimits { CueLimits(maxSeconds: segmentWindow, pauseSeconds: segmentPause) }
 
     /// Default TCP port the `--remote-control` agent binds when the flag is given
     /// without an explicit `[host:]port` (an explicit value still wins).
@@ -137,6 +142,9 @@ struct ResolvedSettings: Equatable {
         let diarizeEngine = try choice(
             a.diarizeEngine, .diarizeEngine, config.diarizeEngine,
             allowed: ["auto", "streaming", "offline"], default: DiarizeEngine.auto)
+        let minSpeakers = try int(a.minSpeakers, .minSpeakers, config.minSpeakers) {
+            try ConfigKey.parsePositiveInt($0, .minSpeakers)
+        }
         let maxSpeakers = try int(a.maxSpeakers, .maxSpeakers, config.maxSpeakers) {
             try ConfigKey.parsePositiveInt($0, .maxSpeakers)
         }
@@ -159,8 +167,9 @@ struct ResolvedSettings: Equatable {
             silenceThreshold: silenceThreshold, useVad: useVad, vadThreshold: vadThreshold,
             segmentPause: segmentPause, segmentWindow: segmentWindow,
             useGain: useGain, speakers: speakers, speakerMode: speakerMode,
-            speakerLabels: speakerLabels, diarizeEngine: diarizeEngine, maxSpeakers: maxSpeakers,
-            speakerThreshold: speakerThreshold, remoteControlPort: remoteControlPort)
+            speakerLabels: speakerLabels, diarizeEngine: diarizeEngine, minSpeakers: minSpeakers,
+            maxSpeakers: maxSpeakers, speakerThreshold: speakerThreshold,
+            remoteControlPort: remoteControlPort)
     }
 
     /// Validates merged values that flag-only `Hark.validate()` cannot see
@@ -184,6 +193,10 @@ struct ResolvedSettings: Equatable {
         }
         guard ConfigKey.isValidSegmentWindow(segmentWindow) else {
             throw HarkError.usage("segment-window must be between 2 and 60 seconds.")
+        }
+        if let minSpeakers, let maxSpeakers, minSpeakers > maxSpeakers {
+            throw HarkError.usage(
+                "min-speakers (\(minSpeakers)) cannot exceed max-speakers (\(maxSpeakers)).")
         }
     }
 
