@@ -1,9 +1,9 @@
 class Hark < Formula
   desc "Capture and transcribe microphone and system audio on macOS"
   homepage "https://github.com/PhantomYdn/hark"
-  url "https://github.com/PhantomYdn/hark/releases/download/v0.5.0/hark-0.5.0-macos-arm64.tar.gz"
-  version "0.5.0"
-  sha256 "98dc730f17f57fb0f209ba0f6a1e98729be5aa3d0743c71359fb1df4426f67bd"
+  url "https://github.com/PhantomYdn/hark/releases/download/v0.6.0/hark-0.6.0-macos-arm64.tar.gz"
+  version "0.6.0"
+  sha256 "c92b929f648b3aed86079955bd71b1e8690b9fde322db231700f38f037fd33d7"
   license "MIT"
 
   # Prebuilt Apple Silicon binary; Intel users build from source (see README).
