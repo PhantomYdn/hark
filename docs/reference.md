@@ -269,6 +269,20 @@ hark config show                        # every setting, its value, and its SOUR
 The config file is plain JSON and hand-editable; `hark config path` prints its
 location.
 
+### Interactive shortcuts
+
+`shortcut.<k>` keys (one letter or digit; `m` and `y` are built-in) bind a key
+in `--interactive` to a shell command. They sit outside the typed registry: no
+flag, no `$HARK_*` variable. On keypress the transcript so far is the command's
+stdin and its path is `$HARK_TRANSCRIPT`; the output is printed when the command
+exits (first 200 lines).
+
+```sh
+hark config set shortcut.w 'fabric-ai -p summarize'
+hark config set shortcut.s 'wc -lm'
+hark config unset shortcut.s
+```
+
 ## Subcommands
 
 ```sh

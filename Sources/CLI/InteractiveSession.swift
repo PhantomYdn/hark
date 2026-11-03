@@ -46,6 +46,9 @@ final class InteractiveSession: @unchecked Sendable {
     private let hasMic: Bool
     private let transcriptLog: TranscriptLog?
     private let clipboard: ClipboardWriter
+    /// User-defined `shortcut.<k>` bindings by key (PRD §6.9) and their runner.
+    private let shortcuts: [Character: ShortcutBinding]
+    private let shortcutRunner: ShortcutRunner
     private let lock = NSLock()
     private var original = termios()
     private var rawEnabled = false
@@ -55,12 +58,16 @@ final class InteractiveSession: @unchecked Sendable {
         control: CaptureControl,
         hasMic: Bool,
         transcriptLog: TranscriptLog?,
-        clipboard: ClipboardWriter = SystemClipboard()
+        clipboard: ClipboardWriter = SystemClipboard(),
+        shortcuts: [ShortcutBinding] = [],
+        shortcutRunner: ShortcutRunner = ProcessShortcutRunner()
     ) {
         self.control = control
         self.hasMic = hasMic
         self.transcriptLog = transcriptLog
         self.clipboard = clipboard
+        self.shortcuts = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.key, $0) })
+        self.shortcutRunner = shortcutRunner
     }
 
     /// Enables cbreak mode and starts the key-reader thread. Prints the control
@@ -89,15 +96,20 @@ final class InteractiveSession: @unchecked Sendable {
         thread.name = "hark.interactive.keys"
         thread.start()
 
-        note(Self.controlsHint(hasMic: hasMic))
+        note(Self.controlsHint(hasMic: hasMic, shortcutKeys: shortcuts.keys.sorted()))
     }
 
     /// The controls hint line. `[m] mute` is shown only when a microphone is
-    /// part of the capture; `[y] yank transcript` always appears.
-    static func controlsHint(hasMic: Bool) -> String {
+    /// part of the capture; `[y] yank transcript` always appears; bound
+    /// shortcut keys are listed when configured.
+    static func controlsHint(hasMic: Bool, shortcutKeys: [Character] = []) -> String {
         var parts = ["[space] pause/resume"]
         if hasMic { parts.append("[m] mute mic") }
         parts.append("[y] yank transcript")
+        if !shortcutKeys.isEmpty {
+            let keys = shortcutKeys.map(String.init).joined(separator: "/")
+            parts.append("[\(keys)] shortcut\(shortcutKeys.count == 1 ? "" : "s")")
+        }
         parts.append("[enter] finish")
         parts.append("[ctrl-c] stop")
         return "controls: " + parts.joined(separator: "   ")
@@ -136,9 +148,37 @@ final class InteractiveSession: @unchecked Sendable {
             control.stop()
             return true
         default:
-            break
+            if let key = ShortcutBinding.key(forKeypress: byte), let binding = shortcuts[key] {
+                runShortcut(binding)
+            }
         }
         return false
+    }
+
+    /// Runs a shortcut command on the transcript so far (PRD §6.9): the
+    /// snapshot goes to the child's stdin and `$HARK_TRANSCRIPT`; its output is
+    /// reported when it exits. Works while paused; a second press while the
+    /// first command still runs starts another.
+    private func runShortcut(_ binding: ShortcutBinding) {
+        let text = transcriptLog?.text ?? ""
+        guard !text.isEmpty else {
+            note("nothing to pass yet")
+            return
+        }
+        do {
+            try shortcutRunner.run(binding, transcript: text) { [weak self] outcome in
+                self?.report(outcome.report(for: binding))
+            }
+            note("\(binding.label) started")
+        } catch {
+            note("\(binding.label): \(error)")
+        }
+    }
+
+    /// Prints a shortcut's report as one write, so concurrent notices cannot
+    /// interleave inside it.
+    private func report(_ lines: [String]) {
+        FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
     }
 
     /// Copies the transcript captured so far to the clipboard (PRD §6.9).
@@ -167,6 +207,7 @@ final class InteractiveSession: @unchecked Sendable {
         if wasRaw {
             tcsetattr(STDIN_FILENO, TCSANOW, &original)
         }
+        shortcutRunner.cleanup()
     }
 
     deinit {

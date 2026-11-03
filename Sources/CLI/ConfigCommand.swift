@@ -43,12 +43,21 @@ struct ConfigShow: ParsableCommand {
         try runMapped(verbose: options.verbose) {
             let config = Configuration.load()
             let environment = ProcessInfo.processInfo.environment
-            let resolved = Configuration.settings.map { setting -> (key: String, entry: Entry) in
+            var resolved = Configuration.settings.map { setting -> (key: String, entry: Entry) in
                 let (value, source) = setting.effective(config: config, env: environment)
                 return (
                     setting.key.rawValue,
                     Entry(value: value, source: source.rawValue, description: setting.summary)
                 )
+            }
+            // Shortcut bindings follow the typed settings (PRD §6.9).
+            for binding in config.shortcutBindings {
+                resolved.append((
+                    binding.configKey,
+                    Entry(
+                        value: binding.command, source: "config",
+                        description: "Interactive shortcut: runs this command on the transcript so far.")
+                ))
             }
             if json {
                 let object = Dictionary(uniqueKeysWithValues: resolved.map { ($0.key, $0.entry) })
@@ -83,6 +92,13 @@ struct ConfigSet: ParsableCommand {
     /// True if the captured arguments are a help request. Needed because
     /// `.captureForPassthrough` (used so values like `-40` aren't parsed as
     /// options) also swallows `-h`/`--help` before ArgumentParser sees them.
+    /// The validated shortcut binding when `key` is `shortcut.<k>`; nil for a
+    /// typed key. A malformed shortcut key or blank command is a usage error.
+    static func shortcut(key: String, command: String) throws -> ShortcutBinding? {
+        guard try ShortcutBinding.key(fromConfigKey: key) != nil else { return nil }
+        return try ShortcutBinding.make(configKey: key, command: command)
+    }
+
     static func isHelpRequest(_ arguments: [String]) -> Bool {
         arguments.contains("-h") || arguments.contains("--help")
     }
@@ -98,6 +114,14 @@ struct ConfigSet: ParsableCommand {
             }
             let key = arguments[0]
             let value = arguments[1]
+            // Interactive shortcuts (PRD §6.9) live outside the typed registry.
+            if let binding = try Self.shortcut(key: key, command: value) {
+                var config = Configuration.load()
+                config.shortcuts[binding.key] = binding.command
+                try config.save()
+                print("\(binding.configKey) = \(binding.command)")
+                return
+            }
             guard let configKey = ConfigKey(rawValue: key) else {
                 throw HarkError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
             }
@@ -175,6 +199,15 @@ struct ConfigUnset: ParsableCommand {
 
     func run() throws {
         try runMapped(verbose: options.verbose) {
+            if let shortcut = try ShortcutBinding.key(fromConfigKey: key) {
+                var config = Configuration.load()
+                guard config.shortcuts.removeValue(forKey: shortcut) != nil else {
+                    throw HarkError.usage("shortcut.\(shortcut) is not set.")
+                }
+                try config.save()
+                print("unset shortcut.\(shortcut)")
+                return
+            }
             guard let configKey = ConfigKey(rawValue: key) else {
                 throw HarkError.usage("unknown config key '\(key)' (known: \(ConfigKey.knownNames)).")
             }

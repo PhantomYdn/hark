@@ -6,6 +6,16 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+### Added
+- Interactive shortcuts: `hark config set shortcut.<k> '<command>'` binds a
+  letter or digit in `--interactive`. Pressing it snapshots the transcript so
+  far (speaker labels included) and runs the command with the snapshot on its
+  stdin and its path in `$HARK_TRANSCRIPT`, without stalling capture; the
+  command's output is shown as a block when it finishes (first 200 lines).
+  `m` and `y` cannot be rebound; `hark config show` lists the bindings and
+  `config unset` removes one. Snapshots live until the session ends, so a
+  command may hand the path to a `tmux` pane that outlives it.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added

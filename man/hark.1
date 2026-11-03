@@ -402,9 +402,14 @@ pauses/resumes (the paused interval is not recorded),
 .B m
 mutes/unmutes the microphone (only the mic is silenced; recording continues),
 .B y
-yanks the transcript so far to the clipboard, and
+yanks the transcript so far to the clipboard,
 .B Enter
-finishes (Ctrl\-C also stops). Needs a TTY; not combined with
+finishes (Ctrl\-C also stops), and any key bound with
+.B "hark config set shortcut.<k> <command>"
+runs that shell command with the transcript so far on its stdin and its path in
+.BR $HARK_TRANSCRIPT ,
+showing the command's output when it exits while capture continues.
+Needs a TTY; not combined with
 .B \-i
 or stdout output.
 .TP

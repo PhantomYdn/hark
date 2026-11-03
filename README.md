@@ -351,6 +351,8 @@ engine/source/format, and single keys control the session:
   preserved)
 - **y** — yank: copy the transcript captured so far to the clipboard (local only)
 - **Enter** — finish and finalise the file (Ctrl-C also stops)
+- **your own keys** — `shortcut.<k>` bindings run a shell command on the
+  transcript so far (see below)
 
 ```sh
 hark --interactive --system --mix -a meeting.m4a            # watch the transcript live
@@ -359,6 +361,27 @@ hark --interactive --system --mix -a meeting.m4a -t meeting.txt  # …and persis
 
 Interactive mode needs a real terminal (stdin + stdout are a TTY) and can't be
 combined with `-i` or stdout output (`-a -`/`-t -`).
+
+### Shortcuts
+
+Bind a letter or digit to a shell command with `hark config set shortcut.<k>`.
+Pressing the key snapshots the transcript so far (speaker labels included) and
+runs the command with the snapshot on its **stdin** and its path in
+`$HARK_TRANSCRIPT`; the command's output is shown when it finishes, while the
+capture keeps going. Press again any time, even while paused.
+
+```sh
+hark config set shortcut.s 'wc -lm'                        # lines and characters so far
+hark config set shortcut.w 'fabric-ai -p summarize'        # one-paragraph AI recap
+hark config set shortcut.q 'fabric-ai -p extract_questions'
+hark config set shortcut.a 'fabric-ai -p extract_action_items'
+hark config set shortcut.t 'tmux split-window -h "fabric-ai -p summarize < $HARK_TRANSCRIPT | less"'
+hark config unset shortcut.t
+```
+
+`m` and `y` are built-in and cannot be rebound. A command that should stay
+quiet ends in `>/dev/null`. Shortcuts are keyboard-only; the remote-control
+API does not expose them.
 
 ## Remote control
 

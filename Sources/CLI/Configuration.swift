@@ -49,6 +49,10 @@ struct Configuration: Codable, Equatable {
     // Remote control
     var remoteControlPort: Int?
 
+    // Interactive shortcuts (PRD §6.9): key letter → command, stored flat as
+    // `"shortcut.<k>"` beside the typed keys. Not part of the settings registry.
+    var shortcuts: [Character: String] = [:]
+
     /// JSON keys mirror the CLI flag/key names (kebab-case) so the file is
     /// hand-editable with familiar names.
     enum CodingKeys: String, CodingKey {
@@ -72,6 +76,11 @@ struct Configuration: Codable, Equatable {
         case maxSpeakers = "max-speakers"
         case speakerThreshold = "speaker-threshold"
         case remoteControlPort = "remote-control-port"
+    }
+
+    /// The shortcut bindings in key order.
+    var shortcutBindings: [ShortcutBinding] {
+        shortcuts.keys.sorted().map { ShortcutBinding(key: $0, command: shortcuts[$0]!) }
     }
 
     /// `~/.hark/config.json`.
@@ -232,6 +241,100 @@ struct Configuration: Codable, Equatable {
     func entries() -> [(key: String, value: String)] {
         ConfigKey.allCases.compactMap { key in
             displayValue(for: key).map { (key.rawValue, $0) }
+        }
+    }
+}
+
+// MARK: Codable with the free-form `shortcut.<k>` keys
+
+extension Configuration {
+    /// A JSON key that is not in `CodingKeys`: the `shortcut.<k>` bindings.
+    private struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    /// Decodes the typed keys as synthesized, then every `shortcut.<k>` key.
+    /// A malformed binding (bad key, blank command) is skipped with a notice
+    /// rather than failing the whole file; other unknown keys are ignored as
+    /// before.
+    init(from decoder: Decoder) throws {
+        let typed = try decoder.container(keyedBy: CodingKeys.self)
+        model = try typed.decodeIfPresent(String.self, forKey: .model)
+        engine = try typed.decodeIfPresent(String.self, forKey: .engine)
+        language = try typed.decodeIfPresent(String.self, forKey: .language)
+        translate = try typed.decodeIfPresent(Bool.self, forKey: .translate)
+        device = try typed.decodeIfPresent(String.self, forKey: .device)
+        directory = try typed.decodeIfPresent(String.self, forKey: .directory)
+        ifExists = try typed.decodeIfPresent(String.self, forKey: .ifExists)
+        captureBackend = try typed.decodeIfPresent(String.self, forKey: .captureBackend)
+        rate = try typed.decodeIfPresent(Int.self, forKey: .rate)
+        bits = try typed.decodeIfPresent(Int.self, forKey: .bits)
+        channels = try typed.decodeIfPresent(Int.self, forKey: .channels)
+        tracks = try typed.decodeIfPresent(String.self, forKey: .tracks)
+        keepAwake = try typed.decodeIfPresent(Bool.self, forKey: .keepAwake)
+        silenceThreshold = try typed.decodeIfPresent(Double.self, forKey: .silenceThreshold)
+        vad = try typed.decodeIfPresent(Bool.self, forKey: .vad)
+        vadThreshold = try typed.decodeIfPresent(Double.self, forKey: .vadThreshold)
+        segmentPause = try typed.decodeIfPresent(Double.self, forKey: .segmentPause)
+        segmentWindow = try typed.decodeIfPresent(Double.self, forKey: .segmentWindow)
+        gain = try typed.decodeIfPresent(Bool.self, forKey: .gain)
+        speakers = try typed.decodeIfPresent(Bool.self, forKey: .speakers)
+        speakerMode = try typed.decodeIfPresent(String.self, forKey: .speakerMode)
+        speakerLabels = try typed.decodeIfPresent(String.self, forKey: .speakerLabels)
+        diarizeEngine = try typed.decodeIfPresent(String.self, forKey: .diarizeEngine)
+        minSpeakers = try typed.decodeIfPresent(Int.self, forKey: .minSpeakers)
+        maxSpeakers = try typed.decodeIfPresent(Int.self, forKey: .maxSpeakers)
+        speakerThreshold = try typed.decodeIfPresent(Double.self, forKey: .speakerThreshold)
+        remoteControlPort = try typed.decodeIfPresent(Int.self, forKey: .remoteControlPort)
+
+        let free = try decoder.container(keyedBy: AnyKey.self)
+        for key in free.allKeys where key.stringValue.lowercased().hasPrefix(ShortcutBinding.prefix) {
+            let command = (try? free.decode(String.self, forKey: key)) ?? ""
+            do {
+                let binding = try ShortcutBinding.make(configKey: key.stringValue, command: command)
+                shortcuts[binding.key] = binding.command
+            } catch {
+                Log.notice("warning: ignoring config key '\(key.stringValue)': \(error)")
+            }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var typed = encoder.container(keyedBy: CodingKeys.self)
+        try typed.encodeIfPresent(model, forKey: .model)
+        try typed.encodeIfPresent(engine, forKey: .engine)
+        try typed.encodeIfPresent(language, forKey: .language)
+        try typed.encodeIfPresent(translate, forKey: .translate)
+        try typed.encodeIfPresent(device, forKey: .device)
+        try typed.encodeIfPresent(directory, forKey: .directory)
+        try typed.encodeIfPresent(ifExists, forKey: .ifExists)
+        try typed.encodeIfPresent(captureBackend, forKey: .captureBackend)
+        try typed.encodeIfPresent(rate, forKey: .rate)
+        try typed.encodeIfPresent(bits, forKey: .bits)
+        try typed.encodeIfPresent(channels, forKey: .channels)
+        try typed.encodeIfPresent(tracks, forKey: .tracks)
+        try typed.encodeIfPresent(keepAwake, forKey: .keepAwake)
+        try typed.encodeIfPresent(silenceThreshold, forKey: .silenceThreshold)
+        try typed.encodeIfPresent(vad, forKey: .vad)
+        try typed.encodeIfPresent(vadThreshold, forKey: .vadThreshold)
+        try typed.encodeIfPresent(segmentPause, forKey: .segmentPause)
+        try typed.encodeIfPresent(segmentWindow, forKey: .segmentWindow)
+        try typed.encodeIfPresent(gain, forKey: .gain)
+        try typed.encodeIfPresent(speakers, forKey: .speakers)
+        try typed.encodeIfPresent(speakerMode, forKey: .speakerMode)
+        try typed.encodeIfPresent(speakerLabels, forKey: .speakerLabels)
+        try typed.encodeIfPresent(diarizeEngine, forKey: .diarizeEngine)
+        try typed.encodeIfPresent(minSpeakers, forKey: .minSpeakers)
+        try typed.encodeIfPresent(maxSpeakers, forKey: .maxSpeakers)
+        try typed.encodeIfPresent(speakerThreshold, forKey: .speakerThreshold)
+        try typed.encodeIfPresent(remoteControlPort, forKey: .remoteControlPort)
+
+        var free = encoder.container(keyedBy: AnyKey.self)
+        for binding in shortcutBindings {
+            try free.encode(binding.command, forKey: AnyKey(stringValue: binding.configKey))
         }
     }
 }

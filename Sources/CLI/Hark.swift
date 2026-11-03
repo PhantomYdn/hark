@@ -339,8 +339,10 @@ struct Hark: ParsableCommand {
         single-key controls — space to pause/resume (the paused interval is \
         not recorded), m to mute/unmute the mic (only the mic is silenced; \
         recording continues), y to yank the transcript so far to the clipboard, \
-        Enter to finish (Ctrl-C also stops). Needs a terminal; not combined \
-        with -i or stdout output.
+        Enter to finish (Ctrl-C also stops), and any key bound with 'hark config \
+        set shortcut.<k> <command>' to run that command on the transcript so far \
+        (on its stdin and at $HARK_TRANSCRIPT; output shown when it exits). \
+        Needs a terminal; not combined with -i or stdout output.
         """)
     var interactive = false
 
@@ -777,7 +779,8 @@ struct Hark: ParsableCommand {
             let control = CaptureControl()
             captureEngine.control = control
             let ui = InteractiveSession(
-                control: control, hasMic: hasMic, transcriptLog: transcriptLog)
+                control: control, hasMic: hasMic, transcriptLog: transcriptLog,
+                shortcuts: Configuration.load().shortcutBindings)
             ui.start()
             interactiveSession = ui
         } else if let externalControl {

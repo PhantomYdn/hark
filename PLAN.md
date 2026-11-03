@@ -557,11 +557,12 @@ Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #
 
 ### Phase 13.1 — `shortcut.<k>` (Feature 24, US13)
 
-- [ ] Free-form config keys: `shortcut.<k>` storage + `config set/unset/show` support (deliberately outside the typed `ConfigKey` registry — needs a dictionary field on `Configuration` and dynamic-key handling in `ConfigCommand`)
-- [ ] Validation: single `[a-z0-9]` (stored lowercase), reserved keys `m`/`y` rejected, multi-character suffix and empty command are usage errors
-- [ ] Runtime: snapshot the live caption log to a temp file, spawn detached `/bin/sh -c` with `$HARK_TRANSCRIPT` set on the child, stdio → `/dev/null`, one-line stderr ack, temp file removed when the child exits, re-entrant, works while paused
-- [ ] Empty log → `nothing to pass yet` notice, no spawn; controls hint lists bound keys
-- [ ] Tests (binding parse/validation, reserved rejection, snapshot content, spawn via an injected runner, hint text) + README/man/reference docs + US13 criteria
+- [x] Free-form config keys: `Configuration.shortcuts` (`[Character: String]`) stored flat as `"shortcut.<k>"` beside the typed keys via a custom `Codable` extension (the memberwise init stays); `config set/unset/show` (table and `--json`) handle them before the typed registry (`ShortcutBinding`, `Shortcuts.swift`)
+- [x] Validation: single `[a-z0-9]` (stored lowercase), reserved keys `m`/`y` rejected, multi-character suffix and empty command are usage errors; a malformed binding in a hand-edited file is skipped with a notice
+- [x] Runtime (`ProcessShortcutRunner`): snapshot the caption log to a per-session temp directory, `/bin/sh -c` with the snapshot on the child's stdin and its path in `$HARK_TRANSCRIPT`, stdout+stderr collected on a drain thread (stdin fed on another, so a `cat`-like command cannot deadlock) and printed as a `── shortcut.w finished ──` block capped at 200 lines when it exits; `started` ack; re-entrant; works while paused; snapshots removed at session end (2026-11-02 decision: a `tmux split-window` pane opened by the command must still find the file). Replaces the PRD's original stdio-to-`/dev/null` design, which hid the output the use cases need (line counts, a one-paragraph summary)
+- [x] Empty log → `nothing to pass yet` notice, no spawn; controls hint lists bound keys (`[a/w] shortcuts`)
+- [x] Tests (`ShortcutTests`: parse/reserved/validation, config round-trip and malformed-skip, `config set` key routing, session dispatch via `FakeShortcutRunner`, hint text, real `/bin/sh` runner incl. a 500 KB echo) + README/man/reference docs + US13 criteria
+- [ ] Delta since last press: a second file with only the lines added since this key last fired (`$HARK_TRANSCRIPT_NEW`), for "questions since I last looked" (deferred 2026-11-02; the log is line-indexed so it is a per-key cursor)
 
 ### Phase 13.2 — Combined interactive agent (Feature 25, US14)
 
