@@ -372,10 +372,10 @@ capture keeps going. Press again any time, even while paused.
 
 ```sh
 hark config set shortcut.s 'wc -lm'                        # lines and characters so far
-hark config set shortcut.w 'fabric-ai -p summarize'        # one-paragraph AI recap
+hark config set shortcut.w 'fabric-ai -p summarize_micro'  # short AI recap
 hark config set shortcut.q 'fabric-ai -p extract_questions'
-hark config set shortcut.a 'fabric-ai -p extract_action_items'
-hark config set shortcut.t 'tmux split-window -h "fabric-ai -p summarize < $HARK_TRANSCRIPT | less"'
+hark config set shortcut.a 'fabric-ai -p summarize_meeting' # tasks, decisions, next steps
+hark config set shortcut.t 'tmux split-window -h -d "fabric-ai -p summarize_micro < $HARK_TRANSCRIPT | less"'
 hark config unset shortcut.t
 ```
 
