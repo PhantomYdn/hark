@@ -6,6 +6,8 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-02
+
 ### Added
 - Interactive shortcuts: `hark config set shortcut.<k> '<command>'` binds a
   letter or digit in `--interactive`. Pressing it snapshots the transcript so
@@ -457,6 +459,7 @@ transcribes them, and composes into Unix pipelines.
 - The release binary is signed (Developer ID) and notarized, so it passes
   Gatekeeper; its stable code identity keeps privacy grants across upgrades.
 
+[0.7.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.7.0
 [0.6.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.6.0
 [0.5.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.5.0
 [0.4.3]: https://github.com/PhantomYdn/hark/releases/tag/v0.4.3
