@@ -134,6 +134,7 @@ jobs:
             echo
             echo '```sh'
             echo "brew tap PhantomYdn/hark https://github.com/PhantomYdn/hark"
+            echo "brew trust phantomydn/hark"
             echo "brew install hark"
             echo '```'
             echo

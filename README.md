@@ -158,6 +158,7 @@ More copy-and-adapt wrappers live in [examples/](examples/) — including
 
 ```sh
 brew tap PhantomYdn/hark https://github.com/PhantomYdn/hark
+brew trust phantomydn/hark
 brew install hark
 ```
 
@@ -165,9 +166,10 @@ This installs the prebuilt arm64 binary and the man page, and pulls in
 `whisper-cpp` for the default engine. Homebrew downloads aren't quarantined, so
 no Gatekeeper steps are needed.
 
-> Some Homebrew setups prompt you to trust a third-party tap — run `brew tap` as
-> above (and `brew trust phantomydn/hark` if asked). The fully-qualified name
-> `phantomydn/hark/hark` also works.
+The `brew trust` step is required on current Homebrew (7.x), which refuses to
+load formulae from third-party taps until you trust them once; older versions
+accept the extra command harmlessly. If `brew install hark` ever resolves to a
+different formula, use the fully-qualified name `phantomydn/hark/hark`.
 
 ### Build from source (Intel, or to hack on it)
 
