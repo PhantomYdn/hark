@@ -284,6 +284,10 @@ input; it is normalized to 16 kHz mono internally.
 
 ## Speaker labels
 
+<p align="center">
+  <img src="assets/demo-speakers.gif" alt="hark transcribing a two-person call with Speaker 1 / Speaker 2 labels, then as subtitles" width="820">
+</p>
+
 `--speakers` (alias `--diarize`) labels each transcript segment with who spoke,
 two ways that combine:
 
@@ -506,7 +510,7 @@ and `hark-dictate` (speak → clipboard). See [examples/README.md](examples/READ
 make build      # swift build
 make test       # swift test (with a CLT Testing.framework path workaround)
 make release    # swift build -c release
-make demo       # render the README demo GIF (needs: brew install vhs ffmpeg)
+make demo       # render the README demo GIFs (needs: brew install vhs ffmpeg)
 ```
 
 Modular SwiftPM targets: `DeviceManager`, `TapEngine`, `Encoders`, `CLI`. Many
