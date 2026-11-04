@@ -137,6 +137,7 @@ More copy-and-adapt wrappers live in [examples/](examples/) — including
 - [Recipes](#recipes)
 - [Development](#development)
 - [Project documents](#project-documents)
+- [FAQ](#faq)
 - [Legal & responsible use](#legal--responsible-use)
 - [License](#license)
 
@@ -522,6 +523,49 @@ Speech authorization) and skip cleanly when absent. Contributions welcome — se
 - [docs/remote-control.md](docs/remote-control.md) — remote-control HTTP API
 - [docs/legal.md](docs/legal.md) — export classification & responsible use
 - [CHANGELOG.md](CHANGELOG.md) — release notes
+
+## FAQ
+
+**Why not BlackHole / Loopback / Audio Hijack?** Those route audio through a
+virtual device or a GUI app. hark uses the Core Audio process-tap API (macOS
+14.4+) directly: no driver to install, no device to select in every app, per-app
+capture and `--exclude-app`, and it is scriptable and free.
+
+**How is this different from MacWhisper, superwhisper and the other offline
+transcription apps?** They are GUIs. hark is a Unix tool: audio and transcript
+stream over stdin/stdout, it runs unattended and headless, and it can be driven
+from scripts or over HTTP. Use it where you would use `ffmpeg`, not where you
+would use a menu-bar app.
+
+**Does anything leave my machine?** No. Capture, transcription and speaker
+labelling run on-device. The only network access is downloading a model you
+asked for (`hark models download`). No telemetry.
+
+**Which engine should I pick?** `parakeet` for English and 25 European
+languages on Apple Silicon (fast, no extra install); `whisper` for the widest
+language list, translation, or Intel; `apple` for zero-download dictation;
+`whisperkit` for CoreML Whisper. See [Transcription engines](#transcription-engines).
+
+**Does it run on Intel Macs?** Yes, built from source. The prebuilt Homebrew
+binary is arm64 only, and the CoreML engines (`parakeet`, `whisperkit`) and
+acoustic diarization need Apple Silicon; `whisper`, `apple` and `You`/`Others`
+labels work on Intel.
+
+**Why macOS 14.4 or later?** Process taps appeared in 14.4. Older systems have
+no supported way to capture another app's audio without a virtual device.
+
+**How do speaker labels work?** Two layers: in a `--mix` capture your mic is
+`You` and the call is `Others` (deterministic, no model); within a stream,
+voices are separated into `Speaker 1..N` by CoreML embeddings clustered in
+hark. Pass `--min-speakers`/`--max-speakers` when you know the cast.
+See [Speaker labels](#speaker-labels).
+
+**Can it summarize with Ollama, OpenAI, Claude?** Not itself, by design. Pipe
+the transcript into whatever you use: `hark --system --mix -t - | fabric-ai -p
+summarize_meeting`, or any script reading stdin.
+
+**Is recording a call legal?** That depends on where you and the other
+parties are. See [Legal & responsible use](#legal--responsible-use).
 
 ## Legal & responsible use
 
