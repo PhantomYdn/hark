@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo.gif" alt="hark in action: list devices, transcribe a file, transcode, show config" width="820">
+  <img src="assets/demo.gif" alt="hark in action: list devices, transcribe a call with speaker labels, write subtitles, transcode" width="820">
 </p>
 
 **`hark`** is the verb — *"listen and transcribe."* It captures your microphone,

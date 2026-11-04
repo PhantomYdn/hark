@@ -9,9 +9,11 @@ All notable changes to Hark are documented here. The format is loosely based on
 ### Added
 - README FAQ answering the usual questions (virtual drivers, GUI apps, Intel,
   macOS 14.4, engines, diarization, legality).
-- Speaker-label demo: `demo/speakers.tape` + `demo/standup.m4a` render
-  `assets/demo-speakers.gif` (`make demo-speakers`; `make demo` renders both
-  GIFs). Shown in the README's Speaker labels section.
+- Demo refresh: `demo/standup.m4a`, a two-voice sample, is transcribed with
+  speaker labels and as subtitles in the README hero GIF (`demo/hark.tape`);
+  `demo/speakers.tape` renders the shorter `assets/demo-speakers.gif` shown in
+  the Speaker labels section (`make demo` renders both, `make demo-speakers`
+  the second only).
 
 ## [0.7.0] - 2026-11-02
 
