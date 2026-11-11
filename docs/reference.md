@@ -146,6 +146,15 @@ The directory must already exist.
 by engine), `--translate` / `--no-translate`,
 `--transcript-format txt|srt|json`.
 
+### Progress
+
+Batch transcription of a file draws a progress line on stderr when stderr is a
+terminal: percent complete and a linear ETA, driven by the engine's own
+position (the `whisperkit` engine reports the timestamp of its last decoded
+segment). A redirected stderr (a log, `2>file`) never sees the line, stdout is
+untouched, and no flag is needed. Engines without measurable progress
+(`whisper`, `apple`, `parakeet`) show nothing, as before.
+
 ### Quiet captures
 
 Live transcription covers the whole timeline — an on-device VAD (Apple Silicon)

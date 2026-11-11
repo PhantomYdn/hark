@@ -1,6 +1,31 @@
 import Foundation
 import WhisperKit
 
+/// Keeps the furthest segment end seen this run so the reported fraction is
+/// monotonic (windows are sequential, but WhisperKit's seek can revisit
+/// earlier audio) and safe to update from the decoder's callback threads.
+private final class SegmentProgressTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lastEnd: Double = 0
+    private let duration: Double
+    private let handler: @Sendable (Double) -> Void
+
+    init(duration: Double, handler: @escaping @Sendable (Double) -> Void) {
+        self.duration = duration
+        self.handler = handler
+    }
+
+    func accept(_ segments: [TranscriptionSegment]) {
+        guard duration > 0, let end = segments.last.map({ Double($0.end) }), end.isFinite
+        else { return }
+        lock.lock()
+        guard end > lastEnd else { lock.unlock(); return }
+        lastEnd = end
+        lock.unlock()
+        handler(min(end / duration, 1))
+    }
+}
+
 /// On-device CoreML transcription via WhisperKit (PRD §6.6, engine
 /// `whisperkit`). Apple-Silicon-first; multilingual with auto-detect and
 /// translation. The model is loaded once (resident) and reused across batch and
@@ -8,6 +33,10 @@ import WhisperKit
 /// first use into `~/.hark/models/whisperkit`.
 final class WhisperKitBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: true, translate: true, usesModelFile: true)
+
+    /// Segment discovery carries each window's position, so this engine can
+    /// report fraction-complete progress (the only one that can, so far).
+    var reportsProgress: Bool { true }
 
     private let pipe: UncheckedSendableBox<WhisperKit>
     private let modelLabel: String
@@ -61,6 +90,15 @@ final class WhisperKitBackend: TranscriptionBackend {
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat
     ) throws -> String {
+        try transcribe(
+            wavFile: wavFile, language: language, translate: translate, format: format,
+            progress: { _ in })
+    }
+
+    func transcribe(
+        wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
+        progress: @escaping @Sendable (Double) -> Void
+    ) throws -> String {
         let options = DecodingOptions(
             task: translate ? .translate : .transcribe,
             language: Self.languageCode(language),
@@ -69,8 +107,17 @@ final class WhisperKitBackend: TranscriptionBackend {
             wordTimestamps: false)
         let pipe = self.pipe
         let path = wavFile.path
+        let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: path)
+        // Fraction-complete comes from segment discovery: WhisperKit decodes
+        // the file in sequential ~30 s windows, and each window's last segment
+        // carries its position on the file timeline. Its decode-loop callback
+        // has no usable position (the timings it reports never track windows).
+        let tracker = SegmentProgressTracker(
+            duration: Double(samples.count) / Double(WhisperKit.sampleRate), handler: progress)
         let results = try RunLoopBridge.runBlocking(timeout: 1800) {
-            try await pipe.value.transcribe(audioPath: path, decodeOptions: options)
+            try await pipe.value.transcribe(
+                audioArray: samples, decodeOptions: options,
+                segmentCallback: { tracker.accept($0) })
         }
         let fullText = Self.clean(results.map(\.text).joined(separator: " "))
         let cues = results.flatMap(\.segments).map {

@@ -7,6 +7,9 @@ All notable changes to Hark are documented here. The format is loosely based on
 ## [Unreleased]
 
 ### Added
+- Batch transcription progress: with the `whisperkit` engine, `hark -i file`
+  draws a percent + ETA line on stderr while the file transcribes (shown only
+  on a terminal, no flag; stdout and redirected stderr stay untouched).
 - README FAQ answering the usual questions (virtual drivers, GUI apps, Intel,
   macOS 14.4, engines, diarization, legality).
 - Demo refresh: `demo/standup.m4a`, a two-voice sample, is transcribed with
