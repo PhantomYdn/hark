@@ -148,12 +148,25 @@ by engine), `--translate` / `--no-translate`,
 
 ### Progress
 
-Batch transcription of a file draws a progress line on stderr when stderr is a
-terminal: percent complete and a linear ETA, driven by the engine's own
-position (the `whisperkit` engine reports the timestamp of its last decoded
-segment). A redirected stderr (a log, `2>file`) never sees the line, stdout is
-untouched, and no flag is needed. Engines without measurable progress
-(`whisper`, `apple`, `parakeet`) show nothing, as before.
+Transcribing a file draws one redrawn line on stderr while the engine runs:
+
+```
+hark: transcribing 42% [########............] 3:10 / 7:32 eta 1:20
+```
+
+Percent done, the position in the audio against its length, and the estimated
+time left. The position is the engine's own, so the ETA follows the real speed
+on this file: `whisper`, `whisperkit` and `parakeet` report it; `apple` cannot,
+and shows `hark: transcribing… 0:42 elapsed (7:32 of audio)` instead. The ETA
+appears once 5% of the file is done and counts down between the engine's steps.
+
+It covers `-i FILE`, `-i FILE --speakers` (one line for both channels under
+`--speaker-mode source`) and the transcript-at-end pass of
+`--diarize-engine offline`. Live captions never show it.
+
+The line is drawn only when stderr is a terminal. A redirected stderr (a log,
+`2>file`) never sees it, stdout is untouched, `--interactive` never shows it,
+and there is no flag. A file that transcribes in under 1.5 s prints nothing.
 
 ### Quiet captures
 

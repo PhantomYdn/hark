@@ -262,6 +262,17 @@ method.
 .BR \-\-gain ", " \-\-no\-gain
 Peak\-normalize each segment before the engine to recognize quiet captures
 (default on; the recording is unaffected).
+.PP
+While a file transcribes
+.RB ( \-i
+.IR FILE ,
+with or without
+.BR \-\-speakers ),
+a single line on standard error shows the percent done, the position in the
+audio and the estimated time left. It is drawn only when standard error is a
+terminal, never on standard output, and takes no option. The
+.B apple
+engine reports no position and shows the elapsed time instead.
 .SH SPEAKER LABELING
 Label transcript segments with who spoke (PRD \[char167]6.7). Two mechanisms
 combine: deterministic
