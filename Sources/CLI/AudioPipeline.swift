@@ -21,6 +21,13 @@ enum AudioPipeline {
         }
     }
 
+    /// Length of an audio file in seconds, or nil when it cannot be read.
+    static func durationSeconds(of url: URL) -> Double? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let rate = file.processingFormat.sampleRate
+        return rate > 0 ? Double(file.length) / rate : nil
+    }
+
     /// How many channels an audio file carries.
     static func channelCount(of path: String) throws -> Int {
         Int(try openForReading(path).processingFormat.channelCount)

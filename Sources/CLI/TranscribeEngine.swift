@@ -37,9 +37,9 @@ struct TranscribeEngine {
     var cueLimits: CueLimits = .default
 
     /// Normalizes `audioPath` to a 16 kHz mono WAV, runs the selected engine,
-    /// and returns the transcript text in the requested format. Engines that
-    /// report fraction-complete progress get a redrawn stderr line
-    /// (TranscribeProgress); stdout stays untouched.
+    /// and returns the transcript text in the requested format. On a terminal
+    /// the engine's position is drawn as a redrawn stderr line
+    /// (TranscribeProgressLine); stdout stays untouched.
     func transcribe(audioPath: String) throws -> String {
         let backend = try TranscriptionEngine.makeBatch(
             engineName: engineName, modelFlag: modelFlag, language: language, translate: translate,
@@ -48,12 +48,10 @@ struct TranscribeEngine {
         Log.verbose("normalizing '\(audioPath)' to 16 kHz mono WAV")
         let wavFile = try AudioPipeline.normalizeFileForWhisper(audioPath)
         defer { try? FileManager.default.removeItem(at: wavFile) }
-        let progressLine = TranscribeProgressLine()
-        if backend.reportsProgress { progressLine.start() }
-        defer { progressLine.finish() }
-        return try backend.transcribe(
-            wavFile: wavFile, language: language, translate: translate, format: format,
-            progress: { progressLine.update(fraction: $0) })
+        let progressLine = TranscribeProgressLine.begin()
+        defer { progressLine?.finish() }
+        return try TranscribeProgressLine.transcribe(
+            backend, wavFile: wavFile, language: language, translate: translate, format: format)
     }
 
     /// Resolves the transcription engine: validates the backend is known and

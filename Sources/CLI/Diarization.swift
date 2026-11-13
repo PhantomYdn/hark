@@ -386,8 +386,8 @@ enum BatchDiarization {
         mono: URL, backend: TranscriptionBackend, language: String?, translate: Bool
     ) throws -> [TranscriptCue]? {
         if backend is AppleSpeechBackend { return nil }
-        let srt = try backend.transcribe(
-            wavFile: mono, language: language, translate: translate, format: .srt)
+        let srt = try TranscribeProgressLine.transcribe(
+            backend, wavFile: mono, language: language, translate: translate, format: .srt)
         return TranscriptFormatting.cues(fromSRT: srt).compactMap(speechOnly)
     }
 
@@ -395,8 +395,8 @@ enum BatchDiarization {
     private static func wholeFileCue(
         mono: URL, backend: TranscriptionBackend, language: String?, translate: Bool
     ) throws -> [TranscriptCue] {
-        let text = try backend.transcribe(
-            wavFile: mono, language: language, translate: translate, format: .txt)
+        let text = try TranscribeProgressLine.transcribe(
+            backend, wavFile: mono, language: language, translate: translate, format: .txt)
         let file = try AudioPipeline.openForReading(mono.path)
         let seconds = Double(file.length) / file.processingFormat.sampleRate
         return [TranscriptCue(start: 0, end: seconds, text: text)].compactMap(speechOnly)
@@ -410,7 +410,14 @@ enum BatchDiarization {
     ) throws -> [TranscriptCue] {
         let minimumSamples = Int((backend.minimumAudioSeconds * 16000).rounded(.up))
         var cues: [TranscriptCue] = []
+        // The spans together are one pass over the file for the progress line:
+        // each finished span moves it to that span's end.
+        let seconds = Double(samples.count) / 16000
+        let progressLine = TranscribeProgressLine.active
+        progressLine?.beginPass(audioSeconds: seconds)
+        defer { progressLine?.endPass() }
         for segment in timeline {
+            defer { if seconds > 0 { progressLine?.update(fraction: segment.end / seconds) } }
             let startSample = max(0, Int(segment.start * 16000))
             let endSample = min(samples.count, Int(segment.end * 16000))
             guard

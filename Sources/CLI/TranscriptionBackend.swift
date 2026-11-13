@@ -77,17 +77,13 @@ protocol TranscriptionBackend: AnyObject {
     ) throws -> String
 
     /// Same call with fraction-complete reporting (0...1) from the engine's
-    /// callback thread, rendered as a stderr progress line by the batch path.
-    /// Engines that can't measure their progress keep the default (report
-    /// nothing).
+    /// callback thread, rendered as a stderr progress line by the batch path
+    /// (`TranscribeProgressLine`). An engine that cannot tell where it is
+    /// keeps the default and reports nothing; the line then shows elapsed time.
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
         progress: @escaping @Sendable (Double) -> Void
     ) throws -> String
-
-    /// Whether this engine reports fraction-complete progress to the overload
-    /// above; the batch path only draws a progress line when this is true.
-    var reportsProgress: Bool { get }
 
     /// Releases any held resources (e.g., terminates a server process).
     func shutdown()
@@ -98,8 +94,8 @@ extension TranscriptionBackend {
     /// floor only has to be declared by the ones that reject short audio.
     var minimumAudioSeconds: Double { 0 }
 
-    /// Default for engines without measurable progress: forward to the plain
-    /// call and report nothing.
+    /// Default for an engine without a measurable position: forward to the
+    /// plain call and report nothing.
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
         progress: @escaping @Sendable (Double) -> Void
@@ -108,8 +104,6 @@ extension TranscriptionBackend {
         return try transcribe(
             wavFile: wavFile, language: language, translate: translate, format: format)
     }
-
-    var reportsProgress: Bool { false }
 }
 
 /// Per-call whisper.cpp CLI backend: spawns `whisper-cli` once per request
@@ -134,6 +128,15 @@ final class WhisperCLIBackend: TranscriptionBackend {
             format: format, quietStderr: quietStderr)
     }
 
+    func transcribe(
+        wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
+        progress: @escaping @Sendable (Double) -> Void
+    ) throws -> String {
+        try engine.transcribe(
+            wavFile: wavFile, language: language, translate: translate,
+            format: format, quietStderr: quietStderr, progress: progress)
+    }
+
     func shutdown() {}
 
     var label: String { "whisper-cli (per-call)" }
@@ -151,7 +154,6 @@ final class SerializedBackend: TranscriptionBackend {
     var capabilities: EngineCapabilities { backend.capabilities }
     var label: String { "\(backend.label) (shared)" }
     var minimumAudioSeconds: Double { backend.minimumAudioSeconds }
-    var reportsProgress: Bool { backend.reportsProgress }
 
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat

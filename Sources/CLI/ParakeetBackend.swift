@@ -106,6 +106,26 @@ final class ParakeetBackend: TranscriptionBackend {
     func transcribe(
         wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat
     ) throws -> String {
+        try transcribe(
+            wavFile: wavFile, language: language, translate: translate, format: format,
+            reporting: nil)
+    }
+
+    func transcribe(
+        wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
+        progress: @escaping @Sendable (Double) -> Void
+    ) throws -> String {
+        try transcribe(
+            wavFile: wavFile, language: language, translate: translate, format: format,
+            reporting: progress)
+    }
+
+    /// `reporting`, when given, receives FluidAudio's 0...1 position, which it
+    /// publishes per decoded window for audio longer than about 15 s.
+    private func transcribe(
+        wavFile: URL, language: String?, translate: Bool, format: TranscriptOutputFormat,
+        reporting progress: (@Sendable (Double) -> Void)?
+    ) throws -> String {
         // translate is already rejected by capability validation; guard anyway.
         if translate {
             throw HarkError.usage(
@@ -114,7 +134,17 @@ final class ParakeetBackend: TranscriptionBackend {
         let manager = self.manager
         let url = wavFile
         let layers = decoderLayers
-        let result = try RunLoopBridge.runBlocking(timeout: 1800) {
+        let timeout = RunLoopBridge.transcribeTimeout(
+            audioSeconds: AudioPipeline.durationSeconds(of: wavFile))
+        let result = try RunLoopBridge.runBlocking(timeout: timeout) {
+            var watcher: Task<Void, Never>?
+            if let progress {
+                let positions = await manager.transcriptionProgressStream
+                watcher = Task {
+                    do { for try await fraction in positions { progress(fraction) } } catch {}
+                }
+            }
+            defer { watcher?.cancel() }
             var state = try TdtDecoderState(decoderLayers: layers)
             return try await manager.transcribe(url, decoderState: &state)
         }

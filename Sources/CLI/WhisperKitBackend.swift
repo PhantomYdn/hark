@@ -34,10 +34,6 @@ private final class SegmentProgressTracker: @unchecked Sendable {
 final class WhisperKitBackend: TranscriptionBackend {
     let capabilities = EngineCapabilities(autoDetect: true, translate: true, usesModelFile: true)
 
-    /// Segment discovery carries each window's position, so this engine can
-    /// report fraction-complete progress (the only one that can, so far).
-    var reportsProgress: Bool { true }
-
     private let pipe: UncheckedSendableBox<WhisperKit>
     private let modelLabel: String
 
@@ -112,9 +108,10 @@ final class WhisperKitBackend: TranscriptionBackend {
         // the file in sequential ~30 s windows, and each window's last segment
         // carries its position on the file timeline. Its decode-loop callback
         // has no usable position (the timings it reports never track windows).
-        let tracker = SegmentProgressTracker(
-            duration: Double(samples.count) / Double(WhisperKit.sampleRate), handler: progress)
-        let results = try RunLoopBridge.runBlocking(timeout: 1800) {
+        let duration = Double(samples.count) / Double(WhisperKit.sampleRate)
+        let tracker = SegmentProgressTracker(duration: duration, handler: progress)
+        let timeout = RunLoopBridge.transcribeTimeout(audioSeconds: duration)
+        let results = try RunLoopBridge.runBlocking(timeout: timeout) {
             try await pipe.value.transcribe(
                 audioArray: samples, decodeOptions: options,
                 segmentCallback: { tracker.accept($0) })

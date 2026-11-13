@@ -1129,14 +1129,21 @@ struct Hark: ParsableCommand {
         Log.notice("diarizing the recording…")
         var systemCues: [TranscriptCue] = []
         var micCues: [TranscriptCue] = []
-        if FileManager.default.fileExists(atPath: systemPath) {
+        let hasSystem = FileManager.default.fileExists(atPath: systemPath)
+        let hasMic = labels != nil && FileManager.default.fileExists(atPath: micPath)
+        // One engine pass per recorded track. The interactive UI owns the
+        // terminal, so it never gets a redrawn line.
+        let progressLine = interactive
+            ? nil : TranscribeProgressLine.begin(passes: (hasSystem ? 1 : 0) + (hasMic ? 1 : 0))
+        defer { progressLine?.finish() }
+        if hasSystem {
             systemCues = try BatchDiarization.diarizeToCues(
                 audioPath: systemPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
                 minSpeakers: settings.minSpeakers, maxSpeakers: settings.maxSpeakers,
                 threshold: settings.speakerThreshold, cueLimits: settings.cueLimits)
         }
-        if let labels, FileManager.default.fileExists(atPath: micPath) {
+        if let labels, hasMic {
             micCues = try BatchDiarization.diarizeToCues(
                 audioPath: micPath, engineName: settings.engine, modelFlag: model,
                 language: settings.language, translate: settings.translate,
@@ -1265,6 +1272,10 @@ struct Hark: ParsableCommand {
             Log.notice(
                 "note: diarize-engine streaming applies to live capture; using the offline diarizer for files.")
         }
+        // One engine pass over the file, or one per channel under source
+        // attribution.
+        let progressLine = TranscribeProgressLine.begin(passes: bySource ? 2 : 1)
+        defer { progressLine?.finish() }
         let rendered: String
         if bySource {
             let labels = settings.speakerLabels
