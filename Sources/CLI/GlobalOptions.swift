@@ -14,17 +14,17 @@ enum Log {
     /// Diagnostic output, shown only with `--verbose`.
     static func verbose(_ message: @autoclosure () -> String) {
         guard isVerbose else { return }
-        FileHandle.standardError.write(Data("hark: \(message())\n".utf8))
+        TranscribeProgressLine.writeStderr("hark: \(message())\n")
     }
 
     /// Error output, always shown.
     static func error(_ message: String) {
-        FileHandle.standardError.write(Data("hark: error: \(message)\n".utf8))
+        TranscribeProgressLine.writeStderr("hark: error: \(message)\n")
     }
 
     /// Notice output, always shown (no error prefix).
     static func notice(_ message: String) {
-        FileHandle.standardError.write(Data("hark: \(message)\n".utf8))
+        TranscribeProgressLine.writeStderr("hark: \(message)\n")
     }
 }
 

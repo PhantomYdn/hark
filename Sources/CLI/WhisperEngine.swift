@@ -55,9 +55,11 @@ enum TranscriptionError: Error, CustomStringConvertible {
 /// Runs a local whisper.cpp binary on a normalized (16 kHz mono 16-bit)
 /// WAV file (PRD §6.6).
 ///
-/// Engine stderr is passed through live for progress/debugging; engine
-/// stdout (a duplicate timestamped transcript) is suppressed so hark's
-/// stdout carries exactly the requested output format.
+/// Engine stderr is passed through live for debugging; engine stdout (a
+/// duplicate timestamped transcript) is suppressed so hark's stdout carries
+/// exactly the requested output format. When the caller asks for progress,
+/// the engine's own percent lines are read off its stderr and everything
+/// else is still passed through.
 struct WhisperEngine {
     /// Binary names probed on PATH, in order of preference.
     static let binaryNames = ["whisper-cli", "whisper-cpp"]
@@ -130,9 +132,11 @@ struct WhisperEngine {
 
     /// Builds the whisper-cli argument list. `language` nil omits `-l` (whisper
     /// default); "auto" enables detection. `translate` adds `-tr` (English out).
+    /// `printProgress` adds `-pp`, which makes the engine report its position
+    /// on stderr (it does so even under `-np`).
     static func buildArguments(
         model: String, wav: String, language: String?, translate: Bool,
-        format: TranscriptOutputFormat, outputBase: String
+        format: TranscriptOutputFormat, outputBase: String, printProgress: Bool = false
     ) -> [String] {
         var arguments = [
             "-m", model,
@@ -147,7 +151,22 @@ struct WhisperEngine {
         if let language {
             arguments += ["-l", language]
         }
+        if printProgress {
+            arguments.append("-pp")
+        }
         return arguments
+    }
+
+    /// The 0...1 position in a whisper.cpp progress line
+    /// (`whisper_print_progress_callback: progress =  35%`), or nil for any
+    /// other stderr line. Pure, for testing.
+    static func progressFraction(fromStderrLine line: String) -> Double? {
+        guard let marker = line.range(of: "progress =") else { return nil }
+        let digits = line[marker.upperBound...]
+            .drop { $0 == " " }
+            .prefix { $0.isNumber }
+        guard !digits.isEmpty, let percent = Double(digits) else { return nil }
+        return min(max(percent / 100, 0), 1)
     }
 
     /// Transcribes the WAV file; returns the transcript in the requested
@@ -156,10 +175,12 @@ struct WhisperEngine {
     ///
     /// `quietStderr` silences the engine's stderr (model-load/timing lines);
     /// used by live transcription, which would otherwise emit one such block
-    /// per segment.
+    /// per segment. `progress`, when given, receives the engine's 0...1
+    /// position; its other stderr lines still reach hark's stderr.
     func transcribe(
         wavFile: URL, language: String?, translate: Bool = false,
-        format: TranscriptOutputFormat, quietStderr: Bool = false
+        format: TranscriptOutputFormat, quietStderr: Bool = false,
+        progress: (@Sendable (Double) -> Void)? = nil
     ) throws -> String {
         let outputBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("hark-transcript-\(UUID().uuidString)").path
@@ -170,19 +191,28 @@ struct WhisperEngine {
         process.executableURL = binary
         process.arguments = Self.buildArguments(
             model: modelPath, wav: wavFile.path, language: language, translate: translate,
-            format: format, outputBase: outputBase)
+            format: format, outputBase: outputBase, printProgress: progress != nil)
         // stdout duplicates the transcript with timestamps — suppress;
         // stderr (model load info, errors) passes through to our stderr
         // unless silenced.
         process.standardOutput = FileHandle.nullDevice
-        if quietStderr { process.standardError = FileHandle.nullDevice }
+        var stderrReader: EngineStderrReader?
+        if let progress {
+            let reader = EngineStderrReader(forwardOtherLines: !quietStderr, progress: progress)
+            process.standardError = reader.pipe
+            stderrReader = reader
+        } else if quietStderr {
+            process.standardError = FileHandle.nullDevice
+        }
 
         do {
             try process.run()
         } catch {
             throw TranscriptionError.engineNotFound
         }
+        stderrReader?.start()
         process.waitUntilExit()
+        stderrReader?.finish()
         guard process.terminationStatus == 0 else {
             throw TranscriptionError.engineFailed(process.terminationStatus)
         }
@@ -190,5 +220,59 @@ struct WhisperEngine {
             throw TranscriptionError.outputMissing(outputPath)
         }
         return transcript
+    }
+}
+
+/// Reads a whisper.cpp child's stderr line by line while it runs: progress
+/// lines feed `progress`, every other line is passed on to hark's stderr (or
+/// dropped when the caller silenced the engine). Lines are split on the
+/// reader's own queue; `finish` drains what is left once the child has exited.
+private final class EngineStderrReader: @unchecked Sendable {
+    let pipe = Pipe()
+    private let lock = NSLock()
+    private var pending = Data()
+    private let forwardOtherLines: Bool
+    private let progress: @Sendable (Double) -> Void
+
+    init(forwardOtherLines: Bool, progress: @escaping @Sendable (Double) -> Void) {
+        self.forwardOtherLines = forwardOtherLines
+        self.progress = progress
+    }
+
+    func start() {
+        // The parent's copy of the write end must close, or the read never
+        // sees end-of-file once the child exits.
+        try? pipe.fileHandleForWriting.close()
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            self?.consume(handle.availableData, atEnd: false)
+        }
+    }
+
+    func finish() {
+        pipe.fileHandleForReading.readabilityHandler = nil
+        consume(pipe.fileHandleForReading.readDataToEndOfFile(), atEnd: true)
+    }
+
+    private func consume(_ data: Data, atEnd: Bool) {
+        lock.lock()
+        pending.append(data)
+        var lines: [Data] = []
+        while let newline = pending.firstIndex(of: 0x0A) {
+            lines.append(pending[pending.startIndex..<newline])
+            pending.removeSubrange(pending.startIndex...newline)
+        }
+        if atEnd, !pending.isEmpty {
+            lines.append(pending)
+            pending = Data()
+        }
+        lock.unlock()
+        for line in lines {
+            let text = String(decoding: line, as: UTF8.self)
+            if let fraction = WhisperEngine.progressFraction(fromStderrLine: text) {
+                progress(fraction)
+            } else if forwardOtherLines {
+                TranscribeProgressLine.writeStderr(text + "\n")
+            }
+        }
     }
 }

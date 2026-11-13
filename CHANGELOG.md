@@ -7,6 +7,13 @@ All notable changes to Hark are documented here. The format is loosely based on
 ## [Unreleased]
 
 ### Added
+- Batch transcription progress: `hark -i file` draws a line on stderr while the
+  file transcribes, with the percent done, the position in the audio and an
+  ETA (`hark: transcribing 42% [########............] 3:10 / 7:32 eta 1:20`).
+  The position is the engine's own for `whisper`, `whisperkit` and `parakeet`;
+  `apple` shows the elapsed time. Also covers `--speakers` on a file and the
+  transcript-at-end pass of `--diarize-engine offline`. Shown only on a
+  terminal, no flag; stdout and a redirected stderr stay untouched (#13).
 - README FAQ answering the usual questions (virtual drivers, GUI apps, Intel,
   macOS 14.4, engines, diarization, legality).
 - Demo refresh: `demo/standup.m4a`, a two-voice sample, is transcribed with
@@ -14,6 +21,11 @@ All notable changes to Hark are documented here. The format is loosely based on
   `demo/speakers.tape` renders the shorter `assets/demo-speakers.gif` shown in
   the Speaker labels section (`make demo` renders both, `make demo-speakers`
   the second only).
+
+### Fixed
+- A long file no longer fails with `engine operation timed out after 1800s`
+  on `whisperkit` or `parakeet` (120 s on `apple`): the limit on one engine
+  call now grows with the audio, to three times its length.
 
 ## [0.7.0] - 2026-11-02
 

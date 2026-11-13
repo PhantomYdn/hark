@@ -35,6 +35,15 @@ enum RunLoopBridge {
         return true
     }
 
+    /// How long a whole-file transcription may run before it counts as hung:
+    /// `floor`, or three times the audio's length when that is longer, so a
+    /// multi-hour recording on a slow model is not cut off mid-run while a
+    /// wedged engine still ends an unattended job. Pure, for testing.
+    static func transcribeTimeout(audioSeconds: Double?, floor: TimeInterval = 1800) -> TimeInterval {
+        guard let audioSeconds, audioSeconds.isFinite else { return floor }
+        return max(floor, 3 * audioSeconds)
+    }
+
     /// Runs an `async` operation to completion synchronously, returning its
     /// result or rethrowing its error. Throws on timeout.
     static func runBlocking<T: Sendable>(

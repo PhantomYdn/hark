@@ -572,6 +572,25 @@ Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #
 - [ ] Idle-key semantics (space/m notices, y/shortcuts on an empty log); headless `--remote-control` and one-shot `--interactive` unchanged
 - [ ] Tests (idle/recording state machine, session hand-off, unchanged one-shot paths) + README/man/`docs/remote-control.md` + US14 criteria
 
+## Phase 14: Batch transcription progress (PRD Feature 27 / §6.11, issue #13)
+
+> A 3-hour lecture takes about half an hour to transcribe and showed nothing
+> until it was done. PR #14 (external contribution) added the line for
+> `whisperkit`; this phase makes it one engine-agnostic surface.
+
+- [x] `TranscriptionBackend.transcribe(…, progress:)` overload with a no-op default; `TranscribeProgress.render` (percent, bar, linear ETA hidden below 5%) and a redrawn stderr line gated on a TTY (PR #14)
+- [x] `whisperkit`: position from segment discovery, monotonic (PR #14)
+- [x] One line per run (`TranscribeProgressLine.begin`/`finish`, a single active line per process); every whole-file call goes through `TranscribeProgressLine.transcribe`, which is the plain call when there is no line — a redirected stderr leaves each engine untouched
+- [x] `whisper`: `-pp` only when a line is drawn; the child's stderr is read line by line, progress lines feed the line, every other line is still passed through
+- [x] `parakeet`: FluidAudio's `transcriptionProgressStream`
+- [x] ETA measured from the first reported position and counted down between engine steps; 1.5 s start delay; position in the audio (`3:10 / 7:32`) for single-pass runs; elapsed-only form before the first position and for engines without one
+- [x] `-i FILE --speakers` (1 pass, or 2 under source attribution), the span fallback (one pass, a step per span) and the offline-live transcript-at-end pass (never under `--interactive`)
+- [x] `Log` output erases the line before writing
+- [x] Hang guard scaled to the audio: `RunLoopBridge.transcribeTimeout` = max(floor, 3 × audio length) for whisperkit, parakeet (floor 30 min) and apple (floor 2 min) — the flat 30 minutes cut a 3-hour whisperkit run off at the finish
+- [x] Tests (`TranscribeProgressTests`: render forms, ETA baseline and countdown, multi-pass fraction, TTY gate, timeout scaling, whisper progress-line parser, `-pp` opt-in). Verified on a terminal (pty) with whisper, whisperkit and parakeet on 5- and 60-minute files, `--speakers` and two-channel source attribution; a redirected stderr is byte-for-byte the old output
+- [ ] `apple`: position from partial results (`shouldReportPartialResults`). Not built: it could not be verified that turning partial results on leaves the final transcript unchanged (no Speech Recognition permission in the test environment), and the line must never be able to alter a transcript
+- [ ] Offline-live transcript-at-end pass verified on a real capture (wired, covered only by the shared code path)
+
 ## Future
 
 > Nice-to-have items outside current scope.

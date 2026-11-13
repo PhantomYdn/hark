@@ -70,7 +70,9 @@ final class AppleSpeechBackend: TranscriptionBackend {
         // Wait for completion, pumping the run loop so a main-queue callback
         // still runs (avoids deadlocking the CLI's main thread). Results arrive
         // off-main in practice; the pump handles either case.
-        guard RunLoopBridge.waitPumping(timeout: 120, until: { box.get() != nil }) else {
+        let timeout = RunLoopBridge.transcribeTimeout(
+            audioSeconds: AudioPipeline.durationSeconds(of: wavFile), floor: 120)
+        guard RunLoopBridge.waitPumping(timeout: timeout, until: { box.get() != nil }) else {
             task.cancel()
             throw HarkError.software("apple recognition timed out.")
         }
