@@ -6,6 +6,8 @@ All notable changes to Hark are documented here. The format is loosely based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-16
+
 ### Added
 - Batch transcription progress: `hark -i file` draws a line on stderr while the
   file transcribes, with the percent done, the position in the audio and an
@@ -493,6 +495,7 @@ transcribes them, and composes into Unix pipelines.
 - The release binary is signed (Developer ID) and notarized, so it passes
   Gatekeeper; its stable code identity keeps privacy grants across upgrades.
 
+[0.8.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.8.0
 [0.7.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.7.0
 [0.6.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.6.0
 [0.5.0]: https://github.com/PhantomYdn/hark/releases/tag/v0.5.0
