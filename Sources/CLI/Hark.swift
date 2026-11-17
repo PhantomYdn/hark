@@ -796,7 +796,7 @@ struct Hark: ParsableCommand {
         }
         defer { interactiveSession?.stop() }
 
-        let metadata = WAVMetadata(
+        let metadata = RecordingMetadata(
             creationDate: Date(), software: "hark \(harkVersion)", title: sourceLabel)
 
         var sinks: [AudioSink] = []
@@ -1323,7 +1323,7 @@ struct Hark: ParsableCommand {
             channels: settings.channels ?? min(2, max(1, Int(sourceFormat.channelCount)))
         )
         let sink = try makeAudioSink(
-            destination, format: pcmFormat, metadata: WAVMetadata(),
+            destination, format: pcmFormat, metadata: RecordingMetadata(),
             silenceThreshold: settings.silenceThreshold)
         Log.verbose("""
             \(sourcePath) (\(Int(sourceFormat.sampleRate)) Hz, \(sourceFormat.channelCount) ch) -> \
@@ -1350,7 +1350,7 @@ struct Hark: ParsableCommand {
     /// Builds an audio sink for a destination. File destinations honor
     /// `--split` (live only); stdout uses a WAV stream or raw PCM.
     private func makeAudioSink(
-        _ destination: AudioDestination, format: PCMFormat, metadata: WAVMetadata,
+        _ destination: AudioDestination, format: PCMFormat, metadata: RecordingMetadata,
         silenceThreshold: Double
     ) throws -> AudioSink {
         switch destination {

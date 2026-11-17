@@ -390,7 +390,7 @@ struct CaptureEngine {
     /// for WAV (LIST/INFO); MP4 atoms and ID3 are deferred.
     static func makeFileSink(
         path: String, fileFormat: AudioFileFormat, format: PCMFormat,
-        metadata: WAVMetadata = WAVMetadata()
+        metadata: RecordingMetadata = RecordingMetadata()
     ) throws -> AudioSink {
         let url = URL(fileURLWithPath: path)
         switch fileFormat {
@@ -412,7 +412,7 @@ struct CaptureEngine {
             }
         case .mp3:
             do {
-                let writer = try MP3FileWriter(url: url, pcmFormat: format)
+                let writer = try MP3FileWriter(url: url, pcmFormat: format, metadata: metadata)
                 return MP3Sink(writer: writer, label: "\(url.path) (mp3)")
             } catch {
                 throw HarkError.ioError("cannot open output file: \(error)")

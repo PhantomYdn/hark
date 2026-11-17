@@ -142,10 +142,10 @@ struct AudioFileFormatTests {
 }
 
 @Suite("WAV metadata")
-struct WAVMetadataTests {
+struct RecordingMetadataTests {
     @Test func infoListChunkLayout() {
         let chunk = WAVFileWriter.infoListChunk(
-            WAVMetadata(creationDate: nil, software: "hark", title: nil))
+            RecordingMetadata(creationDate: nil, software: "hark", title: nil))
         // LIST + size + INFO + ISFT + size(6) + "hark\0\0" (4 chars + null, padded even)
         var expected: [UInt8] = []
         expected += Array("LIST".utf8)
@@ -166,7 +166,7 @@ struct WAVMetadataTests {
         let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
         let writer = try WAVFileWriter(
             destination: .file(url), format: format,
-            metadata: WAVMetadata(software: "hark", title: "Test Mic"))
+            metadata: RecordingMetadata(software: "hark", title: "Test Mic"))
         try writer.write(Data([1, 2, 3, 4]))
         try writer.finalize()
 
@@ -198,7 +198,7 @@ struct WAVMetadataTests {
 }
 
 @Suite("WAV metadata readback")
-struct WAVMetadataReadbackTests {
+struct RecordingMetadataReadbackTests {
     @Test func coreAudioReadsInfoChunk() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("hark-metard-\(UUID().uuidString).wav")
@@ -207,7 +207,7 @@ struct WAVMetadataReadbackTests {
         let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
         let writer = try WAVFileWriter(
             destination: .file(url), format: format,
-            metadata: WAVMetadata(
+            metadata: RecordingMetadata(
                 creationDate: Date(), software: "hark 0.1.0", title: "Test Source"))
         try writer.write(Data(count: 44100 * 2))  // 1s silence
         try writer.finalize()

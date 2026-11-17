@@ -61,6 +61,60 @@ struct MP3FileWriterTests {
         #expect(decoded.rms > 0.2)  // 0.5-amplitude sine survives lossy encode
     }
 
+    /// The recording's metadata lands in an ID3v2 tag ahead of the audio, and
+    /// the file still decodes to the same signal.
+    @Test func metadataIsWrittenAsAnID3v2Tag() throws {
+        let url = temporaryFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
+        let date = Date(timeIntervalSince1970: 1_794_000_000)
+        let metadata = RecordingMetadata(
+            creationDate: date, software: "hark 9.9.9", title: "MacBook Pro Microphone — Büro")
+
+        let writer = try MP3FileWriter(url: url, pcmFormat: format, metadata: metadata)
+        try writer.write(sinePCM())
+        try writer.finalize()
+
+        let contents = try Data(contentsOf: url)
+        #expect(contents.prefix(3) == Data("ID3".utf8))
+        // No ID3v1 trailer: its 30-byte fields would truncate the title.
+        #expect(contents.suffix(128).prefix(3) != Data("TAG".utf8))
+
+        let info = try infoDictionary(of: url)
+        #expect(info["title"] == "MacBook Pro Microphone — Büro")
+        #expect(info["encoding application"] == "hark 9.9.9")
+        #expect(info["year"] == String(try #require(metadata.dateString).prefix(4)))
+
+        let decoded = try decode(url)
+        #expect(decoded.channels == 1)
+        #expect(decoded.rms > 0.2)
+    }
+
+    @Test func noMetadataMeansNoTag() throws {
+        let url = temporaryFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
+        let writer = try MP3FileWriter(url: url, pcmFormat: format)
+        try writer.write(sinePCM())
+        try writer.finalize()
+        #expect(try Data(contentsOf: url).prefix(3) != Data("ID3".utf8))
+    }
+
+    /// The tags CoreAudio reads back from a file, as `hark info` shows them.
+    private func infoDictionary(of url: URL) throws -> [String: String] {
+        var fileID: AudioFileID?
+        try #require(AudioFileOpenURL(url as CFURL, .readPermission, 0, &fileID) == noErr)
+        let file = try #require(fileID)
+        defer { AudioFileClose(file) }
+        var dictionary: Unmanaged<CFDictionary>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        try #require(
+            AudioFileGetProperty(file, kAudioFilePropertyInfoDictionary, &size, &dictionary)
+                == noErr)
+        let raw = try #require(dictionary).takeRetainedValue() as? [String: Any] ?? [:]
+        return raw.mapValues { String(describing: $0) }
+    }
+
     @Test func stereoEncodesTwoChannels() throws {
         let url = temporaryFile()
         defer { try? FileManager.default.removeItem(at: url) }

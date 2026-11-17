@@ -1,23 +1,5 @@
 import Foundation
 
-/// Metadata embedded as a WAV LIST/INFO chunk (PRD §4.1.7).
-public struct WAVMetadata: Sendable {
-    /// Recording start time -> ICRD (date portion, ISO format).
-    public var creationDate: Date?
-    /// Writing software -> ISFT.
-    public var software: String?
-    /// Source/title -> INAM (e.g., device or app name).
-    public var title: String?
-
-    public init(creationDate: Date? = nil, software: String? = nil, title: String? = nil) {
-        self.creationDate = creationDate
-        self.software = software
-        self.title = title
-    }
-
-    var isEmpty: Bool { creationDate == nil && software == nil && title == nil }
-}
-
 /// Writes interleaved little-endian signed PCM into a WAV (RIFF) container.
 ///
 /// Two modes:
@@ -58,7 +40,7 @@ public final class WAVFileWriter: @unchecked Sendable {
     private let handle: FileHandle
     private let seekable: Bool
     private let format: PCMFormat
-    private let metadata: WAVMetadata
+    private let metadata: RecordingMetadata
     private let lock = NSLock()
     private var dataBytes: UInt64 = 0
     private var finalized = false
@@ -74,7 +56,7 @@ public final class WAVFileWriter: @unchecked Sendable {
     ///   finalize (seekable files only; ignored for streams, where readers
     ///   consume until EOF and would treat trailing chunks as audio).
     public init(
-        destination: Destination, format: PCMFormat, metadata: WAVMetadata = WAVMetadata()
+        destination: Destination, format: PCMFormat, metadata: RecordingMetadata = RecordingMetadata()
     ) throws {
         guard [16, 24, 32].contains(format.bitsPerSample) else {
             throw WriterError.unsupportedBitDepth(format.bitsPerSample)
@@ -135,14 +117,9 @@ public final class WAVFileWriter: @unchecked Sendable {
     }
 
     /// Builds a RIFF LIST chunk with INFO subchunks (ICRD/ISFT/INAM).
-    static func infoListChunk(_ metadata: WAVMetadata) -> Data {
+    static func infoListChunk(_ metadata: RecordingMetadata) -> Data {
         var entries: [(String, String)] = []
-        if let date = metadata.creationDate {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            formatter.timeZone = TimeZone.current
-            entries.append(("ICRD", formatter.string(from: date)))
-        }
+        if let date = metadata.dateString { entries.append(("ICRD", date)) }
         if let software = metadata.software { entries.append(("ISFT", software)) }
         if let title = metadata.title { entries.append(("INAM", title)) }
 

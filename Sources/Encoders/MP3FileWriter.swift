@@ -37,7 +37,11 @@ public final class MP3FileWriter: @unchecked Sendable {
         return pcmBytes
     }
 
-    public init(url: URL, pcmFormat: PCMFormat) throws {
+    /// `metadata`, when not empty, is written as an ID3v2 tag at the start of
+    /// the file (title, recording date, software).
+    public init(
+        url: URL, pcmFormat: PCMFormat, metadata: RecordingMetadata = RecordingMetadata()
+    ) throws {
         self.pcmFormat = pcmFormat
 
         guard let gfp = lame_init() else { throw WriterError.initFailed }
@@ -48,6 +52,7 @@ public final class MP3FileWriter: @unchecked Sendable {
         lame_set_quality(gfp, 2)  // 0 best … 9 fastest; 2 = high quality
         lame_set_VBR(gfp, vbr_default)
         lame_set_VBR_q(gfp, 2)
+        Self.setID3(gfp, metadata)
         guard lame_init_params(gfp) >= 0 else {
             lame_close(gfp)
             throw WriterError.initFailed
@@ -60,6 +65,39 @@ public final class MP3FileWriter: @unchecked Sendable {
             throw WriterError.cannotCreateFile(url.path)
         }
         self.handle = handle
+    }
+
+    /// Hands the metadata to LAME, which writes the ID3v2 tag ahead of the
+    /// first audio frame by itself. Must run before `lame_init_params`. Only
+    /// ID3v2 is written: the 30-byte fields of ID3v1 would truncate a device
+    /// name, and it would have to be appended after the last frame. LAME
+    /// writes ID3v2.3, so the date is the year (`TYER`) plus day and month
+    /// (`TDAT`), and the software goes in both `TSSE` (its proper frame) and
+    /// `TENC`, the one CoreAudio reads back as the encoding application.
+    private static func setID3(_ gfp: OpaquePointer, _ metadata: RecordingMetadata) {
+        guard !metadata.isEmpty else { return }
+        id3tag_init(gfp)
+        id3tag_v2_only(gfp)
+        if let title = metadata.title { setText(gfp, "TIT2", title) }
+        if let date = metadata.dateString {
+            // yyyy-MM-dd → TYER yyyy, TDAT ddMM.
+            let parts = date.split(separator: "-")
+            if parts.count == 3 {
+                setText(gfp, "TYER", String(parts[0]))
+                setText(gfp, "TDAT", String(parts[2]) + String(parts[1]))
+            }
+        }
+        if let software = metadata.software {
+            setText(gfp, "TSSE", software)
+            setText(gfp, "TENC", software)
+        }
+    }
+
+    /// Sets one ID3v2 text frame as UTF-16 (with the byte-order mark LAME
+    /// expects), so a device name outside Latin-1 survives.
+    private static func setText(_ gfp: OpaquePointer, _ frame: String, _ text: String) {
+        let utf16: [UInt16] = [0xFEFF] + Array(text.utf16) + [0]
+        _ = id3tag_set_textinfo_utf16(gfp, frame, utf16)
     }
 
     public func write(_ data: Data) throws {
