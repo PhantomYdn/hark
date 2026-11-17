@@ -460,6 +460,8 @@ List running applications whose audio can be captured.
 .TP
 .B hark info <file> [\-\-json]
 Print duration, sample rate, channels, and metadata of an audio file.
+Recordings in WAV, MP3 and M4A carry the recording date, the source name
+(as the title) and the hark version that wrote them.
 .TP
 .B hark models list [\-\-available] [\-\-json]
 List installed models across engines, or the downloadable catalog with
@@ -474,6 +476,8 @@ CoreML engines use a prefix
 .RB ( whisperkit:tiny ", " parakeet:ultra ).
 .B \-\-default
 makes it the default (also setting the engine for whisperkit/parakeet).
+On a terminal a line on standard error shows the percent done and the
+estimated time left.
 .TP
 .B hark config show|set <key> <value>|unset <key>|path
 View and edit persisted defaults. Keys include

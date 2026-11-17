@@ -316,6 +316,15 @@ hark models download <name> [--default] [--force]      # fetch a ggml model
 hark config show|set <key> <value>|unset <key>|path    # persisted defaults
 ```
 
+`hark info` prints what hark stored in a recording: `.wav`, `.mp3` and `.m4a`
+files carry the recording date, the source (device or app name) as the title,
+and `hark <version>` as the encoding application. `.flac` and `.opus` carry none.
+
+`hark models download` shows a progress line on a terminal for the large
+downloads (whisper ggml, whisperkit, parakeet): percent, bytes for ggml models,
+and an ETA. A parakeet download ends with a CoreML compile step that can take a
+minute; hark says so when it starts.
+
 ## Exit codes
 
 Following BSD `sysexits(3)` where applicable:

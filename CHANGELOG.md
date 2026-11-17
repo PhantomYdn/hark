@@ -14,6 +14,12 @@ All notable changes to Hark are documented here. The format is loosely based on
   `apple` shows the elapsed time. Also covers `--speakers` on a file and the
   transcript-at-end pass of `--diarize-engine offline`. Shown only on a
   terminal, no flag; stdout and a redirected stderr stay untouched (#13).
+- Recording metadata in mp3 and m4a files: the recording date, the source
+  name and `hark <version>` are now stored in an ID3v2 tag (mp3) and in the
+  container's atoms (m4a), as they already were in WAV. `hark info` shows them.
+- Model download progress: `hark models download` (whisper ggml, whisperkit,
+  parakeet) and the first-use parakeet download draw a percent + ETA line on
+  stderr, with bytes for ggml models. Terminal only, no flag.
 - README FAQ answering the usual questions (virtual drivers, GUI apps, Intel,
   macOS 14.4, engines, diarization, legality).
 - Demo refresh: `demo/standup.m4a`, a two-voice sample, is transcribed with
@@ -23,6 +29,13 @@ All notable changes to Hark are documented here. The format is loosely based on
   the second only).
 
 ### Fixed
+- Remote control: `POST /start` now rejects a request whose merged settings
+  are invalid (for example `translate` with an engine from the environment
+  that cannot translate) with 400, instead of answering 201 and then failing
+  the session.
+- Live transcription without the VAD (`--no-vad`, Intel): a segment padded up
+  to the engine's minimum length keeps a 10 ms margin, so resampling cannot
+  put it back under the minimum and lose it.
 - A long file no longer fails with `engine operation timed out after 1800s`
   on `whisperkit` or `parakeet` (120 s on `apple`): the limit on one engine
   call now grows with the audio, to three times its length.

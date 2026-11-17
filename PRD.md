@@ -58,7 +58,7 @@ Beyond batch and pipe usage, Hark can run **interactively** — a minimal termin
 | 13 | Multi-language & translation | P1 | Transcribe ~99 languages with a multilingual model via `--language CODE` or auto-detect (`--language auto`, default); `--translate` emits English from any spoken language (engines that support it). `hark models list/download` manages local models. |
 | 14 | Pluggable transcription engines | P2 | Select the engine with `--engine`: `whisper` (whisper.cpp, default), `apple` (native Speech.framework, no extra deps), `whisperkit` (CoreML, on-device, multilingual + translate), `parakeet` (FluidAudio CoreML; variants for 25 European languages, English, or Japanese — default `ultra`). Capabilities (auto-detect, translate, model semantics) vary and are validated; `cloud` stays Post-MVP. |
 | 10 | Silence-based splitting | P2 | Split on continuous silence exceeding a configurable threshold (`--split silence=SEC`). |
-| 11 | Basic metadata embedding | P2 | Store recording start time, source name, and software tag in WAV `LIST/INFO` (`ICRD`/`INAM`/`ISFT`). **Shipped for WAV only**; MP4 atoms (m4a) and ID3v2 (mp3) are deferred to Post-MVP (§4.2) — the OS encoders give no metadata hook, so each needs its own container writer. |
+| 11 | Basic metadata embedding | P2 | Store the recording start date, source name, and software tag in the audio file: WAV `LIST/INFO` (`ICRD`/`INAM`/`ISFT`), an ID3v2 tag in mp3 (`TYER`+`TDAT`/`TIT2`/`TSSE`+`TENC`), and iTunes-style atoms in m4a (`©day`/`©nam`/`©too`). `hark info` shows them for all three. FLAC and Opus carry none. |
 | 15 | Speaker attribution by source (You vs Others) | P1 | When two sources are captured (`--mix`, or `--system`/`--app` + mic), keep the microphone and system audio as separate **internal** tracks and tag each transcript segment with its source ("You" = mic, "Others" = system). Deterministic and exact — no ML, no model download. This replaces the unreliable single-mixed-stream heuristic. |
 | 16 | Acoustic speaker diarization | P1 | Separate anonymous speakers ("Speaker 1/2…") within a single stream using FluidAudio CoreML models (on-device, Apple Neural Engine). Offline mode (batch `-i`, most accurate) and streaming mode (live capture). |
 | 17 | VAD-based live segmentation | P1 | Replace amplitude/silence-threshold segment cutting with Silero VAD (FluidAudio) for stable speech/pause boundaries at runtime; graceful fallback to the existing amplitude method when VAD models are unavailable. Feeds both transcription and the speaker pipeline. |
@@ -72,6 +72,7 @@ Beyond batch and pipe usage, Hark can run **interactively** — a minimal termin
 | 25 | Combined interactive agent | P1 | `hark --interactive --remote-control [ADDR]` is a long-lived TUI agent: the HTTP API and the keyboard share one session. Idle (no capture) until `POST /start`; live captions while recording; **Enter** stops the session and returns to idle; **Ctrl-C** quits the process. Launch flags are session defaults. Headless `brew services` is unchanged (`--remote-control` only). See §6.9, §6.10. |
 | 26 | Existing-output protection | P1 | No output is ever clobbered silently. Before capture starts, Hark checks every file the run would write (audio, transcript, `--split` chunk set) and applies `--if-exists ask\|error\|overwrite\|unique` (default `ask`; also `$HARK_IF_EXISTS` / config `if-exists`). On a terminal `ask` offers overwrite / a numbered name / cancel; without a terminal it refuses (exit 73). The invocation's outputs are one artifact set: a single decision covers all of them and `unique` picks one suffix free for each, so an audio/transcript pair stays aligned (`rec-1.m4a` + `rec-1.txt`). The remote-control agent (§6.10) defaults to `unique` so a session never blocks or overwrites. See §6.1. |
 | 27 | Batch transcription progress | P1 | While a **file** transcribes (`-i FILE`, with or without `--speakers`, and the transcript-at-end pass of `--diarize-engine offline`), Hark redraws one stderr line with the percent done, the position in the audio and an ETA. The position is the engine's own (whisper, whisperkit, parakeet); an engine that cannot report one (apple) shows the elapsed time instead. Shown only when stderr is a TTY; never on stdout, never in `--interactive`, and no flag. See §6.11. |
+| 28 | Model download progress | P2 | Downloading a large model (`hark models download` for whisper ggml, whisperkit and parakeet, and the first-use parakeet download) redraws one stderr line with the percent done, the bytes when the source reports them, and an ETA. Same visibility rule as Feature 27: a TTY only, no flag. See §6.11. |
 
 ### 4.2 Post-MVP Features (Future)
 
@@ -86,7 +87,6 @@ Beyond batch and pipe usage, Hark can run **interactively** — a minimal termin
 - **Plugin system** to inject custom DSP filters (EQ, noise suppression) as middleware.
 - **Configuration profiles** to store default sources, formats, and transcription settings.
 - **Additional engines**: cloud backends (Deepgram, Google) selectable via `--engine cloud`. (NVIDIA Parakeet via FluidAudio CoreML shipped in M6 — see Feature 14.)
-- **Metadata for encoded formats**: MP4 atoms (m4a) and ID3v2 (mp3), completing Feature 11 beyond WAV.
 - **Named speaker identification**: voiceprint enrollment and a local speaker store, so diarized speakers resolve to named people across recordings (FluidAudio speaker embeddings).
 - **Overlapping-speech handling**: per-word speaker assignment and crosstalk resolution when two speakers talk simultaneously.
 
@@ -388,7 +388,7 @@ All invocations accept `-h, --help` and `-v, --verbose`.
 - Write (P0): WAV (PCM), M4A/AAC, FLAC — native CoreAudio encoders.
 - Write (P1): MP3 (vendored libmp3lame, encode-only — Sources/CLame, LGPL), Ogg/Opus (native `kAudioFormatOpus` encoder + hand-written Ogg muxer, zero external deps).
 - All write formats must be accepted as-is by major transcription tools: `whisper.cpp`, Fabric AI, OpenAI/cloud transcription APIs.
-- Metadata: WAV INFO chunk, MP4 metadata atoms for M4A, ID3v2 for MP3.
+- Metadata (Feature 11): WAV INFO chunk, MP4 metadata atoms for M4A, ID3v2 for MP3 — date, source name, software. Metadata never fails or alters a recording: a container that cannot take it records exactly as it would without.
 
 ### 6.5 Chunking & Splitting
 
@@ -503,6 +503,7 @@ Speaker labeling answers "who said what." It is **opt-in** via `--speakers`/`--d
 - **Source of the position:** the engine itself, never a prediction. `whisper` reports percent steps on its stderr (`whisper-cli -pp`; Hark reads those lines and still passes every other engine line through), `whisperkit` the end time of the last decoded segment, `parakeet` the end of the last dispatched window. An engine that reports no position (`apple`) shows `hark: transcribing… 0:42 elapsed (7:32 of audio)` instead. Without a terminal no engine is asked for its position, so a redirected run is exactly what it was before.
 - **ETA:** linear, from the speed measured since the engine's **first** reported position (so the model load and warm-up before it do not inflate it), hidden until 5% of the file has been covered since then. Engines report in steps; between two steps the ETA counts down by the clock.
 - **Other stderr output** (`-v` diagnostics, notices, the engine's own messages) erases the line first and the next redraw puts it back, so messages never land on top of it.
+- **Model downloads** use the same line and the same visibility rule: `hark: downloading large-v3-turbo 42% [########............] 680 MB / 1.6 GB eta 1:20`. Whisper ggml downloads show bytes; whisperkit and parakeet report a fraction only, so they show percent and ETA. A parakeet download is followed by CoreML compilation, which reports no position: the line ends with the download and a one-line notice says the model is compiling. The small speaker-pipeline models (VAD, diarizers) keep their one-line notice.
 
 ---
 

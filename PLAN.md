@@ -9,8 +9,8 @@
 Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #9):
 
 - [ ] Live `--channels 1` on a stereo tap keeps only the left channel: the capture sessions hand the tap format to `PCMStreamConverter` (`AVAudioConverter`, `downmix` off). Fold by averaging there, like `AudioPipeline.decode` does for files since #5
-- [ ] Live segments are padded to the engine's minimum (Parakeet 0.3 s) in the capture format, *before* the resample to 16 kHz; a rounding loss of one sample would make Parakeet reject the segment silently. Pad after normalizing, or add a few ms of margin (#4)
-- [ ] Remote `POST /start` never calls `settings.validate()` on the merged settings (`reservingOutputs()`), so a bad value from env/config answers 201 and then fails the session; validate before replying
+- [x] Live segments are padded to the engine's minimum (Parakeet 0.3 s) in the capture format, *before* the resample to 16 kHz; a rounding loss of one sample would make Parakeet reject the segment silently. Pad after normalizing, or add a few ms of margin (#4)
+- [x] Remote `POST /start` never calls `settings.validate()` on the merged settings (`reservingOutputs()`), so a bad value from env/config answers 201 and then fails the session; validate before replying
 - [ ] `-i FILE --speaker-mode source` fallback (no diarizer) with `--engine apple`: apple writes plain text only, so each channel becomes one cue spanning it, with no interleaving by time (#9)
 - [ ] Flaky under parallel `make test` (locally; CI green): `wedgedStopStillFinalizesTheRecording` and `runBoundedReportsWhetherWorkFinished` (`CaptureControlIntegrationTests`) wait 1 s for work on `DispatchQueue.global()`, which other tests running in parallel can starve. Both pass alone and in a `--no-parallel` run. Serialize that suite or stop depending on the global queue's latency
 
@@ -590,6 +590,19 @@ Follow-ups from the 2026-10-30 review of the external PRs (#3, #4, #5, #7, #8, #
 - [x] Tests (`TranscribeProgressTests`: render forms, ETA baseline and countdown, multi-pass fraction, TTY gate, timeout scaling, whisper progress-line parser, `-pp` opt-in). Verified on a terminal (pty) with whisper, whisperkit and parakeet on 5- and 60-minute files, `--speakers` and two-channel source attribution; a redirected stderr is byte-for-byte the old output
 - [ ] `apple`: position from partial results (`shouldReportPartialResults`). Not built: it could not be verified that turning partial results on leaves the final transcript unchanged (no Speech Recognition permission in the test environment), and the line must never be able to alter a transcript
 - [ ] Offline-live transcript-at-end pass verified on a real capture (wired, covered only by the shared code path)
+
+## Phase 15: Metadata for mp3/m4a, download progress, Incoming fixes (0.8.0)
+
+- [x] Incoming: remote `POST /start` validates the merged settings in `reservingOutputs()` before the session is registered (→ 400, not a 201 followed by a failed session)
+- [x] Incoming: live short-segment padding targets the engine floor plus 10 ms (`LiveTranscriber.engineFloorMargin`), so the resample to 16 kHz cannot land it under the floor. Only the amplitude path resamples (`--no-vad`, Intel). A resample test over 8–96 kHz passes with and without the margin, so the loss was not reproduced; the margin is a guard
+- [x] `WAVMetadata` → `RecordingMetadata` (format-neutral, own file)
+- [x] mp3 (Feature 11): ID3v2 tag through the bundled LAME (`TIT2`, `TYER`+`TDAT`, `TSSE`+`TENC`), UTF-16 text, no ID3v1
+- [x] m4a (Feature 11): `©nam`/`©day`/`©too` through CoreAudio's info dictionary. It is only writable while the file is being written and AVAudioFile hides the audio file, so `EncodedFileWriter` now drives ExtAudioFile directly. Verified against the old writer: FLAC byte-identical, M4A `mdat` byte-identical (index differs in 12 timestamp bytes). Side finding: `AVEncoderAudioQualityKey: .high` never changed the encoder (codec quality stays at its default 64); left as is to keep output identical
+- [x] Verified on a real 2 s microphone capture: `hark info` shows title, encoding application and date for `.m4a` and `.mp3`; ffprobe agrees
+- [x] `StderrStatusLine`: the shared redrawn-line mechanics (own dispatch timer, so it draws without a pumped run loop), under `TranscribeProgressLine` and the new `ModelDownloadLine`
+- [x] Download progress (Feature 28): ggml via the URLSession task (bytes), whisperkit via its `progressCallback`, parakeet via FluidAudio's `progressHandler` (explicit download and first use; download phase only, then a "compiling" notice). Verified on a pty with `base`, `whisperkit:base` and 6 parakeet variants
+- [ ] First-use whisperkit download (inside `WhisperKit(config)`, no callback there) still shows nothing; would need an explicit `WhisperKit.download` before the load
+- [ ] LAME prints `count1: real: …` debug lines in debug builds only (`#ifdef DEBUG` in `bitstream.c`); release builds are clean. Undefine `DEBUG` for the CLame target if it gets in the way
 
 ## Future
 
