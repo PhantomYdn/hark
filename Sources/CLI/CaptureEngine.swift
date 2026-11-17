@@ -387,7 +387,7 @@ struct CaptureEngine {
     }
 
     /// Creates a single-file sink for the given format. Metadata is embedded
-    /// for WAV (LIST/INFO); MP4 atoms and ID3 are deferred.
+    /// for WAV (LIST/INFO), mp3 (ID3v2) and M4A (atoms).
     static func makeFileSink(
         path: String, fileFormat: AudioFileFormat, format: PCMFormat,
         metadata: RecordingMetadata = RecordingMetadata()
@@ -405,7 +405,7 @@ struct CaptureEngine {
         case .m4a, .flac:
             do {
                 let writer = try EncodedFileWriter(
-                    url: url, fileFormat: fileFormat, pcmFormat: format)
+                    url: url, fileFormat: fileFormat, pcmFormat: format, metadata: metadata)
                 return EncodedSink(writer: writer, label: "\(url.path) (\(fileFormat.rawValue))")
             } catch {
                 throw HarkError.ioError("cannot open output file: \(error)")

@@ -39,6 +39,69 @@ struct EncodedFileWriterTests {
         )
     }
 
+    /// The tags CoreAudio reads back from a file, as `hark info` shows them.
+    private func infoDictionary(of url: URL) throws -> [String: String] {
+        var fileID: AudioFileID?
+        try #require(AudioFileOpenURL(url as CFURL, .readPermission, 0, &fileID) == noErr)
+        let file = try #require(fileID)
+        defer { AudioFileClose(file) }
+        var dictionary: Unmanaged<CFDictionary>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        try #require(
+            AudioFileGetProperty(file, kAudioFilePropertyInfoDictionary, &size, &dictionary)
+                == noErr)
+        let raw = try #require(dictionary).takeRetainedValue() as? [String: Any] ?? [:]
+        return raw.mapValues { String(describing: $0) }
+    }
+
+    private let sampleMetadata = RecordingMetadata(
+        creationDate: Date(timeIntervalSince1970: 1_794_000_000), software: "hark 9.9.9",
+        title: "MacBook Pro Microphone — Büro")
+
+    /// An M4A recording carries its date, source and software in the container,
+    /// and still decodes to the same signal.
+    @Test func m4aCarriesTheRecordingMetadata() throws {
+        let url = temporaryFile("m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
+
+        let writer = try EncodedFileWriter(
+            url: url, fileFormat: .m4a, pcmFormat: format, metadata: sampleMetadata)
+        try writer.write(sinePCM())
+        try writer.finalize()
+
+        let info = try infoDictionary(of: url)
+        #expect(info["title"] == "MacBook Pro Microphone — Büro")
+        #expect(info["encoding application"] == "hark 9.9.9")
+        #expect(info["year"] == sampleMetadata.dateString, "keys present: \(info)")
+
+        let decoded = try decode(url)
+        #expect(decoded.frames == 22050)
+        #expect(abs(decoded.rms - 0.3535) < 0.02)
+    }
+
+    /// Metadata must never cost a recording: a container without a place for
+    /// it (FLAC through CoreAudio) records exactly as it does without any.
+    @Test func metadataNeverChangesAFlacRecording() throws {
+        let plain = temporaryFile("flac")
+        let tagged = temporaryFile("flac")
+        defer {
+            try? FileManager.default.removeItem(at: plain)
+            try? FileManager.default.removeItem(at: tagged)
+        }
+        let format = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 1)
+        let first = try EncodedFileWriter(url: plain, fileFormat: .flac, pcmFormat: format)
+        try first.write(sinePCM())
+        try first.finalize()
+        let second = try EncodedFileWriter(
+            url: tagged, fileFormat: .flac, pcmFormat: format, metadata: sampleMetadata)
+        try second.write(sinePCM())
+        try second.finalize()
+
+        #expect(try Data(contentsOf: plain) == Data(contentsOf: tagged))
+        #expect(try decode(tagged).frames == 22050)
+    }
+
     @Test func m4aRoundTripPreservesSignal() throws {
         let url = temporaryFile("m4a")
         defer { try? FileManager.default.removeItem(at: url) }

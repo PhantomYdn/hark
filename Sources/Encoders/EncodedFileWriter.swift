@@ -2,7 +2,12 @@
 import Foundation
 
 /// Writes a packed-PCM capture stream into an encoded audio file (M4A/AAC
-/// or FLAC) using the native CoreAudio encoders via AVAudioFile.
+/// or FLAC) using the native CoreAudio encoders via ExtAudioFile.
+///
+/// ExtAudioFile rather than AVAudioFile (which wraps it) for two things
+/// AVAudioFile does not expose: the underlying audio file, which is the only
+/// way to store the recording's metadata in the container, and an explicit
+/// close.
 ///
 /// Accepts the same interleaved little-endian signed PCM byte stream the
 /// capture sessions produce; chunks need not be frame-aligned (a carry
@@ -14,6 +19,7 @@ public final class EncodedFileWriter: @unchecked Sendable {
         case unsupportedFormat(AudioFileFormat)
         case cannotCreateFile(String, underlying: Error?)
         case bufferAllocationFailed
+        case writeFailed(OSStatus)
         case alreadyFinalized
         case recordingTooShortForFLAC(frames: UInt64)
 
@@ -26,6 +32,8 @@ public final class EncodedFileWriter: @unchecked Sendable {
                 return "cannot create encoded file at \(path)\(detail)"
             case .bufferAllocationFailed:
                 return "failed to allocate conversion buffer"
+            case .writeFailed(let status):
+                return "the encoder rejected a write (CoreAudio error \(status))"
             case .alreadyFinalized:
                 return "writer is already finalized"
             case .recordingTooShortForFLAC(let frames):
@@ -46,7 +54,7 @@ public final class EncodedFileWriter: @unchecked Sendable {
     public static let flacMinimumFrames: UInt64 = 4608
 
     private let lock = NSLock()
-    private var file: AVAudioFile?
+    private var file: ExtAudioFileRef?
     private let processingFormat: AVAudioFormat
     private let pcmFormat: PCMFormat
     private let fileFormat: AudioFileFormat
@@ -62,14 +70,22 @@ public final class EncodedFileWriter: @unchecked Sendable {
         return pcmBytes
     }
 
-    public init(url: URL, fileFormat: AudioFileFormat, pcmFormat: PCMFormat) throws {
+    /// `metadata`, when not empty, is stored in the container where it has a
+    /// place for it (M4A: title, date and software atoms). A container that
+    /// refuses it still records; metadata never fails a capture.
+    public init(
+        url: URL, fileFormat: AudioFileFormat, pcmFormat: PCMFormat,
+        metadata: RecordingMetadata = RecordingMetadata()
+    ) throws {
         self.pcmFormat = pcmFormat
         self.fileFormat = fileFormat
         self.url = url
 
         let settings: [String: Any]
+        let fileType: AudioFileTypeID
         switch fileFormat {
         case .m4a:
+            fileType = kAudioFileM4AType
             settings = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: Double(pcmFormat.sampleRate),
@@ -77,6 +93,7 @@ public final class EncodedFileWriter: @unchecked Sendable {
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
             ]
         case .flac:
+            fileType = kAudioFileFLACType
             settings = [
                 AVFormatIDKey: kAudioFormatFLAC,
                 AVSampleRateKey: Double(pcmFormat.sampleRate),
@@ -89,7 +106,7 @@ public final class EncodedFileWriter: @unchecked Sendable {
         }
 
         // Buffers are handed over as Int16 (16-bit) or Int32 (24/32-bit);
-        // AVAudioFile converts to the file's codec internally.
+        // ExtAudioFile converts to the file's codec internally.
         let commonFormat: AVAudioCommonFormat =
             pcmFormat.bitsPerSample == 16 ? .pcmFormatInt16 : .pcmFormatInt32
         guard
@@ -103,15 +120,54 @@ public final class EncodedFileWriter: @unchecked Sendable {
         }
         self.processingFormat = processing
 
-        do {
-            self.file = try AVAudioFile(
-                forWriting: url,
-                settings: settings,
-                commonFormat: commonFormat,
-                interleaved: true)
-        } catch {
-            throw WriterError.cannotCreateFile(url.path, underlying: error)
+        guard let encoded = AVAudioFormat(settings: settings) else {
+            throw WriterError.unsupportedFormat(fileFormat)
         }
+        var fileDescription = encoded.streamDescription.pointee
+        var created: ExtAudioFileRef?
+        let status = ExtAudioFileCreateWithURL(
+            url as CFURL, fileType, &fileDescription, nil, AudioFileFlags.eraseFile.rawValue,
+            &created)
+        guard status == noErr, let created else {
+            throw WriterError.cannotCreateFile(
+                url.path, underlying: NSError(domain: NSOSStatusErrorDomain, code: Int(status)))
+        }
+        var clientDescription = processing.streamDescription.pointee
+        let clientStatus = ExtAudioFileSetProperty(
+            created, kExtAudioFileProperty_ClientDataFormat,
+            UInt32(MemoryLayout<AudioStreamBasicDescription>.size), &clientDescription)
+        guard clientStatus == noErr else {
+            ExtAudioFileDispose(created)
+            throw WriterError.cannotCreateFile(
+                url.path,
+                underlying: NSError(domain: NSOSStatusErrorDomain, code: Int(clientStatus)))
+        }
+        Self.embed(metadata, in: created)
+        self.file = created
+    }
+
+    /// Stores the recording's metadata through the audio file's info
+    /// dictionary, which CoreAudio maps onto the container's own tags. Has to
+    /// happen before the first write: a finished M4A cannot be reopened for
+    /// writing. Failure is ignored, since the audio matters more than its tags.
+    private static func embed(_ metadata: RecordingMetadata, in file: ExtAudioFileRef) {
+        guard !metadata.isEmpty else { return }
+        var audioFile: AudioFileID?
+        var size = UInt32(MemoryLayout<AudioFileID?>.size)
+        guard
+            ExtAudioFileGetProperty(file, kExtAudioFileProperty_AudioFile, &size, &audioFile)
+                == noErr, let audioFile
+        else { return }
+        var info: [String: String] = [:]
+        if let title = metadata.title { info[kAFInfoDictionary_Title] = title }
+        if let software = metadata.software {
+            info[kAFInfoDictionary_EncodingApplication] = software
+        }
+        if let date = metadata.dateString { info[kAFInfoDictionary_Year] = date }
+        var dictionary = info as CFDictionary
+        AudioFileSetProperty(
+            audioFile, kAudioFilePropertyInfoDictionary,
+            UInt32(MemoryLayout<CFDictionary>.size), &dictionary)
     }
 
     /// Appends packed PCM bytes (any chunking; partial frames are carried).
@@ -132,7 +188,8 @@ public final class EncodedFileWriter: @unchecked Sendable {
         guard let buffer = makeBuffer(from: chunk, frames: frames) else {
             throw WriterError.bufferAllocationFailed
         }
-        try file.write(from: buffer)
+        let status = ExtAudioFileWrite(file, UInt32(frames), buffer.audioBufferList)
+        guard status == noErr else { throw WriterError.writeFailed(status) }
         pcmBytes += UInt64(consumed)
         carry.removeFirst(consumed)
     }
@@ -143,8 +200,8 @@ public final class EncodedFileWriter: @unchecked Sendable {
         defer { lock.unlock() }
         guard !finalized else { return }
         finalized = true
-        // Dropping the last reference flushes and closes the underlying
-        // ExtAudioFile (AVAudioFile has no public close on macOS 14).
+        // Flushes the encoder's last packets and closes the file.
+        if let file { ExtAudioFileDispose(file) }
         file = nil
         carry.removeAll()
 
