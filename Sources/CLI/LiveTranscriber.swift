@@ -253,6 +253,10 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
         return (text, speaker)
     }
 
+    /// Extra silence past the engine's floor, in seconds, so the resample to
+    /// 16 kHz cannot land a padded segment under it.
+    static let engineFloorMargin = 0.01
+
     /// Pads a live segment with trailing silence up to the engine's floor, in the
     /// segment's own format.
     ///
@@ -264,10 +268,16 @@ final class LiveTranscriber: AudioSink, @unchecked Sendable {
     /// speech in it is lost and the user is never told. Cue timings come from the
     /// segment, so the padding never reaches the transcript, and a backend with no
     /// floor (whisper, apple, whisperkit) is left alone.
+    ///
+    /// The padding is applied in the capture format, and a segment that is not
+    /// already 16 kHz mono is resampled afterwards. Resampling may round a
+    /// sample or two away, which would put a clip padded to exactly the floor
+    /// back under it, so the target is the floor plus `engineFloorMargin`.
     static func padToEngineFloor(_ pcm: Data, format: PCMFormat, seconds: Double) -> Data {
         guard seconds > 0 else { return pcm }
         let frameSize = max(1, format.bytesPerFrame)
-        let minimumBytes = Int((seconds * Double(format.byteRate)).rounded(.up))
+        let minimumBytes = Int(
+            ((seconds + engineFloorMargin) * Double(format.byteRate)).rounded(.up))
         let aligned = (minimumBytes + frameSize - 1) / frameSize * frameSize
         guard pcm.count < aligned else { return pcm }
         // Zero bytes are silence in every signed PCM depth hark writes.

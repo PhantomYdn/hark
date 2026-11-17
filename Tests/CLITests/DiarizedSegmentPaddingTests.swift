@@ -247,8 +247,10 @@ struct LiveSegmentPaddingTests {
         #expect(contents.contains("No."), "the short turn never reached the transcript")
         let handed = backend.handedFrames
         #expect(handed.count == 1, "handed \(handed)")
-        // Padded to exactly the floor, which also proves the segment was under it.
-        #expect(handed.first == Int((floorSeconds * 16000).rounded(.up)))
+        // Padded to exactly the floor plus the resampling margin, which also
+        // proves the segment was under it.
+        let target = floorSeconds + LiveTranscriber.engineFloorMargin
+        #expect(handed.first == Int((target * 16000).rounded(.up)))
     }
 
     /// whisper, apple and whisperkit declare no floor, so their segments must reach
@@ -265,10 +267,11 @@ struct LiveSegmentPaddingTests {
     }
 
     @Test func paddingIsFrameAlignedInTheCaptureFormat() {
-        // 44.1 kHz 16-bit stereo: 4 bytes a frame, 0.3 s is 52 920 B, already aligned.
+        // 44.1 kHz 16-bit stereo: 4 bytes a frame; 0.3 s plus the 10 ms margin
+        // is 54 684 B, already aligned.
         let stereo = PCMFormat(sampleRate: 44100, bitsPerSample: 16, channels: 2)
         let padded = LiveTranscriber.padToEngineFloor(Data(count: 1000), format: stereo, seconds: 0.3)
-        #expect(padded.count == 52_920)
+        #expect(padded.count == 54_684)
         #expect(padded.count % stereo.bytesPerFrame == 0)
         #expect(padded.prefix(1000).allSatisfy { $0 == 0 })
 
@@ -278,6 +281,29 @@ struct LiveSegmentPaddingTests {
         // No floor, no padding.
         #expect(
             LiveTranscriber.padToEngineFloor(Data(count: 10), format: stereo, seconds: 0).count == 10)
+    }
+
+    /// The segment is padded in the capture format and resampled to 16 kHz
+    /// afterwards. Whatever the capture rate, what reaches the engine must still
+    /// be at or over its floor.
+    @Test(arguments: [8000, 22050, 44100, 48000, 96000])
+    func aPaddedSegmentStaysOverTheFloorAfterResampling(sampleRate: Int) throws {
+        let capture = PCMFormat(sampleRate: sampleRate, bitsPerSample: 16, channels: 2)
+        let floor = 0.3
+        let padded = LiveTranscriber.padToEngineFloor(
+            Data(count: capture.bytesPerFrame * 37), format: capture, seconds: floor)
+
+        let raw = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hark-pad-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: raw) }
+        let writer = try WAVFileWriter(destination: .file(raw), format: capture)
+        try writer.write(padded)
+        try writer.finalize()
+        let normalized = try AudioPipeline.normalizeFileForWhisper(raw.path)
+        defer { try? FileManager.default.removeItem(at: normalized) }
+
+        let frames = try AudioPipeline.openForReading(normalized.path).length
+        #expect(frames >= Int64((floor * 16000).rounded(.up)))
     }
 }
 
