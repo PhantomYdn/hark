@@ -271,7 +271,7 @@ private final class EngineStderrReader: @unchecked Sendable {
             if let fraction = WhisperEngine.progressFraction(fromStderrLine: text) {
                 progress(fraction)
             } else if forwardOtherLines {
-                TranscribeProgressLine.writeStderr(text + "\n")
+                StderrStatusLine.write(text + "\n")
             }
         }
     }

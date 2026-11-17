@@ -152,4 +152,45 @@ struct TranscribeProgressTests {
         #expect(TranscribeProgress.formatDuration(3661) == "1:01:01")
         #expect(TranscribeProgress.formatDuration(-5) == "0:00")
     }
+
+    @Test func downloadLineShowsBytesAndEta() {
+        let line = ModelDownloadProgress.render(
+            name: "large-v3-turbo", fraction: 0.5, receivedBytes: 800_000_000,
+            totalBytes: 1_600_000_000, elapsed: 60)
+        #expect(line.hasPrefix("hark: downloading large-v3-turbo 50% [##########..........] "))
+        #expect(line.contains(" / "))
+        #expect(line.hasSuffix(" eta 1:00"))
+    }
+
+    @Test func downloadLineWithoutBytesShowsPercentOnly() {
+        #expect(
+            ModelDownloadProgress.render(name: "whisperkit base", fraction: 0.25, elapsed: 30)
+                == "hark: downloading whisperkit base 25% [#####...............] eta 1:30")
+        // Too early for an estimate.
+        #expect(
+            ModelDownloadProgress.render(name: "whisperkit base", fraction: 0.01, elapsed: 30)
+                == "hark: downloading whisperkit base 1% [....................]")
+    }
+
+    @Test func downloadLineBeforeTheSizeIsKnownShowsElapsedTime() {
+        #expect(
+            ModelDownloadProgress.render(name: "parakeet ultra", fraction: nil, elapsed: 5)
+                == "hark: downloading parakeet ultra… 0:05 elapsed")
+        #expect(
+            ModelDownloadProgress.render(name: "x", fraction: .nan, elapsed: 5)
+                == "hark: downloading x… 0:05 elapsed")
+    }
+
+    @Test func noDownloadLineWithoutATerminal() {
+        #expect(ModelDownloadLine.begin(name: "base", isStderrTTY: false) == nil)
+    }
+
+    /// FluidAudio reports a fraction of download + compile; the line follows
+    /// the download half only.
+    @Test func parakeetDownloadFractionCoversTheDownloadPhase() {
+        #expect(ParakeetBackend.downloadFraction(operationFraction: 0) == 0)
+        #expect(ParakeetBackend.downloadFraction(operationFraction: 0.25) == 0.5)
+        #expect(ParakeetBackend.downloadFraction(operationFraction: 0.5) == 1)
+        #expect(ParakeetBackend.downloadFraction(operationFraction: 0.9) == 1)
+    }
 }

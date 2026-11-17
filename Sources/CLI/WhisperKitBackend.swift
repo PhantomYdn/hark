@@ -62,8 +62,12 @@ final class WhisperKitBackend: TranscriptionBackend {
         try Platform.requireAppleSilicon(engine: "whisperkit")
         let base = downloadBase
         Log.notice("downloading whisperkit model \(variant) …")
+        let line = ModelDownloadLine.begin(name: "whisperkit \(variant)")
+        defer { line?.finish() }
         try RunLoopBridge.runBlocking(timeout: 3600) {
-            _ = try await WhisperKit.download(variant: variant, downloadBase: base)
+            _ = try await WhisperKit.download(
+                variant: variant, downloadBase: base,
+                progressCallback: { line?.update(fraction: $0.fractionCompleted) })
         }
     }
 

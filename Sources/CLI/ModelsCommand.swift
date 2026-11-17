@@ -277,6 +277,19 @@ enum ModelDownloader {
                 box.set(.failure(HarkError.ioError("could not stage download: \(error)")))
             }
         }
+        // On a terminal, a redrawn line follows the bytes as they arrive.
+        let line = ModelDownloadLine.begin(name: modelName)
+        let observation = task.progress.observe(\.fractionCompleted) { [weak task] progress, _ in
+            // The progress object counts abstract units; the bytes are on the task.
+            line?.update(
+                fraction: progress.fractionCompleted,
+                receivedBytes: task?.countOfBytesReceived,
+                totalBytes: task?.countOfBytesExpectedToReceive)
+        }
+        defer {
+            observation.invalidate()
+            line?.finish()
+        }
         task.resume()
         semaphore.wait()
         return try box.get()

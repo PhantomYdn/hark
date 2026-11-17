@@ -88,12 +88,18 @@ final class ParakeetBackend: TranscriptionBackend {
         let selected = resolveOrDefault(model)
         let version = selected.version
         let label = "\(selected.name) (\(selected.languages))"
+        // First use downloads the models: on a terminal a line follows it.
+        var line: ModelDownloadLine?
         if !AsrModels.modelsExist(at: selected.cacheDirectory, version: version) {
             Log.notice("downloading parakeet \(selected.name) models (first use)…")
+            line = ModelDownloadLine.begin(name: "parakeet \(selected.name)")
         }
+        defer { line?.finish() }
+        let handler = downloadHandler(for: line, name: selected.name)
         Log.verbose("parakeet: loading \(label) models")
         let manager: AsrManager = try RunLoopBridge.runBlocking(timeout: 1800) {
-            let models = try await AsrModels.downloadAndLoad(version: version)
+            let models = try await AsrModels.downloadAndLoad(
+                version: version, progressHandler: handler)
             let manager = AsrManager()
             try await manager.loadModels(models)
             return manager
@@ -216,14 +222,53 @@ final class ParakeetBackend: TranscriptionBackend {
         AsrModels.modelsExist(at: model.cacheDirectory, version: model.version)
     }
 
+    /// The share of FluidAudio's reported fraction that the download phase of
+    /// a model repository occupies; CoreML compilation takes the rest
+    /// (`ProgressReporter(downloadPhaseWeight: 0.5)` in FluidAudio's ModelHub).
+    static let downloadPhaseWeight = 0.5
+
+    /// The 0...1 position of the download itself, from FluidAudio's fraction
+    /// of the whole operation. Pure, for testing.
+    static func downloadFraction(operationFraction: Double) -> Double {
+        min(max(operationFraction / downloadPhaseWeight, 0), 1)
+    }
+
+    /// Feeds FluidAudio's download progress into the line; nil without a line,
+    /// so nothing is asked of FluidAudio when stderr is not a terminal. The
+    /// line follows the download phase only. When CoreML compilation starts
+    /// (which can take a minute or more for a large model and reports no
+    /// position) the line is replaced by a one-time notice, so it never sits
+    /// at 100% "downloading" while a model compiles.
+    static func downloadHandler(for line: ModelDownloadLine?, name: String) -> ProgressHandler? {
+        guard let line else { return nil }
+        let compiling = LockBox<Bool>()
+        return { progress in
+            switch progress.phase {
+            case .listing: break
+            case .downloading:
+                line.update(
+                    fraction: downloadFraction(operationFraction: progress.fractionCompleted))
+            case .compiling:
+                guard compiling.get() == nil else { return }
+                compiling.set(true)
+                line.finish()
+                Log.notice("compiling parakeet \(name) models (first use, can take a minute)…")
+            }
+        }
+    }
+
     /// Pre-downloads the model bundles (no load) into FluidAudio's cache.
     static func download(model name: String?) throws {
         try Platform.requireAppleSilicon(engine: "parakeet")
         let selected = resolveOrDefault(name)
         let version = selected.version
         Log.notice("downloading parakeet \(selected.name) models …")
+        let line = ModelDownloadLine.begin(name: "parakeet \(selected.name)")
+        defer { line?.finish() }
         try RunLoopBridge.runBlocking(timeout: 3600) {
-            _ = try await AsrModels.download(version: version)
+            _ = try await AsrModels.download(
+                version: version,
+                progressHandler: Self.downloadHandler(for: line, name: selected.name))
         }
     }
 
