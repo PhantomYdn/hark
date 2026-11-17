@@ -642,10 +642,18 @@ struct Hark: ParsableCommand {
     /// Pre-resolves output collisions for a remote session (PRD §6.10) so
     /// `POST /start`/`GET /status` can report the paths that will actually be
     /// written. Returns a copy whose `-a`/`-t` are free, with the policy pinned
-    /// to `error` (the re-check inside `executeLive` is then a no-op).
-    func reservingOutputs() throws -> Hark {
+    /// to `error` (the re-check inside `executeLive` is then a no-op). The merged
+    /// settings are validated here too, so a bad value from the environment or
+    /// the config file fails the request instead of a session already reported
+    /// as started.
+    func reservingOutputs(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        config: Configuration = .load()
+    ) throws -> Hark {
         var reserved = self
-        let settings = try ResolvedSettings.resolve(from: self)
+        let settings = try ResolvedSettings.resolve(
+            from: self, environment: environment, config: config)
+        try settings.validate()
         let outputs = try guardedOutputs(try resolveOutputs(), settings: settings)
         if case .file(let path)? = outputs.audio { reserved.audio = path }
         if case .file(let path)? = outputs.transcript { reserved.transcript = path }

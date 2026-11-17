@@ -216,6 +216,29 @@ struct StartRequestTests {
         #expect(reserved.ifExists == .error)  // the paths are free; the re-check is a no-op
         #expect(FileManager.default.fileExists(atPath: audio))  // previous session untouched
     }
+
+    /// A value the request never named (here the engine, from the environment)
+    /// can still make the merged settings invalid. That has to fail the request
+    /// (→ 400), not a session the agent already answered 201 for.
+    @Test func mergedSettingsAreValidatedBeforeTheSessionStarts() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hark-agent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var body = StartRequest()
+        body.transcript = dir.appendingPathComponent("meet.txt").path
+        body.translate = true
+        let command = try body.makeCommand(defaults: defaults([]))
+        let parakeet = [ConfigKey.engine.environmentName: "parakeet"]
+
+        #expect(throws: HarkError.self) {
+            _ = try command.reservingOutputs(environment: parakeet, config: Configuration())
+        }
+        // The same request is fine with an engine that can translate.
+        let whisper = [ConfigKey.engine.environmentName: "whisper"]
+        _ = try command.reservingOutputs(environment: whisper, config: Configuration())
+    }
 }
 
 @Suite("Remote-control session manager")
